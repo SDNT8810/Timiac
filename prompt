@@ -1,0 +1,6 @@
+im going to build a 12 arm clock like the attached image (clock.jpeg)
+it will work with octupus board (g-code input)
+for designing its motion i need a simulator so i see if i like it or not!
+make the simulator and some gcodes so i can test its moving and see it in localhost
+
+design some g-codes so it moves like a living creture

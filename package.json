@@ -1,0 +1,20 @@
+{
+  "name": "dodeca-motion-lab",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 4000",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4000",
+    "test": "playwright test",
+    "test:mobile": "playwright test tests/mobile.spec.js"
+  },
+  "dependencies": {
+    "three": "^0.178.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "vite": "^7.0.4"
+  }
+}
