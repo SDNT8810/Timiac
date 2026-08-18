@@ -12,6 +12,49 @@ test.use({
 });
 
 const sheet = (page, name) => page.locator(`.mobile-sheet[data-mobile-sheet="${name}"]`);
+const toMinutes = time => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+const fromMinutes = minutes => {
+  const wrapped = ((minutes % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
+};
+
+test('main page exposes usable clock pose quick actions', async ({ page }) => {
+  await page.goto(APP_URL, { waitUntil: 'networkidle' });
+
+  const quickActions = page.getByRole('group', { name: 'Clock pose quick actions' });
+  await expect(quickActions).toBeVisible();
+  await expect(quickActions.getByRole('button')).toHaveCount(3);
+
+  const actualTime = quickActions.getByRole('button', { name: 'Actual time', exact: true });
+  const nextHour = quickActions.getByRole('button', { name: '+1 hr', exact: true });
+  const nextFive = quickActions.getByRole('button', { name: '+5 min', exact: true });
+  for (const button of [actualTime, nextHour, nextFive]) {
+    const box = await button.boundingBox();
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+  const stageBox = await page.locator('#stage').boundingBox();
+  const quickActionsBox = await quickActions.boundingBox();
+  expect(quickActionsBox.y).toBeLessThanOrEqual(stageBox.y + 51);
+
+  const startingTime = await page.locator('#time-input').inputValue();
+  const expectedFive = fromMinutes((Math.floor(toMinutes(startingTime) / 5) + 1) * 5);
+  await nextFive.click();
+  await expect(page.locator('#time-input')).toHaveValue(expectedFive);
+  await expect(page.locator('#sequence-name')).toHaveText(`TIME POSE / ${expectedFive}`);
+
+  await actualTime.click();
+  await expect(page.locator('#clock-mode')).toContainText('LIVE');
+  const actual = await page.locator('#time-input').inputValue();
+
+  await nextHour.click();
+  const hourTarget = await page.locator('#time-input').inputValue();
+  const hourDelta = (toMinutes(hourTarget) - toMinutes(actual) + 1440) % 1440;
+  expect([60, 61]).toContain(hourDelta);
+  await expect(page.locator('#clock-mode')).toContainText('TESTING NEXT HOUR');
+});
 
 test('phone opens on the clock and exposes controls as popup sheets', async ({ page }) => {
   const consoleErrors = [];
@@ -194,6 +237,9 @@ test('clock-only shell fits small phones, large phones, and mobile landscape', a
         topbarHeight: topbar.height,
         dockHeight: dock.height,
         dockButtonHeight: box('.mobile-dock > button').height,
+        quickActionsTop: box('.clock-quick-actions').top,
+        stageTop: box('#stage').top,
+        stageCornerVisible: getComputedStyle(document.querySelector('.stage-corner.top-left')).display !== 'none',
         visibleSheets: [...document.querySelectorAll('.mobile-sheet')].filter(item => getComputedStyle(item).display !== 'none').length,
       };
     });
@@ -206,6 +252,10 @@ test('clock-only shell fits small phones, large phones, and mobile landscape', a
     expect(metrics.viewportHeight + metrics.topbarHeight + metrics.dockHeight, viewport.name).toBeLessThanOrEqual(viewport.height + 1);
     expect(metrics.dockButtonHeight, viewport.name).toBeGreaterThanOrEqual(44);
     expect(metrics.visibleSheets, viewport.name).toBe(0);
+    if (viewport.width <= 360 && viewport.height > viewport.width) {
+      expect(metrics.quickActionsTop - metrics.stageTop, viewport.name).toBeLessThanOrEqual(3);
+      expect(metrics.stageCornerVisible, viewport.name).toBe(false);
+    }
     expect(errors, viewport.name).toEqual([]);
 
     if (['small-portrait', 'large-portrait', 'tablet-portrait', 'phone-landscape'].includes(viewport.name)) {

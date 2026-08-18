@@ -107,6 +107,11 @@ document.querySelector('#app').innerHTML = `
       <div class="stage view-3d" id="stage">
         <div class="stage-corner top-left">12 RADIAL ARMS<br>0–100 MM STROKE</div>
         <div class="stage-corner top-right">DRAG TO ORBIT<br>SCROLL TO ZOOM</div>
+        <div class="clock-quick-actions" role="group" aria-label="Clock pose quick actions">
+          <button id="quick-live-clock" type="button" aria-label="Actual time">ACTUAL TIME</button>
+          <button id="quick-next-hour" type="button" aria-label="+1 hr">+1 HR</button>
+          <button id="quick-next-five" type="button" aria-label="+5 min">+5 MIN</button>
+        </div>
         <canvas id="clock-3d" aria-label="Orbitable three-dimensional view of the twelve folding arm mechanisms"></canvas>
         <svg id="clock" viewBox="0 0 700 700" role="img" aria-label="Twelve arm kinetic clock simulator">
           <defs>
@@ -1323,6 +1328,9 @@ els.liveClock.addEventListener('click', () => {
 els.struggle.addEventListener('click', () => startStruggle());
 els.nextFive.addEventListener('click', () => stepClock({ nextFive: true }));
 els.nextHour.addEventListener('click', () => stepClock({ hours: 1, runHourMovement: true }));
+document.querySelector('#quick-live-clock').addEventListener('click', () => els.liveClock.click());
+document.querySelector('#quick-next-hour').addEventListener('click', () => els.nextHour.click());
+document.querySelector('#quick-next-five').addEventListener('click', () => els.nextFive.click());
 
 document.querySelector('#copy-code').addEventListener('click', async event => {
   await navigator.clipboard.writeText(els.editor.value);
