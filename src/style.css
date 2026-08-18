@@ -36,6 +36,7 @@ body {
 
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
+.temporarily-hidden { display: none !important; }
 
 .topbar {
   height: 54px;
@@ -105,6 +106,7 @@ button { color: inherit; }
 .square-button { border: 0; background: var(--orange); color: white; cursor: pointer; font: 8px var(--mono); }
 .square-button:hover { background: #e94925; }
 .clock-actions { display: grid; grid-template-columns: 1fr 1.25fr; gap: 5px; margin: 6px 0 0 20px; }
+.clock-actions--single { grid-template-columns: 1fr; }
 .clock-actions button { min-height: 34px; border: 1px solid #aeb2ab; background: transparent; cursor: pointer; font: 8px/1 var(--mono); letter-spacing: .08em; }
 .clock-actions button:hover { border-color: var(--ink); background: #e1e0da; }
 .clock-actions #struggle { border-color: var(--ink); background: var(--ink); color: #f1f1eb; }
@@ -530,6 +532,7 @@ footer button:hover, footer button:focus-visible { color: #fff; background: #323
     background: rgba(237,236,230,.98);
     box-shadow: 0 -8px 25px rgba(24,30,28,.11);
   }
+  .mobile-dock--motion-hidden { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .mobile-dock button {
     min-width: 0;
     min-height: 48px;

@@ -66,7 +66,10 @@ test('phone opens on the clock and exposes controls as popup sheets', async ({ p
   await page.goto(APP_URL, { waitUntil: 'networkidle' });
   await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', /viewport-fit=cover/);
   await expect(page.locator('.mobile-dock')).toBeVisible();
-  await expect(page.locator('.mobile-dock > button')).toHaveCount(5);
+  await expect(page.locator('.mobile-dock > button:visible')).toHaveCount(4);
+  await expect(page.getByRole('button', { name: 'Motion', exact: true, includeHidden: true })).toBeHidden();
+  await expect(page.locator('#mobile-motion')).toBeHidden();
+  await expect(page.locator('#struggle')).toBeHidden();
   await expect(page.locator('.mobile-sheet')).toHaveCount(4);
   await expect(page.locator('footer')).toBeHidden();
 
@@ -97,7 +100,6 @@ test('phone opens on the clock and exposes controls as popup sheets', async ({ p
   await page.screenshot({ path: 'artifacts/timiac-mobile-clock-only.png' });
 
   const dockButtons = {
-    motion: page.getByRole('button', { name: 'Motion', exact: true }),
     time: page.getByRole('button', { name: 'Time', exact: true }),
     arms: page.getByRole('button', { name: 'Arms', exact: true }),
     code: page.getByRole('button', { name: 'G-code', exact: true }),
@@ -115,13 +117,6 @@ test('phone opens on the clock and exposes controls as popup sheets', async ({ p
     expect(sheetBox.width, name).toBeLessThanOrEqual(390);
     expect(sheetBox.y + sheetBox.height, name).toBeLessThanOrEqual(dockBox.y + 1);
 
-    if (name === 'motion') {
-      for (let index = 0; index < 14; index += 1) {
-        await page.keyboard.press('Tab');
-        expect(await sheet(page, name).evaluate(item => item.contains(document.activeElement))).toBe(true);
-      }
-      await page.screenshot({ path: 'artifacts/timiac-mobile-motion-sheet.png' });
-    }
     if (name === 'arms') {
       await page.locator('#half-all').click();
       for (const input of await page.locator('.axis-number').all()) await expect(input).toHaveValue('50');

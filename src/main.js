@@ -51,7 +51,7 @@ document.querySelector('#app').innerHTML = `
 
   <main class="workspace">
     <aside class="panel panel-left">
-      <section id="mobile-motion" class="mobile-sheet" data-mobile-sheet="motion">
+      <section id="mobile-motion" class="mobile-sheet temporarily-hidden" data-mobile-sheet="motion" hidden>
         <button class="mobile-sheet-close" type="button" aria-label="Close motion panel">CLOSE ×</button>
         <div class="section-heading"><span>01</span><h2>Motion studies</h2></div>
         <div class="preset-list">
@@ -73,9 +73,9 @@ document.querySelector('#app').innerHTML = `
           <input id="time-input" type="time" aria-label="Clock time" />
           <button id="compose-time" class="square-button" title="Set clock pose">SET</button>
         </div>
-        <div class="clock-actions">
+        <div class="clock-actions clock-actions--single">
           <button id="live-clock" type="button">LIVE TIME</button>
-          <button id="struggle" type="button">CREATURE MOTION <kbd>S</kbd></button>
+          <button id="struggle" class="temporarily-hidden" type="button" hidden>CREATURE MOTION <kbd>S</kbd></button>
         </div>
         <div class="clock-step-actions">
           <button id="next-five" type="button">+5 MIN <kbd>5</kbd></button>
@@ -244,8 +244,8 @@ document.querySelector('#app').innerHTML = `
   </main>
 
   <div class="mobile-sheet-backdrop" aria-hidden="true"></div>
-  <nav class="mobile-dock" aria-label="Mobile control panels">
-    <button type="button" data-mobile-open="motion" aria-label="Motion" aria-controls="mobile-motion" aria-expanded="false"><span>01</span>MOTION</button>
+  <nav class="mobile-dock mobile-dock--motion-hidden" aria-label="Mobile control panels">
+    <button class="temporarily-hidden" type="button" data-mobile-open="motion" aria-label="Motion" aria-controls="mobile-motion" aria-expanded="false" hidden><span>01</span>MOTION</button>
     <button type="button" data-mobile-open="time" aria-label="Time" aria-controls="mobile-time" aria-expanded="false"><span>02</span>TIME</button>
     <button type="button" data-mobile-open="arms" aria-label="Arms" aria-controls="mobile-arms" aria-expanded="false"><span>03</span>ARMS</button>
     <button type="button" data-mobile-open="code" aria-label="G-code" aria-controls="mobile-code" aria-expanded="false"><span>04</span>G-CODE</button>
@@ -1355,7 +1355,7 @@ document.addEventListener('keydown', event => {
     els.play.click();
   }
   if (event.key.toLowerCase() === 'r') els.stop.click();
-  if (event.key.toLowerCase() === 's') startStruggle();
+  if (event.key.toLowerCase() === 's' && !els.struggle.hidden) startStruggle();
   if (event.key === '5') els.nextFive.click();
   if (event.key.toLowerCase() === 'h') els.nextHour.click();
 });

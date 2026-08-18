@@ -21,7 +21,9 @@ test('Timiac 3D workspace and manual actuator controls', async ({ page }) => {
   await expect(page.locator('.viewport-meta')).toBeHidden();
   await expect(page.locator('.mobile-dock')).toHaveCount(1);
   await expect(page.locator('.mobile-dock')).toBeHidden();
-  await expect(page.locator('.mobile-sheet').first()).toBeVisible();
+  await expect(page.locator('#mobile-motion')).toBeHidden();
+  await expect(page.locator('#struggle')).toBeHidden();
+  await expect(page.locator('#mobile-time')).toBeVisible();
   await expect(page.locator('#clock-3d')).toBeVisible();
   await expect(page.getByRole('button', { name: 'FRONT' })).toHaveCount(0);
   await expect(page.locator('.axis-slider')).toHaveCount(12);
