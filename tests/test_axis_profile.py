@@ -15,6 +15,13 @@ class AxisProfileTests(unittest.TestCase):
                 self.assertIsNone(config[f"AXIS{number}_ROTATES"])
                 self.assertEqual(config[f"{driver}_DRIVER_TYPE"], "TMC2209")
 
+    def test_z_uses_the_motor3_socket_instead_of_motor2(self):
+        profile = json.loads((ROOT / "Marlin/profiles/twelve-motor/profile.json").read_text())
+        self.assertEqual(profile["post_pins"], {
+            "Z_STEP_PIN": "PG4", "Z_DIR_PIN": "PC1", "Z_ENABLE_PIN": "PA0",
+            "Z_CS_PIN": "PC7", "Z_SERIAL_TX_PIN": "PC7",
+        })
+
 
 if __name__ == "__main__":
     unittest.main()

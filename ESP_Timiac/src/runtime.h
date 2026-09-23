@@ -17,7 +17,7 @@ struct Peer {
 } peers[2];
 struct RemoteBoard {
   timiac::EndstopReport endstops;
-  bool online = false, busy = false, latched = false;
+  bool online = false, busy = false, latched = false, resetRequired = false;
   uint8_t homed = 0;
   uint32_t reset = 0, stateAt = 0;
   String fault, stopAck;

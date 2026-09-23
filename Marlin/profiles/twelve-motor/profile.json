@@ -92,5 +92,12 @@
     "I_MIN_PIN": "PG11",
     "J_MIN_PIN": "PG12",
     "K_MIN_PIN": "PG13"
+  },
+  "post_pins": {
+    "Z_STEP_PIN": "PG4",
+    "Z_DIR_PIN": "PC1",
+    "Z_ENABLE_PIN": "PA0",
+    "Z_CS_PIN": "PC7",
+    "Z_SERIAL_TX_PIN": "PC7"
   }
 }

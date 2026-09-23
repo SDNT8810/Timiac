@@ -56,12 +56,23 @@ uint32_t now = 4000;
 uint32_t millis() { return now; }
 String serialLine;
 bool serialDiscard = false;
-struct { timiac::Barrier barrier; } operation;
+struct { timiac::Barrier barrier; String error; } operation;
 unsigned completions = 0;
+unsigned faults = 0, recorded = 0;
+bool expectFault = false, systemLatched = false;
+String systemFault;
+void recordReceipt() { ++recorded; }
 void logMessage(const String&) {}
-void stopAll(const String& reason) { std::cerr << reason << '\n'; assert(false); }
+void stopAll(const String& reason);
 void finishLocal() { ++completions; }
 #include "../ESP_Timiac/src/uart_bridge.h"
+void stopAll(const String& reason) {
+  if (systemLatched) return;
+  if (!expectFault) std::cerr << reason << '\n';
+  assert(expectFault);
+  ++faults; systemLatched = true; systemFault = reason;
+  uart.abort(reason);
+}
 
 static void runStep(const timiac::Step& step, unsigned board) {
   assert(step.count[board]);
@@ -181,6 +192,42 @@ int main() {
   assert(Serial.output == "M115\n"); uart.receive("ok");
   uart.monitorEndstops(true); uart.endstopMonitorAt = now - kPeerTimeout;
   Serial.output.clear(); now += 5001; uart.tick(); assert(Serial.output == "M115\n");
+  uart.receive("ok");
+
+  // Replay the reported fault: keep Bad A Endstop, cancel the barrier and
+  // ignore late acknowledgements/timeouts until the halted Octopus restarts.
+  operation.barrier.begin(now); operation.barrier.phase = timiac::Phase::Running;
+  uart.stage(home); uart.commit();
+  uart.tick(); uart.receive("ok"); uart.tick(); uart.receive("ok"); uart.tick();
+  assert(uart.active == "G28 X Y Z A B C");
+  expectFault = true;
+  uart.receive("echo:Bad A Endstop?");
+  const String rootCause = uart.fault;
+  assert(rootCause.startsWith(TIMIAC_BOARD_ID == 1 ? "A1 endstop" : "A2 endstop"));
+  assert(uart.halted && !uart.ready && !uart.healthy() && !uart.waiting && !uart.job);
+  assert(!operation.barrier.active() && operation.error == rootCause && recorded == 1);
+  assert(systemLatched && faults == 1);
+  uart.receive("echo:Homing Failed");
+  uart.receive("Error:Printer halted. kill() called!");
+  uart.abort("Master stop");
+  uart.receive("ok"); uart.receive("ok N1 P15 B3");
+  assert(uart.fault == rootCause && uart.halted && !uart.ready && faults == 1);
+  Serial.output.clear();
+  for (unsigned i = 0; i < 10; ++i) { now += 30000; uart.tick(); }
+  assert(Serial.output.empty() && uart.fault == rootCause && faults == 1);
+  uart.receive("start");
+  assert(!uart.halted && !uart.ready && uart.homed == 0);
+  now += 1001; uart.tick(); assert(Serial.output == "M115\n");
+  uart.receive("FIRMWARE_NAME:Marlin 2.1.2.7"); uart.receive("ok");
+  assert(uart.healthy() && uart.fault.isEmpty() && !systemLatched && systemFault.isEmpty());
+  assert(operation.barrier.phase == timiac::Phase::Failed && completions == completedBefore + 1);
+  // Ordinary Stop must also close the active homing barrier without inventing
+  // a hardware fault or issuing any reset/emergency command to Marlin.
+  operation.barrier.begin(now); uart.stage(home); uart.commit();
+  Serial.output.clear(); uart.abort("Operator stop");
+  assert(!operation.barrier.active() && operation.error == "Operator stop");
+  assert(!uart.halted && uart.fault.isEmpty() && Serial.output.empty());
+  std::cout << "Board " << board + 1 << ": homing fault retained, Stop cancels barrier, reset handshake recovery passed\n";
   std::cout << "Board " << board + 1 << ": switch telemetry, freshness and motion isolation passed\n";
   std::cout << "Board " << board + 1 << ": six-axis UART routing, homing, release actions and M114 passed\n";
 }

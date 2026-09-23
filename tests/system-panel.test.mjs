@@ -9,6 +9,10 @@ test('status distinguishes an offline ESP, offline Octopus, fault, and ready boa
   assert.equal(boardStatus(state, 'a', true).label, 'Octopus offline');
   state.a.fault = 'Homing failed';
   assert.equal(boardStatus(state, 'a', true).detail, 'Homing failed');
+  state.a.resetRequired = true;
+  state.a.fault = 'A1 endstop stayed triggered after homing backoff';
+  assert.equal(boardStatus(state, 'a', true).label, 'Reset required');
+  assert.match(boardStatus(state, 'a', true).detail, /A1 endstop/);
   state.a = { bridgeConnected: true, octopusConnected: true, ready: true, homed: 0 };
   assert.equal(boardStatus(state, 'a', true).label, 'Home required');
   state.a.homed = 63;

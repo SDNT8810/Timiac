@@ -34,6 +34,24 @@ def prepare_marlin():
             text += "\n// Explicit Timiac profile pin mapping.\n"
             text += "\n".join(f"#define {key} {value}" for key, value in profile.get("pins", {}).items()) + "\n"
         (STAGED / "Marlin" / name).write_text(text, encoding="utf-8")
+    # Octopus defines X/Y/Z socket pins in its board header, after
+    # Configuration.h is read. Apply profile socket reassignment after all
+    # board pin defaults and their post-processing, but before Marlin derives
+    # its final axis conditions and instantiates the TMC drivers.
+    post_pins = profile.get("post_pins", {})
+    if post_pins:
+        overlay = STAGED / "Marlin" / "src" / "inc" / "timiac_post_pins.h"
+        lines = ["#pragma once", "// Generated from Marlin/profiles/twelve-motor/profile.json."]
+        for key, value in post_pins.items():
+            lines += [f"#ifdef {key}", f"#undef {key}", "#endif", f"#define {key} {value}"]
+        overlay.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        config = STAGED / "Marlin" / "src" / "inc" / "MarlinConfig.h"
+        text = config.read_text(encoding="utf-8")
+        needle = '#include "../pins/pins.h"'
+        if text.count(needle) != 1:
+            raise ValueError("Expected one Marlin pin-header include for the Timiac socket override")
+        text = text.replace(needle, needle + '\n#include "timiac_post_pins.h"')
+        config.write_text(text, encoding="utf-8")
     # Keep Marlin stock. The attempted remote-reset/watchdog overlay could
     # inject M112 while an ordinary G28 was still in progress.
     print(f"Prepared shared six-axis source: {STAGED}", flush=True)

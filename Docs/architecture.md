@@ -25,6 +25,18 @@ The master removes the board suffix and routes each command to its bridge.
 The bridge sends local X/Y/Z/A/B/C letters unchanged to the Octopus UART and
 reads the same letters in M114 reports. Marlin uses I/J/K internally for the
 last three drivers, with AXIS4/5/6_NAME explicitly set to A/B/C for G-code.
+
+The development master enables switch telemetry in its authenticated peer
+heartbeat. Each bridge polls M119 at most every 250 ms while idle; polling never
+interleaves with a prepared job, movement, or homing. A report becomes visible
+only after its `ok`. The existing state packets and `/api/status` carry six
+`endstops` booleans per board in XYZABC order (`true` = triggered), with null
+for unknown values and `endstopsAgeMs` for freshness. The master preserves the
+age across bridge heartbeats, and both the API and dashboard reject readings
+at least two seconds old. A restart clears all known switch readings.
+The development page refreshes status every 500 ms and requires no control
+lease to view switches. Release mode does not request automatic M119 polling.
+
 G90/G91 with targets are custom move shorthands. Source relative
 coordinates are checked and converted to explicit absolute local G1 moves.
 

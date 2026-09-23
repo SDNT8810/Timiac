@@ -1,5 +1,65 @@
 # Validation: two motors / three ESPs
 
+## Z socket reassignment: MOTOR2 to MOTOR3 - 2026-09-23
+
+- Reassigned Z1 and Z2 from the unreliable physical MOTOR2 socket to MOTOR3
+  on both Octopus boards. The resulting six-socket layout is MOTOR0, MOTOR1,
+  MOTOR3, MOTOR4, MOTOR5, MOTOR6. A/B/C retain MOTOR4/5/6 and all twelve
+  public axis names remain unchanged.
+- The generated Marlin profile replaces all Z channel signals after the Octopus
+  board's default pin processing: step PG4, direction PC1, enable PA0, TMC2209
+  UART PC7. A compiled assertion checks those five signals, one-Z-axis mode,
+  MOTOR0/1 and MOTOR4/5/6, plus all three A/B/C switch inputs.
+- Z1/Z2 home switches remain STOP2 / PG10. Before power-up, move each Z
+  driver and motor cable to MOTOR3, fit its UART jumper, and remove the
+  MOTOR3/Z2 DIAG jumper because its PG11 input is assigned to A1/A2.
+- The shared Octopus image builds successfully. Four Python profile/flash
+  tests, both bridge regression suites, and all 34 dashboard tests pass.
+  The package hash was verified after rebuilding.
+
+## Reported A homing fault and fault retention - 2026-09-23
+
+- The hardware log contains `echo:Bad A Endstop?` from Board 1. In the active
+  Marlin source this is the broken-endstop check after the 2 mm homing backoff;
+  it calls `kill()`. This establishes the A input was still reported triggered,
+  not whether the cause is wiring, motor motion, or switch release distance.
+- Corrected confirmed bridge bugs: queue cancellation erased the original
+  fault, and accepting Stop left the old operation barrier active. Faults now
+  survive cancellation, the barrier is failed, and a killed board is not polled
+  repeatedly or marked ready by a late `ok`. A fresh reset/startup handshake
+  restores communication without replaying motion or marking axes homed.
+- Both dashboards now show **Reset required** for a halted motor board. The
+  peer report carries the original fault, with a fallback for older bridges
+  that supplied only an operation error, instead of blank `Board 1:` messages.
+- Host tests for both board identities replay the reported fault, the following
+  kill message, Stop, late acknowledgements, five minutes without a response,
+  and reset/handshake recovery. Existing firmware and all 34 Node tests pass.
+- Rebuilt both bridge images, both master modes and both filesystems; verified
+  all 13 binary hashes and flash manifests. All three Python tests pass.
+- Physical homing remains unresolved until A1 switch and backoff behavior are
+  verified on the machine. No axis remapping or endstop protection bypass was
+  introduced for this fault.
+
+## Development micro-switch lamps - 2026-09-23
+
+- Added twelve labeled lamps: red for released, green for triggered, gray for
+  missing, stale, offline, or busy readings. They use actual M119 responses,
+  require no homing/control lease, and are shown only on the development page.
+- Host tests pass for both bridge identities: all six independent switches,
+  release transitions, malformed/missing responses, acknowledgement boundaries,
+  two-second expiry, timer wrap, restart invalidation, opt-in polling and
+  telemetry exclusion during preparation/homing. The existing firmware tests
+  also pass with assertions enabled.
+- All 34 Node tests pass, including twelve-axis lamp routing, observer access,
+  stale/missing values, busy boards and disconnection. In-app browser visual
+  verification is unavailable in this session (no connected browser).
+- Both bridge builds, both master builds and both filesystem builds succeeded.
+  Verified all 13 binary hashes and both flash layouts; the switch module is
+  included only in the development filesystem. HTTP asset checks and all
+  three Python tests pass. Build output is in `.build/endstop-build.log`.
+- Physical switch testing still needs the rebuilt bridges and development
+  master/filesystem flashed. The Octopus image requires no change for this feature.
+
 ## Restored twelve-axis G-code names - 2026-09-23
 
 - Removed the erroneous bridge A/B/C-to-I/J/K UART translation and restored

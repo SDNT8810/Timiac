@@ -7,6 +7,7 @@ struct UartBridge {
   String fault, commands[kMaxCommands + 4], active;
   bool ready = false, waiting = false, staged = false, job = false;
   bool everReady = false, healthSeen = false;
+  bool halted = false;
   bool releasesAxes = false;
   unsigned count = 0, next = 0;
   uint8_t homed = 0, homingMask = 0;
@@ -40,8 +41,19 @@ struct UartBridge {
     endstops.clear();
     count = next = 0; waiting = staged = job = false;
     homed = homingMask = 0; releasesAxes = false;
-    fault = ""; lastPoll = millis();
+    if (operation.barrier.active()) {
+      operation.barrier.fail(); operation.error = reason; recordReceipt();
+    }
+    // Cancelling a queue does not repair a Marlin fault or release kill().
+    lastPoll = millis();
     logMessage("Queued work cancelled: " + reason);
+  }
+  void fail(const String& reason, bool resetRequired = false) {
+    // Keep the first useful cause (e.g. Bad A Endstop), not a later timeout.
+    if (fault.isEmpty()) fault = reason;
+    halted |= resetRequired;
+    invalidate();
+    stopAll(fault);
   }
   void stage(JsonArray lines) {
     count = next = 0; homingMask = 0; releasesAxes = false;
@@ -67,16 +79,26 @@ struct UartBridge {
     line.trim(); if (line.isEmpty()) return;
     if (waiting && active == "M119") endstops.receive(line.c_str());
     if (line == "start") {
+      const bool interrupted = everReady && operation.barrier.active();
       if (everReady) {
         logMessage(String(TIMIAC_BOARD_ID == 1 ? "1" : "2") + " Octopus reboot detected");
-        if (operation.barrier.active()) {
-          stopAll("Octopus rebooted; program position is uncertain");
-          return; // Position is unknown; do not replay an interrupted command.
-        }
       }
+      halted = false; fault = "";
       ++resetCount; invalidate(); lastPoll = millis();
+      if (interrupted) stopAll("Octopus rebooted; program position is uncertain");
       return;
     }
+    if (line.startsWith("echo:Bad ") && line.indexOf(" Endstop?") == 10 && strchr(kAxes, line[9])) {
+      fail(String(line[9]) + (TIMIAC_BOARD_ID == 1 ? "1" : "2") +
+        " endstop stayed triggered after homing backoff. Check switch/motor, then reset Octopus.", true);
+      return;
+    }
+    if (line.indexOf("Printer halted") >= 0 || line.indexOf("kill() called") >= 0) {
+      fail("Marlin halted: " + line + " Reset Octopus after checking the fault.", true);
+      return;
+    }
+    // A queued/late ok cannot release a hard halt. Only a board restart can.
+    if (halted) return;
     int countAt = line.indexOf(" Count");
     String coordinates = countAt >= 0 ? line.substring(0, countAt) : line;
     for (unsigned i = 0; i < 6; ++i) {
@@ -90,9 +112,7 @@ struct UartBridge {
     bool error = line.startsWith("Error:") || line.startsWith("!!") || line.startsWith("Resend:") ||
       line.indexOf("Unknown command") >= 0 || (line.indexOf("Home ") >= 0 && line.indexOf(" First") >= 0);
     if (error) {
-      endstops.clear();
-      if (ready || job || staged) stopAll(String(TIMIAC_BOARD_ID == 1 ? "Octopus 1: " : "Octopus 2: ") + line);
-      else if (fault.isEmpty()) logMessage(line);
+      fail(String(TIMIAC_BOARD_ID == 1 ? "Octopus 1: " : "Octopus 2: ") + line);
       return;
     }
     if (job || (line.indexOf("FIRMWARE_NAME:") >= 0))
@@ -107,6 +127,9 @@ struct UartBridge {
         // A standard Marlin `ok` is sufficient proof that this bridge and its
         // Octopus UART are connected. Do not require an M114 axis report.
         fault = ""; ready = everReady = true;
+        // A fresh handshake after a restart/link recovery clears the local
+        // fault latch. Cancelled operations remain failed and are never replayed.
+        systemLatched = false; systemFault = "";
         logMessage(String(TIMIAC_BOARD_ID == 1 ? "1" : "2") + " Octopus connected");
       } else if (job && next == count) {
         if (releasesAxes) homed = 0;
@@ -117,25 +140,25 @@ struct UartBridge {
   }
 #if !TIMIAC_MASTER
   void tick() {
-    if (Serial.hasOverrun() && (ready || job)) stopAll("UART receive buffer overrun");
+    if (Serial.hasOverrun() && (ready || job)) fail("UART receive buffer overrun");
     unsigned budget = 2048;
     while (Serial.available() && budget--) {
       char c = Serial.read();
       if (c == '\n') {
         if (!serialDiscard) receive(serialLine);
-        else if (ready || job) stopAll("UART line overflow");
+        else if (ready || job) fail("UART line overflow");
         serialLine = ""; serialDiscard = false;
       } else if (c != '\r' && !serialDiscard) {
         if (serialLine.length() < 512) serialLine += c; else serialDiscard = true;
       }
     }
+    if (halted) return; // Keep reading for a restart, without polling a killed MCU.
     if (ready && !online()) {
-      stopAll(String(TIMIAC_BOARD_ID == 1 ? "Octopus 1" : "Octopus 2") + " serial response lost");
-      healthSeen = false;
+      fail(String(TIMIAC_BOARD_ID == 1 ? "Octopus 1" : "Octopus 2") + " serial response lost");
     }
     if (waiting) {
       if (millis() - sent > (job ? timiac::acknowledgementTimeout(active.c_str()) : 3000)) {
-        if (ready || job || staged) stopAll(timiac::homingCommand(active.c_str()) ? "Octopus homing acknowledgement timed out (180 seconds)" : "Octopus command acknowledgement timed out");
+        if (ready || job || staged) fail(timiac::homingCommand(active.c_str()) ? "Octopus homing acknowledgement timed out (180 seconds)" : "Octopus command acknowledgement timed out");
         else { waiting = false; lastPoll = millis(); }
       }
       return;

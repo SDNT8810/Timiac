@@ -75,3 +75,15 @@ when master is connected to the internet, we must be able to read the time from 
 also i like to be able to have access to the dashboard from other locations when it is connected to the internet. so lets make it public !
 i will give it required cloudflare and gcloud cridentials so we can publish it on :
 timiac.it domain , and only registered admin can sign in with gmail and have access to that dashboard
+
+--------------------------------------------------------------------
+
+its not fixed yet, only X Y Z 1 and 2 are homeing and then it stops and make strange noises
+
+
+i like to have state of micro switches on dev dashboard
+so i must have 12 small red lamps , when i triger them with hand it must show me which one is trigered (make it green)
+
+
+
+sk-BOYdPWrmqyDvgdSEBOyQx5b74VXxAzaOmTxNJaOkWZJCUkS6

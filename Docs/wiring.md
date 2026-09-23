@@ -128,9 +128,25 @@ driver diagnostic outputs to the three selected endstop inputs. Switch off
 board power before changing jumpers. Keep the driver UART jumpers installed.
 
 With all motors stationary, run M119 with each switch released and pressed.
-Only the corresponding `i_min`, `j_min`, or `k_min` line should
+Only the corresponding `a_min`, `b_min`, or `c_min` line should
 change from `open` to `TRIGGERED`. If it does not change, check the connector,
 signal/GND wiring, switch contact and DIAG jumper before attempting motion.
+
+`echo:Bad A Endstop?` specifically means Marlin still reads the A home input
+as triggered after the 2 mm homing backoff. The message confirms it recognized
+axis A. This can happen if the switch is held, another arm's switch is connected
+to the A input, the circuit is open, the driver/motor does not back off, or the
+mechanism has not released the switch. The message alone does not distinguish
+those causes. On Board 1 the A1 input is STOP3 / PG11 and its motor is MOTOR4.
+
+This error calls Marlin's `kill()` and requires the affected Octopus RESET
+button or a power cycle. After reset, use the development switch lamps with
+stationary motors: A1 should be red when released and green when pressed, and
+only A1 should change. Do not hold the switch during an automatic homing
+backoff. An NC switch or wire left disconnected reads triggered too.
+The corrected bridge preserves this cause and shows **Reset required**;
+Stop acknowledgements and later UART timeouts cannot erase it. Homing and
+switch wiring still need physical verification after the fault is corrected.
 
 Marlin's initial homing search is 1.5 times the configured 48 mm travel
 (72 mm commanded). Do not wait for that search to finish if the motor moves
@@ -193,12 +209,17 @@ using the network controller.
 |---|---|---|---|---|---|
 | X1 | X2 | X | MOTOR0 | 1st | STOP0 / X-STOP / PG6 |
 | Y1 | Y2 | Y | MOTOR1 | 2nd | STOP1 / Y-STOP / PG9 |
-| Z1 | Z2 | Z | MOTOR2_1 | 3rd | STOP2 / Z-STOP / PG10 |
+| Z1 | Z2 | Z | MOTOR3 | 3rd | STOP2 / Z-STOP / PG10 |
 | A1 | A2 | A | MOTOR4 | 4th | STOP3 / Z2-STOP / PG11 |
 | B1 | B2 | B | MOTOR5 | 5th | STOP4 / E0-DET / PG12 |
 | C1 | C2 | C | MOTOR6 | 6th | STOP5 / E1-DET / PG13 |
 
-MOTOR3 remains unused; it is the Z2 slot in the vendored Marlin pin map.
+MOTOR2 / MOTOR2_1 remains unused. Z is deliberately reassigned to the
+physical MOTOR3 socket (the board's Z2 slot) on both Octopus boards. Its
+TMC2209 UART pin is reassigned with it, so `M122` continues to report Z.
+Move each Z driver and motor cable from MOTOR2 to MOTOR3 while all board power
+is off. X/Y remain on MOTOR0/MOTOR1; A/B/C remain on MOTOR4/MOTOR5/MOTOR6.
+The home switches do not move: Z1/Z2 continue to use STOP2 / PG10.
 
 Pin references are in the vendored
 Marlin/src/pins/stm32f4/pins_BTT_OCTOPUS_V1_common.h.

@@ -2,6 +2,7 @@ export function boardStatus(state, key, connected) {
   const board = state?.[key];
   if (!connected) return { label: 'Unknown', detail: 'Master disconnected' };
   if (!(board?.bridgeConnected ?? board?.online ?? board?.ready)) return { label: 'ESP offline', detail: 'Reconnecting to master...' };
+  if (board.resetRequired) return { label: 'Reset required', detail: board.fault || 'Marlin halted; check the fault, then reset this Octopus' };
   if (board.fault) return { label: 'Stopped', detail: board.fault };
   if (!(board.octopusConnected ?? board.online ?? board.ready)) return { label: 'Octopus offline', detail: 'ESP connected - waiting for motor board' };
   if (board.busy) return { label: state.operation?.homing ? 'Homing' : 'Moving', detail: 'ESP and Octopus connected' };

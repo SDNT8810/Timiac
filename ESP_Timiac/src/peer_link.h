@@ -36,7 +36,8 @@ void writeBoard(JsonObject board, unsigned index) {
   board["octopusConnected"] = online;
   board["ready"] = online && (TIMIAC_MASTER ? remote.fault.isEmpty() && !remote.latched : uart.fault.isEmpty()) && !systemLatched;
   board["busy"] = online && (TIMIAC_MASTER ? remote.busy : uart.job);
-  board["fault"] = TIMIAC_MASTER ? remote.fault : uart.fault;
+  board["fault"] = TIMIAC_MASTER ? remote.fault : (uart.fault.isEmpty() ? systemFault : uart.fault);
+  board["resetRequired"] = TIMIAC_MASTER ? remote.resetRequired : uart.halted;
   board["homed"] = online ? (TIMIAC_MASTER ? remote.homed : uart.homed) : 0;
   board["reset"] = TIMIAC_MASTER ? remote.reset : uart.resetCount;
   const auto& switches = TIMIAC_MASTER ? remote.endstops : uart.endstops;
@@ -55,7 +56,7 @@ void writeBoard(JsonObject board, unsigned index) {
     else positions.add(nullptr);
 }
 void sendState() {
-  DynamicJsonDocument doc(1536);
+  DynamicJsonDocument doc(2048);
   doc["type"] = "state"; writeBoard(doc.createNestedObject("board"), 0);
   doc["id"] = operation.id; doc["phase"] = operation.barrier.name();
   doc["prepared"] = uart.prepared(); doc["error"] = operation.error;
@@ -131,6 +132,11 @@ void processPeer(Peer& p, const String& line) {
     board.online = doc["board"]["online"] | false; board.busy = doc["board"]["busy"] | false;
     board.homed = doc["board"]["homed"] | 0; board.fault = doc["board"]["fault"].as<String>();
     board.latched = doc["latched"] | false; board.stopAck = doc["stopAck"].as<String>();
+    board.resetRequired = doc["board"]["resetRequired"] | false;
+    if (board.latched && board.fault.isEmpty()) {
+      board.fault = doc["error"] | "";
+      if (board.fault.isEmpty()) board.fault = "Bridge fault; check the board log";
+    }
     board.endstops.clear();
     const uint32_t switchAge = doc["board"]["endstopsAgeMs"] | timiac::kEndstopFreshMs;
     board.endstops.updatedAt = millis() - switchAge;
@@ -164,9 +170,11 @@ void processPeer(Peer& p, const String& line) {
     String token = doc["token"] | "";
     if (token.isEmpty()) { p.socket.stop(); return; }
     if (token != acknowledgedStop) uart.abort(doc["reason"] | "Master stop");
-    // The master owns the operation state. Do not latch the bridge or issue a
-    // motor-board reboot/recovery command in response to Stop.
-    acknowledgedStop = token; systemLatched = false; systemFault = ""; sendState();
+    // Cancel the barrier as well as the UART queue. Otherwise the old homing
+    // deadline keeps firing after Stop. A local hardware fault survives Stop.
+    acknowledgedStop = token;
+    systemLatched = !uart.fault.isEmpty(); systemFault = uart.fault;
+    sendState();
   } else if (!TIMIAC_MASTER && type == "prepare") {
     String id = doc["id"] | "";
     if (id == operation.id) {

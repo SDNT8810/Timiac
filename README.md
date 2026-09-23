@@ -101,6 +101,21 @@ distance and automatic hand gestures, alongside manual control and G-code
 uploads. Its buttons require **Take control**. Both dashboards share clock and
 sensor display code and use the same firmware action/preset implementations.
 
+The development dashboard also shows twelve **Micro switches** lamps labeled
+**X1 Y1 Z1 A1 B1 C1 / X2 Y2 Z2 A2 B2 C2**. A released switch is **red**;
+a triggered switch is **green**. Press a switch by hand while the boards are
+idle to identify it, with updates arriving about once per second or faster.
+This display works before homing and without taking control. **Gray** means
+the reading is unavailable, stale, disconnected, or paused during motion.
+Switch states come from Marlin's M119 reports, independently of axis positions.
+An open circuit on the normally closed switch wiring also reports triggered.
+
+To install the lamps, rebuild and flash **both ESP bridges and the development
+master including its filesystem** (`python run.py esp1`, `python run.py esp2`,
+`python run.py master --port COM5`, substituting the actual ports). The existing
+Octopus firmware already supports these reports. Automatic switch polling is
+enabled by the development master; the release dashboard has no switch panel.
+
 - **Home:** homes all twelve axes to **0 mm**, which is physically fully open.
   Required before moving after startup or a motor-board restart.
 - **Open:** moves all arms to **0 mm**, retaining their homed state.
@@ -391,14 +406,15 @@ tested here. Browser visual verification was unavailable. See the
 ## Axis mapping
 
 Each board runs the same six-axis Marlin image. Dashboard and G-code names stay
-`A`, `B`, and `C`; each bridge changes them to Marlin's `I`, `J`, and `K` only
-when it writes its local UART command.
+`A`, `B`, and `C` all the way to the Octopus UART. Marlin internally calls the
+three driver channels `I`, `J`, and `K`, while its configured G-code names are
+`A`, `B`, and `C`.
 
 | Timiac names | Local Marlin | Octopus motor socket |
 |---|---|---|
 | X1 / X2 | X | MOTOR0 |
 | Y1 / Y2 | Y | MOTOR1 |
-| Z1 / Z2 | Z | MOTOR2 |
-| A1 / A2 | I | MOTOR4 |
-| B1 / B2 | J | MOTOR5 |
-| C1 / C2 | K | MOTOR6 |
+| Z1 / Z2 | Z | MOTOR3 |
+| A1 / A2 | A | MOTOR4 |
+| B1 / B2 | B | MOTOR5 |
+| C1 / C2 | C | MOTOR6 |
