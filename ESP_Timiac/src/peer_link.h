@@ -9,7 +9,7 @@ bool boardOnline(unsigned b) {
 }
 bool bothOnline() { return boardOnline(0) && boardOnline(1); }
 bool bothHealthy() {
-  return bothOnline() && !systemLatched && !stopRequested && !stopPending && !networkChanging &&
+  return bothOnline() && boards[0].drivers.good() && boards[1].drivers.good() && !systemLatched && !stopRequested && !stopPending && !networkChanging &&
     !boards[0].latched && !boards[1].latched && boards[0].fault.isEmpty() && boards[1].fault.isEmpty();
 }
 bool sendPeer(Peer& p, JsonDocument& doc) {
@@ -40,6 +40,13 @@ void writeBoard(JsonObject board, unsigned index) {
   board["resetRequired"] = TIMIAC_MASTER ? remote.resetRequired : uart.halted;
   board["homed"] = online ? (TIMIAC_MASTER ? remote.homed : uart.homed) : 0;
   board["reset"] = TIMIAC_MASTER ? remote.reset : uart.resetCount;
+  board["firmware"] = TIMIAC_MASTER ? remote.firmware : (uart.session.identity ? timiac::machineId : "");
+  const auto& drivers = TIMIAC_MASTER ? remote.drivers : uart.drivers;
+  JsonObject checks = board.createNestedObject("drivers");
+  checks["tested"] = drivers.tested; checks["connected"] = drivers.connected;
+  checks["current"] = drivers.currentOk; checks["microsteps"] = drivers.stepsOk;
+  checks["mode"] = drivers.modeOk; checks["columns"] = drivers.columns;
+  checks["settings"] = drivers.settings; checks["ok"] = drivers.good();
   const auto& switches = TIMIAC_MASTER ? remote.endstops : uart.endstops;
   const bool switchData = online && !(TIMIAC_MASTER ? remote.busy : uart.job) && switches.fresh(millis());
   if (switchData) board["endstopsAgeMs"] = uint32_t(millis() - switches.updatedAt);
@@ -97,9 +104,13 @@ void processPeer(Peer& p, const String& line) {
   if (deserializeJson(doc, line)) { p.socket.stop(); return; }
   String type = doc["type"] | "", from = doc["from"] | "";
   if (!p.paired) {
-    if (TIMIAC_MASTER && type == "hello" && doc["key"] == TIMIAC_PEER_KEY && doc["version"] == 4 && !from.isEmpty()) {
+    if (TIMIAC_MASTER && type == "hello" && doc["key"] == TIMIAC_PEER_KEY && !from.isEmpty()) {
       int id = doc["board"] | 0;
-      if (id < 1 || id > 2 || boardPeer(id - 1) || doc["axes"] != kAxisCount) { p.socket.stop(); return; }
+      if (id < 1 || id > 2 || boardPeer(id - 1)) { p.socket.stop(); return; }
+      if (doc["axes"] != kAxisCount || doc["version"] != timiac::protocolVersion || doc["machine"] != timiac::machineId) {
+        boards[id - 1].fault = "ESP firmware mismatch: flash this bridge with the matching TIMIAC2 release";
+        boards[id - 1].online = false; p.socket.stop(); return;
+      }
       p.board = id - 1;
       if (!lastBoardBoot[p.board].isEmpty() && from != lastBoardBoot[p.board] &&
           (operation.barrier.active() || program.reserved())) stopAll("A board bridge restarted; program stopped");
@@ -107,9 +118,10 @@ void processPeer(Peer& p, const String& line) {
       boards[p.board].online = false;
       boards[p.board].endstops.clear();
       p.boot = from; p.paired = true;
-      StaticJsonDocument<384> reply; reply["type"] = "welcome"; reply["version"] = 4; sendPeer(p, reply);
+      StaticJsonDocument<384> reply; reply["type"] = "welcome"; reply["version"] = timiac::protocolVersion;
+      reply["machine"] = timiac::machineId; sendPeer(p, reply);
       logMessage("Board " + String(id) + " bridge connected; waiting for Marlin");
-    } else if (!TIMIAC_MASTER && type == "welcome" && doc["version"] == 4 && !from.isEmpty()) {
+    } else if (!TIMIAC_MASTER && type == "welcome" && doc["version"] == timiac::protocolVersion && doc["machine"] == timiac::machineId && !from.isEmpty()) {
       if (!coordinatorBoot.isEmpty() && coordinatorBoot != from && operation.barrier.active())
         stopAll("Master restarted during command; position is uncertain");
       coordinatorBoot = from; p.boot = from; p.paired = true; sendState();
@@ -133,6 +145,15 @@ void processPeer(Peer& p, const String& line) {
     board.homed = doc["board"]["homed"] | 0; board.fault = doc["board"]["fault"].as<String>();
     board.latched = doc["latched"] | false; board.stopAck = doc["stopAck"].as<String>();
     board.resetRequired = doc["board"]["resetRequired"] | false;
+    board.firmware = doc["board"]["firmware"] | "";
+    const JsonObject checks = doc["board"]["drivers"];
+    board.drivers.tested = checks["tested"] | 0;
+    board.drivers.connected = checks["connected"] | 0;
+    board.drivers.currentOk = checks["current"] | 0;
+    board.drivers.stepsOk = checks["microsteps"] | 0;
+    board.drivers.modeOk = checks["mode"] | 0;
+    board.drivers.columns = checks["columns"] | false;
+    board.drivers.settings = checks["settings"] | 0;
     if (board.latched && board.fault.isEmpty()) {
       board.fault = doc["error"] | "";
       if (board.fault.isEmpty()) board.fault = "Bridge fault; check the board log";
@@ -149,14 +170,15 @@ void processPeer(Peer& p, const String& line) {
       board.positions[i] = doc["board"]["positions"][i] | 0.0f;
     }
     if (stopPending && boards[0].stopAck == stopToken && boards[1].stopAck == stopToken) {
-      stopPending = false; logMessage("Both bridges acknowledged the emergency stop");
+      stopPending = false; logMessage("Stop delivered to both bridges; checking motor-board state");
     }
-    if ((!board.fault.isEmpty() || board.latched) && !systemLatched) stopAll("Board " + String(p.board + 1) + ": " + board.fault);
+    if ((!board.fault.isEmpty() || board.latched) && !systemLatched && (operation.barrier.active() || program.reserved()))
+      stopAll("Board " + String(p.board + 1) + ": " + board.fault);
     // Stop cancels bridge-side queued work only. Once both bridges report a
     // clear state, Home is available again without a reboot or recovery step.
     if (systemLatched && !operation.barrier.active() && !program.reserved() &&
         boards[0].online && boards[1].online && !boards[0].latched && !boards[1].latched &&
-        boards[0].fault.isEmpty() && boards[1].fault.isEmpty()) {
+        boards[0].fault.isEmpty() && boards[1].fault.isEmpty() && boards[0].drivers.good() && boards[1].drivers.good()) {
       systemLatched = false; systemFault = "";
     }
     if (operation.barrier.active() && doc["id"] == operation.id) {
@@ -183,8 +205,7 @@ void processPeer(Peer& p, const String& line) {
     }
     bool stale = false; for (auto& r : receipts) if (r.id == id) stale = true;
     if (stale || id.isEmpty() || id.length() > 96 || !validLines(doc["lines"]) || !uart.healthy() ||
-        systemLatched || operation.barrier.active() ||
-        (hasMove(doc["lines"].as<JsonArray>()) && (uart.homed & kHomedMask) != kHomedMask)) {
+        systemLatched || operation.barrier.active()) {
       stopAll("Preparation rejected: unavailable board, unhomed axis, stale or invalid command"); return;
     }
     operation = Operation(); operation.id = id; operation.hash = doc["hash"] | 0U;
@@ -211,10 +232,8 @@ void networkTick() {
         // A homing command is driven locally by Marlin endstops. Continue it
         // across a transient Wi-Fi reconnection without injecting Marlin
         // emergency, reset, or recovery commands.
-        const bool homing = operation.barrier.active() && operation.homing;
-        if (!homing && (operation.barrier.active() || program.state == "running" || program.state == "paused" ||
-            (!TIMIAC_MASTER && uart.job))) stopAll("Bridge link lost during work; no automatic replay");
-        else if (homing) logMessage("Bridge link lost during homing; local G28 continues");
+        if (operation.barrier.active() || program.state == "running" || program.state == "paused" ||
+            (!TIMIAC_MASTER && uart.job)) stopAll("Bridge link lost during work; movement cancelled, no replay");
       }
     }
   }
@@ -242,7 +261,8 @@ void networkTick() {
         p.paired = false; p.rx = millis(); p.line = ""; p.discard = false;
         p.socket.setTimeout(20); p.socket.setNoDelay(true);
         StaticJsonDocument<512> hello;
-        hello["type"] = "hello"; hello["key"] = TIMIAC_PEER_KEY; hello["version"] = 4;
+        hello["type"] = "hello"; hello["key"] = TIMIAC_PEER_KEY; hello["version"] = timiac::protocolVersion;
+        hello["machine"] = timiac::machineId;
         hello["board"] = TIMIAC_BOARD_ID; hello["axes"] = kAxisCount; sendPeer(p, hello);
       }
     }
@@ -278,12 +298,13 @@ void operationTick() {
   // status-packet gap into a motor-board command while it is still running. Each bridge gives
   // its active G28 180 seconds, the master has the same operation deadline,
   // and an explicit board fault is still propagated by processPeer() above.
-  if (TIMIAC_MASTER && !operation.homing && !bothHealthy()) {
+  if (TIMIAC_MASTER && !bothHealthy()) {
     stopAll("Both-board health check failed during command"); return;
   }
   if (operation.barrier.phase == timiac::Phase::Preparing) {
     if (TIMIAC_MASTER && operation.barrier.canStart(bothHealthy())) {
       operation.barrier.phase = timiac::Phase::Running;
+      operation.barrier.since = millis();
       for (unsigned b = 0; b < 2; ++b) {
         Peer* p = boardPeer(b); StaticJsonDocument<384> doc; doc["type"] = "commit"; doc["id"] = operation.id;
         if (!p || !sendPeer(*p, doc)) { stopAll("Commit delivery failed"); return; }

@@ -1,4 +1,5 @@
 #pragma once
+#include "../../shared/machine_generated.h"
 
 // All three modules must use the same credentials. Override in config.local.h.
 #if __has_include("config.local.h")
@@ -69,17 +70,17 @@ constexpr unsigned long kBaud = 115200;
 // link-loss limits, separate from the 180-second G28 completion limit.
 constexpr unsigned long kPeerTimeout = 15000;
 constexpr unsigned long kHealthTimeout = 15000;
-constexpr unsigned long kPrepareTimeout = 4000;
+constexpr unsigned long kPrepareTimeout = 15000;
 constexpr unsigned long kLeaseMs = 15000;
 constexpr unsigned long kHeartbeatMs = 250;
 // Each Octopus runs X/Y/Z/A/B/C. All three ESP modules must use this same count.
-constexpr unsigned kAxisCount = 6;
+constexpr unsigned kAxisCount = timiac::axisCount;
 constexpr uint8_t kHomedMask = (1U << kAxisCount) - 1;
-constexpr float kTravelMm = 48;
-constexpr float kMaxFeed = 700.0f; // 11.6667 mm/s; must match every Marlin axis limit.
+constexpr float kTravelMm = timiac::travelMm;
+constexpr float kMaxFeed = timiac::maxFeed;
 constexpr unsigned kMaxLine = 160;
 constexpr unsigned kMaxCommands = 6;
 constexpr unsigned kPeerPort = 8266;
 // Local G-code letters on both the peer link and Octopus UART. Marlin's
 // internal I/J/K driver identifiers use AXIS4/5/6_NAME = A/B/C in G-code.
-constexpr char kAxes[] = "XYZABC";
+constexpr auto& kAxes = timiac::axes;

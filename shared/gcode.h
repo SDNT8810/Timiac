@@ -5,11 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <initializer_list>
+#include "machine_generated.h"
 
 namespace timiac {
 // Dashboard/program letters and native Octopus G-code letters are identical.
 // The master selects the board using the 1/2 suffix; bridges keep XYZABC intact.
-constexpr char axes[] = "XYZABC";
 struct GcodeState {
   bool absolute = true;
   float feed = 180, position[12] = {};

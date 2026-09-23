@@ -85,5 +85,21 @@ i like to have state of micro switches on dev dashboard
 so i must have 12 small red lamps , when i triger them with hand it must show me which one is trigered (make it green)
 
 
+--------------------------------------------------------------------
 
-sk-BOYdPWrmqyDvgdSEBOyQx5b74VXxAzaOmTxNJaOkWZJCUkS6
+clock arm map is like this :
+
+X1 ---> 12 o'clock
+Y1 ---> 11 o'clock
+Z1 ---> 10 o'clock
+A1 ----> 9 o'clock
+B1 ----> 8 o'clock
+C1 ----> 7 o'clock
+X2 ----> 6 o'clock
+Y2 ----> 5 o'clock
+Z2 ----> 4 o'clock
+A2 ----> 3 o'clock
+B2 ----> 2 o'clock
+C2 ----> 1 o'clock
+
+so please update the logic and g-codes accordingly

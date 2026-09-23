@@ -17,6 +17,8 @@ struct Peer {
 } peers[2];
 struct RemoteBoard {
   timiac::EndstopReport endstops;
+  timiac::DriverReport drivers;
+  String firmware;
   bool online = false, busy = false, latched = false, resetRequired = false;
   uint8_t homed = 0;
   uint32_t reset = 0, stateAt = 0;
@@ -107,7 +109,12 @@ bool hasHoming(JsonArray lines) {
 }
 bool homingReady(JsonVariant step) {
   for (unsigned b = 0; b < 2; ++b)
-    if (hasMove(step[b == 0 ? "a" : "b"].as<JsonArray>()) && (boards[b].homed & kHomedMask) != kHomedMask) return false;
+    for (JsonVariant line : step[b == 0 ? "a" : "b"].as<JsonArray>()) {
+      const char* command = line.as<const char*>();
+      if (!strncmp(command, "G1 ", 3))
+        for (unsigned a = 0; a < 6; ++a)
+          if (strchr(command, kAxes[a]) && !(boards[b].homed & (1U << a))) return false;
+    }
   return true;
 }
 const char* translate(const char* line, timiac::GcodeState& state, JsonObject doc) {

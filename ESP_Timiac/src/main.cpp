@@ -8,6 +8,7 @@
 #include "../../shared/timeouts.h"
 #include "../../shared/gcode.h"
 #include "../../shared/endstops.h"
+#include "../../shared/driver_report.h"
 #include "../../shared/clock.h"
 #if TIMIAC_MASTER
 #include "../../shared/presets.h"

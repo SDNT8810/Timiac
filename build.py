@@ -7,54 +7,47 @@ import re
 import shutil
 import subprocess
 import sys
+import os
+import tempfile
+import zipfile
+from tools.machine_config import generate, definitions, replace_definitions
 
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "Marlin/marlin-2.1.2.7"
-STAGED = ROOT / ".build/marlin-two-motor"
+BUILD_ROOT = Path(os.environ.get("TIMIAC_BUILD_DIR", str(Path(tempfile.gettempdir()) / "TimiacBuild"))).resolve()
+STAGED = BUILD_ROOT / "marlin"
 PROFILE = ROOT / "Marlin/profiles/twelve-motor/profile.json"
 
 
 def prepare_marlin():
-    profile = json.loads(PROFILE.read_text(encoding="utf-8"))
-    # Recreate the staged Marlin tree for every build.  A previous recovery
-    # experiment added source files here; `copytree(..., dirs_exist_ok=True)`
-    # would otherwise preserve them even after they were removed upstream.
-    shutil.rmtree(STAGED, ignore_errors=True)
-    shutil.copytree(SOURCE, STAGED, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns(".pio", ".git", ".venv", "__pycache__"))
-    for name in ("Configuration.h", "Configuration_adv.h"):
-        text = (SOURCE / "Marlin" / name).read_text(encoding="utf-8")
-        for key, value in profile[name].items():
-            pattern = rf"^[ \t]*(?://)?#define[ \t]+{re.escape(key)}\b[^\n]*"
-            replacement = f"// TIMIAC: {key} disabled" if value is None else f"#define {key} {value}"
-            text, count = re.subn(pattern, lambda _: replacement, text, flags=re.MULTILINE)
-            if count != 1:
-                raise ValueError(f"Expected one {key} definition in {name}, found {count}")
-        if name == "Configuration.h":
-            text += "\n// Explicit Timiac profile pin mapping.\n"
-            text += "\n".join(f"#define {key} {value}" for key, value in profile.get("pins", {}).items()) + "\n"
-        (STAGED / "Marlin" / name).write_text(text, encoding="utf-8")
-    # Octopus defines X/Y/Z socket pins in its board header, after
-    # Configuration.h is read. Apply profile socket reassignment after all
-    # board pin defaults and their post-processing, but before Marlin derives
-    # its final axis conditions and instantiates the TMC drivers.
-    post_pins = profile.get("post_pins", {})
-    if post_pins:
-        overlay = STAGED / "Marlin" / "src" / "inc" / "timiac_post_pins.h"
-        lines = ["#pragma once", "// Generated from Marlin/profiles/twelve-motor/profile.json."]
-        for key, value in post_pins.items():
-            lines += [f"#ifdef {key}", f"#undef {key}", "#endif", f"#define {key} {value}"]
-        overlay.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        config = STAGED / "Marlin" / "src" / "inc" / "MarlinConfig.h"
-        text = config.read_text(encoding="utf-8")
-        needle = '#include "../pins/pins.h"'
-        if text.count(needle) != 1:
-            raise ValueError("Expected one Marlin pin-header include for the Timiac socket override")
-        text = text.replace(needle, needle + '\n#include "timiac_post_pins.h"')
-        config.write_text(text, encoding="utf-8")
-    # Keep Marlin stock. The attempted remote-reset/watchdog overlay could
-    # inject M112 while an ordinary G28 was still in progress.
-    print(f"Prepared shared six-axis source: {STAGED}", flush=True)
+    machine, identity = generate()
+    # Start from the pinned upstream tree, never the modified X-only working tree.
+    BUILD_ROOT.mkdir(parents=True, exist_ok=True)
+    if STAGED.resolve().parent != BUILD_ROOT or STAGED.name != "marlin":
+        raise ValueError("Unsafe staging path")
+    if STAGED.exists():
+        shutil.rmtree(STAGED)
+    archive = BUILD_ROOT / "marlin-source.zip"
+    subprocess.run(["git", "-C", str(SOURCE), "archive", "--format=zip", "--output", str(archive), "2.1.2.7"], check=True)
+    with zipfile.ZipFile(archive) as source:
+        source.extractall(STAGED)
+    for name, values in definitions(machine, identity).items():
+        path = STAGED / "Marlin" / name
+        path.write_text(replace_definitions(path.read_text(encoding="utf-8"), values), encoding="utf-8")
+    # Apply explicit signals at the END of the board header, BEFORE pins_postprocess.
+    # No late patch to MarlinConfig and no implicit I/J/K extruder socket allocation.
+    board = STAGED / "Marlin/src/pins/stm32f4/pins_BTT_OCTOPUS_V1_1.h"
+    pins = ["\n// Timiac generation 2: all active sockets explicitly assigned."]
+    for axis in machine["axes"]:
+        key = axis["marlin"]
+        mapping = {"STEP_PIN": "step", "DIR_PIN": "dir", "ENABLE_PIN": "enable",
+                   "CS_PIN": "uart", "SERIAL_TX_PIN": "uart", "SERIAL_RX_PIN": "uart",
+                   "MIN_PIN": "endstop"}
+        for suffix, field in mapping.items():
+            pins += [f"#undef {key}_{suffix}", f"#define {key}_{suffix} {axis[field]}"]
+    board.write_text(board.read_text(encoding="utf-8") + "\n".join(pins) + "\n", encoding="utf-8")
+    shutil.copy2(ROOT / "tests/marlin_motor_socket_mapping.cpp", STAGED / "Marlin/src/timiac_contract.cpp")
+    print(f"Prepared {identity} from clean Marlin 2.1.2.7: {STAGED}", flush=True)
     return STAGED
 
 
@@ -63,6 +56,7 @@ def main():
     parser.add_argument("target", choices=("all", "master", "master_release", "board1", "board2", "marlin"), nargs="?", default="all")
     parser.add_argument("--prepare-only", action="store_true", help="generate the six-axis Marlin source without compiling")
     args = parser.parse_args()
+    generate()
     if args.prepare_only:
         prepare_marlin()
         return

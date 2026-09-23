@@ -1,4 +1,5 @@
 .build/
+BackUp/
 **/.pio/
 **/node_modules/
 **/__pycache__/

@@ -1,0 +1,81 @@
+{
+  "identity": "TIMIAC2-362c3de3cfa0",
+  "generation": 2,
+  "protocol": 5,
+  "marlin_environment": "STM32F446ZE_btt",
+  "motherboard": "BOARD_BTT_OCTOPUS_V1_1",
+  "travel_mm": 48,
+  "steps_per_mm": 720,
+  "max_feed_mm_min": 700,
+  "homing_feed_mm_min": 675,
+  "acceleration_mm_s2": 20,
+  "driver": "TMC2209",
+  "current_ma": 600,
+  "microsteps": 4,
+  "rsense": 0.11,
+  "uart_address": 0,
+  "driver_mode": "spreadCycle",
+  "chopper_timing": "CHOPPER_DEFAULT_12V",
+  "axes": [
+    {
+      "name": "X",
+      "marlin": "X",
+      "socket": 0,
+      "step": "PF13",
+      "dir": "PF12",
+      "enable": "PF14",
+      "uart": "PC4",
+      "endstop": "PG6"
+    },
+    {
+      "name": "Y",
+      "marlin": "Y",
+      "socket": 1,
+      "step": "PG0",
+      "dir": "PG1",
+      "enable": "PF15",
+      "uart": "PD11",
+      "endstop": "PG9"
+    },
+    {
+      "name": "Z",
+      "marlin": "Z",
+      "socket": 3,
+      "step": "PG4",
+      "dir": "PC1",
+      "enable": "PA0",
+      "uart": "PC7",
+      "endstop": "PG10"
+    },
+    {
+      "name": "A",
+      "marlin": "I",
+      "socket": 4,
+      "step": "PF9",
+      "dir": "PF10",
+      "enable": "PG2",
+      "uart": "PF2",
+      "endstop": "PG11"
+    },
+    {
+      "name": "B",
+      "marlin": "J",
+      "socket": 5,
+      "step": "PC13",
+      "dir": "PF0",
+      "enable": "PF1",
+      "uart": "PE4",
+      "endstop": "PG12"
+    },
+    {
+      "name": "C",
+      "marlin": "K",
+      "socket": 6,
+      "step": "PE2",
+      "dir": "PE3",
+      "enable": "PD4",
+      "uart": "PE1",
+      "endstop": "PG13"
+    }
+  ]
+}

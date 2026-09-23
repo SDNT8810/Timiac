@@ -1,4 +1,4 @@
-// Dashboard names. The hardware bridge maps A/B/C to Marlin I/J/K.
+// Public local letters reach Marlin unchanged. Only the board suffix is removed.
 export const AXES = 'XYZABC';
 // Simulator arm names, clockwise from arm 1. F remains the standard feed word.
 export const SIM_AXES = 'ABCDEHIJKLUV';

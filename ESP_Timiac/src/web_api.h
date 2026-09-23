@@ -11,6 +11,7 @@ void statusReply(AsyncWebServerRequest* request) {
   DynamicJsonDocument doc(8192);
   doc["mode"] = "hardware"; doc["session"] = bootId; doc["revision"] = ++snapshotSerial;
   doc["dashboard"] = TIMIAC_RELEASE ? "release" : "development";
+  doc["firmware"] = timiac::machineId; doc["protocol"] = timiac::protocolVersion;
   JsonObject clock = doc.createNestedObject("clock");
   writeRtcStatus(clock);
   writeNtpStatus(clock);
