@@ -1,0 +1,8 @@
+.build/
+**/.pio/
+**/node_modules/
+**/__pycache__/
+**/dist/
+.venv/
+ESP_Timiac/include/config.local.h
+*.log

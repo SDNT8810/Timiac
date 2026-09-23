@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eae9e1">
+  <title>Timiac · Clock control</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <header><a class="brand" href="/">TIMIAC<span>THE TWELVE-ARM CLOCK</span></a><span id="connection" class="badge">Connecting</span></header>
+    <section class="clock-card" aria-label="Current clock time">
+      <h1>Current time</h1>
+      <div id="clock" class="clock">--:--:--</div>
+      <p id="date">Reading the clock…</p>
+      <p id="clock-status" class="muted">Time is kept on your Timiac.</p>
+      <p class="sensor-readout" aria-label="Hand sensor distance"><span>Hand distance</span><strong id="sensor-distance">—</strong><span id="sensor-status" class="muted">Connecting</span></p>
+      <div class="board-status"><div id="board-a"><span>ESP1 / Octopus 1</span><strong id="board-status-a">Waiting</strong><small id="board-detail-a">Connecting…</small></div><div id="board-b"><span>ESP2 / Octopus 2</span><strong id="board-status-b">Waiting</strong><small id="board-detail-b">Connecting…</small></div></div>
+    </section>
+    <section class="controls" aria-label="Clock actions">
+      <button data-action="home" disabled><span class="symbol" aria-hidden="true">⌂</span><strong>Home</strong><small>Home all 12 arms</small></button>
+      <button data-action="open" disabled><span class="symbol" aria-hidden="true">↗</span><strong>Open</strong><small>All arms to 0 mm</small></button>
+      <button data-action="close" disabled><span class="symbol" aria-hidden="true">↙</span><strong>Close</strong><small id="travel">All arms to 48 mm</small></button>
+      <button data-action="show-time" class="accent" disabled title="Minute arm at 0 mm, hour arm halfway, other arms at full stroke. Press to update."><span class="symbol" aria-hidden="true">◷</span><strong>Show time</strong><small>Arms to current time</small></button>
+      <button data-action="struggle" class="preset" disabled><strong>Struggle</strong><small>Circular wave</small></button>
+      <button data-action="next-five" class="preset" disabled><strong>Next 5 min</strong><small>Next time pose</small></button>
+      <button data-action="next-hour" class="preset" disabled><strong>Next hour</strong><small>Hour movement</small></button>
+    </section>
+    <div class="machine"><p id="machine-status" role="status">Connecting to Timiac…</p><button id="stop" class="stop">Stop</button></div>
+    <p id="message" role="status" aria-live="polite"></p>
+    <section class="settings">
+      <div><h2>Set your clock</h2><p>Save local time to your Timiac.</p></div>
+      <form id="time-form">
+        <label for="local-time">Local date &amp; time</label>
+        <input id="local-time" type="datetime-local" step="1" min="2000-01-01T00:00:00" max="2099-12-31T23:59:59" required>
+        <div class="form-actions"><button id="phone-time" type="button">Use phone time</button><button id="save-time" type="submit" class="dark" disabled>Save time</button></div>
+        <small>Daylight-saving changes are manual.</small>
+      </form>
+      <details class="wifi-settings"><summary>Router / hotspot Wi-Fi</summary><p id="wifi-status">Reading connection…</p>
+        <form id="wifi-form"><label for="wifi-ssid">Wi-Fi name (2.4 GHz)</label><input id="wifi-ssid" autocomplete="off" maxlength="32" required>
+          <label for="wifi-password">Password (leave empty for an open network)</label><input id="wifi-password" type="password" autocomplete="new-password" maxlength="63">
+          <div class="form-actions"><button id="wifi-save" type="submit">Save &amp; connect</button><button id="wifi-forget" type="button">Forget</button></div>
+        </form>
+      </details>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

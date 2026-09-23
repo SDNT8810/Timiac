@@ -1,0 +1,308 @@
+#pragma once
+uint32_t snapshotSerial = 0;
+
+void errorReply(AsyncWebServerRequest* request, unsigned code, const String& message) {
+  StaticJsonDocument<384> doc; doc["error"] = message;
+  String text; serializeJson(doc, text); request->send(code, "application/json", text);
+}
+void statusReply(AsyncWebServerRequest* request) {
+  RuntimeLock lock;
+  if (ESP.getFreeHeap() < 16000) { errorReply(request, 503, "Controller busy; retry status shortly"); return; }
+  DynamicJsonDocument doc(8192);
+  doc["mode"] = "hardware"; doc["session"] = bootId; doc["revision"] = ++snapshotSerial;
+  doc["dashboard"] = TIMIAC_RELEASE ? "release" : "development";
+  JsonObject clock = doc.createNestedObject("clock");
+  writeRtcStatus(clock);
+  writeNtpStatus(clock);
+  clock["armMinute"] = armTimeMinutes;
+  writeProximityStatus(doc.createNestedObject("proximity"));
+  writeUplinkStatus(doc.createNestedObject("wifi"));
+  writeCloudStatus(doc.createNestedObject("cloud"));
+  doc["peerConnected"] = boardPeer(0) && boardPeer(1); doc["axesPerBoard"] = kAxisCount; doc["stopPending"] = stopPending || stopRequested;
+  doc["travelMm"] = kTravelMm; doc["maxFeed"] = kMaxFeed; doc["stations"] = WiFi.softAPgetStationNum();
+  doc["machineReady"] = bothHealthy(); doc["fault"] = systemFault;
+  doc["machineState"] = systemLatched ? "faulted" : bothHealthy() ? "ready" : "reconnecting";
+  writeBoard(doc.createNestedObject("a"), 0); writeBoard(doc.createNestedObject("b"), 1);
+  JsonObject op = doc.createNestedObject("operation");
+  op["id"] = operation.id; op["state"] = operation.barrier.name(); op["error"] = operation.error;
+  op["homing"] = operation.homing; op["timeoutMs"] = timiac::operationTimeout(operation.homing);
+  if (request->hasParam("operation")) {
+    String id = request->getParam("operation")->value();
+    JsonObject result = doc.createNestedObject("result"); result["id"] = id; result["state"] = "unknown";
+    for (auto& receipt : receipts) if (receipt.id == id) {
+      result["state"] = receipt.state; result["error"] = receipt.error; break;
+    }
+    if (program.builtin && program.id == id) {
+      result["state"] = program.state == "faulted" ? "failed" : program.state;
+      result["error"] = program.error;
+    }
+  }
+  JsonObject owner = doc.createNestedObject("control");
+  owner["owner"] = lease.live() ? lease.owner : ""; owner["label"] = lease.live() ? lease.label : "";
+  owner["fence"] = lease.fence; owner["expiresInMs"] = lease.live() ? kLeaseMs - (millis() - lease.renewed) : 0;
+  JsonObject job = doc.createNestedObject("program");
+  job["id"] = program.id; job["name"] = program.name; job["state"] = program.state;
+  job["total"] = program.total; job["uploaded"] = program.uploaded; job["completed"] = program.completed;
+  job["error"] = program.error; job["translation"] = program.translation;
+  job["builtin"] = program.builtin;
+  JsonArray history = doc.createNestedArray("events");
+  uint32_t after = request->hasParam("after") ? strtoul(request->getParam("after")->value().c_str(), nullptr, 10) : 0;
+  uint32_t first = logSequence > 8 ? logSequence - 8 : 0;
+  for (uint32_t i = first; i < logSequence; ++i) {
+    const LogEntry& entry = logs[i % 32]; if (entry.id <= after) continue;
+    JsonObject event = history.createNestedObject(); event["id"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
+  }
+  doc["logSequence"] = logSequence;
+  String text; serializeJson(doc, text);
+  AsyncWebServerResponse* response = request->beginResponse(200, "application/json", text);
+  response->addHeader("Cache-Control", "no-store"); response->addHeader("Connection", "close"); request->send(response);
+}
+bool authorized(AsyncWebServerRequest* request, JsonVariant doc, bool writer) {
+  if (!request->hasHeader("X-Timiac") || request->getHeader("X-Timiac")->value() != "1") {
+    errorReply(request, 403, "Missing control header"); return false;
+  }
+  if (doc["session"] != bootId) { errorReply(request, 409, "Controller restarted; synchronize status first"); return false; }
+  if (writer && (!lease.live() || doc["client"] != lease.owner || doc["fence"] != lease.fence)) {
+    errorReply(request, 423, "Another phone has control, or your control lease expired"); return false;
+  }
+  if (writer) lease.renewed = millis();
+  return true;
+}
+void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
+  RuntimeLock lock;
+  String path = request->url();
+  if (path == "/api/stop") {
+    if (!request->hasHeader("X-Timiac") || request->getHeader("X-Timiac")->value() != "1") {
+      errorReply(request, 403, "Missing control header"); return;
+    }
+    stopRequested = true; statusReply(request); return;
+  }
+  bool writer = path != "/api/claim";
+  if (!authorized(request, doc, writer)) return;
+  if (path == "/api/wifi") {
+    const char* error = saveUplink(doc);
+    if (error) { errorReply(request, 400, error); return; }
+    statusReply(request); return;
+  }
+  if (path == "/api/time") {
+    DateTime date;
+    if (!doc["localTime"].is<const char*>() || !parseRtcDate(doc["localTime"].as<String>(), date)) {
+      errorReply(request, 400, "Enter a valid local date and time from 2000 to 2099"); return;
+    }
+    if (!setRtcDate(date)) { errorReply(request, 503, rtcError.isEmpty() ? "RTC write could not be verified" : rtcError); return; }
+    armTimeMinutes = -1;
+    statusReply(request); return;
+  }
+  if (path == "/api/action") {
+    String action = doc["action"] | "";
+    bool animation = action == "struggle" || action == "next-hour";
+    bool nextTime = action == "next-five" || action == "next-hour";
+    if (action != "home" && action != "open" && action != "close" && action != "show-time" && action != "next-five" && !animation) {
+      errorReply(request, 400, "Unknown user action"); return;
+    }
+    String id = doc["id"] | "";
+    uint32_t actionHash = hashText("action:" + action);
+    if (!id.isEmpty() && program.builtin && program.id == id) {
+      if (program.actionHash != actionHash) { errorReply(request, 409, "Request ID reused with another action"); return; }
+      statusReply(request); return;
+    }
+    // Resolve retries before reading the clock again: an accepted pose is immutable.
+    for (auto& r : receipts) if (!id.isEmpty() && r.id == id) {
+      if (r.hash != actionHash) { errorReply(request, 409, "Request ID reused with another action"); return; }
+      statusReply(request); return;
+    }
+    unsigned targetMinute = 0;
+    if (action == "show-time" || nextTime) {
+      rtcTick(true);
+      if ((action == "show-time" || armTimeMinutes < 0) && !rtcValid) { errorReply(request, 503, rtcError); return; }
+      targetMinute = nextTime && armTimeMinutes >= 0 ? armTimeMinutes : rtcTime.hour() * 60 + rtcTime.minute();
+      if (nextTime) targetMinute = timiac::nextClockMinute(targetMinute, action == "next-five");
+    }
+    // Validate ownership, sequence and readiness before starting any preset.
+    if (id.isEmpty() || id.length() > 96 || !doc["seq"].is<uint32_t>() || doc["seq"].as<uint32_t>() <= lease.lastSeq) {
+      errorReply(request, 409, "Invalid or stale action ID/sequence"); return;
+    }
+    if (operation.barrier.active() || program.reserved()) { errorReply(request, 409, "A command or program owns the machine"); return; }
+    if (!bothHealthy()) { errorReply(request, 503, "Both Octopus boards must be healthy and synchronized"); return; }
+    if (action != "home" && ((boards[0].homed & kHomedMask) != kHomedMask || (boards[1].homed & kHomedMask) != kHomedMask)) {
+      errorReply(request, 409, "Home all moving axes first"); return;
+    }
+    if (animation) {
+      const char* error = startBuiltinPreset(action == "next-hour" ? timiac::Preset::Hour : timiac::Preset::Struggle, targetMinute, id, actionHash);
+      if (error) { errorReply(request, 409, error); return; }
+      lease.lastSeq = doc["seq"].as<uint32_t>();
+      statusReply(request); return;
+    }
+    // Discard any caller-supplied G-code and arrays. User actions are defined here.
+    doc.remove("gcode");
+    timiac::Step step;
+    timiac::userAction(nextTime ? "show-time" : action.c_str(), targetMinute / 60, targetMinute % 60, kTravelMm, kMaxFeed, step);
+    for (unsigned b = 0; b < 2; ++b) {
+      JsonArray lines = doc.createNestedArray(b ? "b" : "a");
+      for (unsigned i = 0; i < step.count[b]; ++i) lines.add(String(step.lines[b][i]));
+      if (lines.size() != step.count[b]) { errorReply(request, 400, "Action request is too large"); return; }
+    }
+    doc["actionHash"] = actionHash;
+    doc["armMinute"] = action == "show-time" || nextTime ? int(targetMinute) : -1;
+    path = "/api/command";
+  } else {
+    doc.remove("actionHash");
+    doc.remove("armMinute");
+#if TIMIAC_RELEASE
+    if (path == "/api/command" || path.startsWith("/api/program/")) {
+      errorReply(request, 404, "Development commands are unavailable in user mode"); return;
+    }
+#endif
+  }
+  if (path == "/api/claim") {
+    String client = doc["client"] | "";
+    if (client.isEmpty() || client.length() > 40) { errorReply(request, 400, "Invalid client ID"); return; }
+    if (lease.live() && lease.owner != client) { errorReply(request, 423, "Control belongs to " + lease.label); return; }
+    if (!lease.live() || lease.owner != client) {
+      ++lease.fence; lease.lastSeq = 0; manualParser = timiac::GcodeState();
+      logMessage("Control acquired by " + String(doc["label"] | "Phone").substring(0, 24));
+    }
+    lease.owner = client; lease.label = String(doc["label"] | "Phone").substring(0, 24); lease.renewed = millis();
+  } else if (path == "/api/lease") {
+    // authorized() renewed the owner's lease. Observers cannot extend it.
+  } else if (path == "/api/release") {
+    logMessage("Control released by " + lease.label); lease.owner = "";
+  } else if (path == "/api/command") {
+    String id = doc["id"] | "";
+    timiac::GcodeState nextParser = manualParser;
+    uint32_t rawHash = 0;
+    if (doc["gcode"].is<const char*>()) {
+      rawHash = hashText("raw:" + doc["gcode"].as<String>());
+      // Look up raw retries before relative coordinates are translated again.
+      for (auto& r : receipts) if (!id.isEmpty() && r.id == id) {
+        if (r.hash != rawHash) { errorReply(request, 409, "Request ID reused with different commands"); return; }
+        statusReply(request); return;
+      }
+      for (unsigned b = 0; b < 2; ++b) for (unsigned a = 0; a < 6; ++a) {
+        nextParser.position[b * 6 + a] = boards[b].positions[a];
+        nextParser.known[b * 6 + a] = boardOnline(b) && boards[b].known[a] && (boards[b].homed & (1U << a));
+      }
+      const char* error = translate(doc["gcode"], nextParser, doc.as<JsonObject>());
+      if (error) { errorReply(request, 400, error); return; }
+    }
+    if (id.isEmpty() || id.length() > 96 || !validStep(doc)) { errorReply(request, 400, "Invalid command arrays or ID"); return; }
+    uint32_t hash = doc["actionHash"].is<uint32_t>() ? doc["actionHash"].as<uint32_t>() : doc["gcode"].is<const char*>() ? rawHash : commandHash(doc["a"], doc["b"]);
+    for (auto& r : receipts) if (r.id == id) {
+      if (r.hash != hash) { errorReply(request, 409, "Request ID reused with different commands"); return; }
+      statusReply(request); return;
+    }
+    if (!doc["seq"].is<uint32_t>() || doc["seq"].as<uint32_t>() <= lease.lastSeq) {
+      errorReply(request, 409, "Stale command sequence; refused to replay"); return;
+    }
+    if (operation.barrier.active() || program.reserved()) { errorReply(request, 409, "A command or program owns the machine"); return; }
+    if (!bothHealthy()) { errorReply(request, 503, "Both Octopus boards must be healthy and synchronized"); return; }
+    if (!homingReady(doc)) { errorReply(request, 409, "Home all moving axes first"); return; }
+    lease.lastSeq = doc["seq"].as<uint32_t>(); manualParser = nextParser;
+    startOperation(doc["a"].as<JsonArray>(), doc["b"].as<JsonArray>(), id, hash);
+    armTimeMinutes = !systemLatched ? (doc["armMinute"] | -1) : -1;
+  } else if (path == "/api/program/begin") {
+    unsigned total = doc["total"] | 0;
+    if (!total || total > 4096) { errorReply(request, 400, "Program must contain 1–4096 steps"); return; }
+    if (operation.barrier.active() || (program.reserved() && program.state != "uploading")) { errorReply(request, 409, "Program/command already active"); return; }
+    recordProgramReceipt(); program.file.close(); program = Program();
+    program.id = bootId + "-program-" + String(++sequence); program.total = total;
+    program.name = String(doc["name"] | "Program").substring(0, 40); program.uploadOwner = lease.owner;
+    program.file = LittleFS.open("/program.jsonl", "w");
+    if (!program.file) { errorReply(request, 507, "Cannot create program file"); return; }
+    program.state = "uploading"; program.activity = millis();
+  } else if (path.startsWith("/api/program/")) {
+    if (doc["program"] != program.id) { errorReply(request, 409, "Program changed; refresh status"); return; }
+    if (path == "/api/program/append") {
+      if (program.state != "uploading" || program.uploadOwner != lease.owner || !doc["gcode"].is<const char*>()) {
+        errorReply(request, 409, "No matching upload or invalid step"); return;
+      }
+      unsigned index = doc["index"] | 65535;
+      uint32_t hash = hashText(doc["gcode"].as<String>());
+      if (program.uploaded && index == program.uploaded - 1 && hash == program.lastHash) { statusReply(request); return; }
+      if (index != program.uploaded || index >= program.total) { errorReply(request, 409, "Upload step out of sequence"); return; }
+      auto nextParser = program.parser;
+      JsonObject step = doc.createNestedObject("step");
+      const char* error = translate(doc["gcode"], nextParser, step);
+      if (error || !validStep(step)) { errorReply(request, 400, error ? error : "Empty program line"); return; }
+      String line; serializeJson(step, line); line += '\n';
+      if (program.bytes + line.length() > 524288 || program.file.print(line) != line.length()) {
+        program.state = "faulted"; program.file.close(); errorReply(request, 507, "Program storage limit/write failure"); return;
+      }
+      program.parser = nextParser; program.translation = line; program.bytes += line.length(); program.lastHash = hash; ++program.uploaded; program.activity = millis();
+      if (program.uploaded == program.total) {
+        program.file.close(); program.state = "ready"; logMessage("Program uploaded: " + program.name);
+      }
+    } else if (path == "/api/program/start") {
+      if (program.state == "running") { statusReply(request); return; }
+      if (program.state != "ready" || operation.barrier.active() || !bothHealthy()) { errorReply(request, 409, "Program or both boards are not ready"); return; }
+      program.file = LittleFS.open("/program.jsonl", "r");
+      if (!program.file) { errorReply(request, 507, "Program file unavailable"); return; }
+      program.completed = 0; program.hasStep = false; program.state = "running"; logMessage("Program running on hotspot ESP: " + program.name);
+      armTimeMinutes = -1;
+    } else if (path == "/api/program/pause") {
+      if (program.state != "running" && program.state != "paused") { errorReply(request, 409, "No running program"); return; }
+      program.state = "paused"; logMessage("Program pauses at the current step boundary");
+    } else if (path == "/api/program/resume") {
+      if (program.state != "paused" || !bothHealthy()) { errorReply(request, 409, "Cannot resume until both boards are healthy"); return; }
+      program.state = "running"; logMessage("Program resumed");
+    } else { errorReply(request, 404, "Unknown program endpoint"); return; }
+  } else { errorReply(request, 404, "Unknown endpoint"); return; }
+  statusReply(request);
+}
+void configureHttp() {
+  http.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) { statusReply(request); });
+  http.on("/api/rtc", HTTP_GET, [](AsyncWebServerRequest* request) {
+    RuntimeLock lock;
+    StaticJsonDocument<1024> doc; writeRtcStatus(doc.to<JsonObject>(), true); writeNtpStatus(doc.to<JsonObject>());
+    String text; serializeJson(doc, text);
+    auto* response = request->beginResponse(200, "application/json", text);
+    response->addHeader("Cache-Control", "no-store"); request->send(response);
+  });
+  for (const char* path : {"/api/claim", "/api/lease", "/api/release", "/api/command", "/api/action", "/api/time", "/api/wifi", "/api/stop",
+       "/api/program/begin", "/api/program/append", "/api/program/start", "/api/program/pause", "/api/program/resume"}) {
+    auto* handler = new AsyncCallbackJsonWebHandler(path, [](AsyncWebServerRequest* request, JsonVariant& json) { handleApi(request, json); }, 4096);
+    handler->setMethod(HTTP_POST); handler->setMaxContentLength(2300); http.addHandler(handler);
+  }
+  http.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("no-cache");
+  http.serveStatic("/app.js", LittleFS, "/app.js").setCacheControl("no-cache");
+  http.serveStatic("/control.js", LittleFS, "/control.js").setCacheControl("no-cache");
+  http.serveStatic("/hardware.js", LittleFS, "/hardware.js").setCacheControl("no-cache");
+  http.serveStatic("/styles.css", LittleFS, "/styles.css").setCacheControl("no-cache");
+  http.onNotFound([](AsyncWebServerRequest* request) {
+    if (request->url().startsWith("/api/")) errorReply(request, 404, "Unknown endpoint");
+    else if (!LittleFS.exists("/index.html")) errorReply(request, 503, "Upload master LittleFS with uploadfs");
+    else request->redirect("http://192.168.4.1/");
+  });
+  http.begin();
+}
+void programTick() {
+  if (program.state == "uploading" && millis() - program.activity > 60000) {
+    program.state = "faulted"; program.error = "Incomplete upload expired; no movement started";
+    program.file.close(); logMessage(program.error);
+  }
+  if (program.hasStep && operation.barrier.phase == timiac::Phase::Done) {
+    program.hasStep = false; ++program.completed;
+    if (program.completed == program.total) {
+      program.state = "done"; program.file.close();
+      if (program.builtin && program.preset == timiac::Preset::Hour) armTimeMinutes = program.targetMinute;
+      recordProgramReceipt(); logMessage("Program complete");
+    }
+  }
+  if (program.state != "running" || operation.barrier.active() || program.hasStep) return;
+  if (!bothHealthy()) { stopAll("Board link lost between program steps"); return; }
+  DynamicJsonDocument doc(3072);
+  if (program.builtin) {
+    timiac::Step step;
+    if (!timiac::presetStep(program.preset, program.completed, program.targetMinute, kTravelMm, kMaxFeed, step) || !writePresetStep(step, doc.to<JsonVariant>())) {
+      stopAll("Preset validation failed"); return;
+    }
+  } else {
+    String line = program.file.readStringUntil('\n');
+    if (deserializeJson(doc, line) || !validStep(doc.as<JsonVariant>())) { stopAll("Stored program validation failed"); return; }
+  }
+  if (!homingReady(doc.as<JsonVariant>())) {
+    program.state = "faulted"; program.error = "Program requires homing before motion"; program.file.close(); armTimeMinutes = -1; recordProgramReceipt(); logMessage(program.error); return;
+  }
+  program.hasStep = true;
+  startOperation(doc["a"].as<JsonArray>(), doc["b"].as<JsonArray>(), program.id + "-" + String(program.completed), commandHash(doc["a"], doc["b"]));
+}

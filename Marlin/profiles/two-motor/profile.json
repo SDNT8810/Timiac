@@ -1,0 +1,22 @@
+{
+  "Configuration.h": {
+    "STRING_CONFIG_H_AUTHOR": "\"Timiac two-motor / three ESP\"",
+    "CUSTOM_MACHINE_NAME": "\"TIMIAC X BRIDGE\"",
+    "SERIAL_PORT": "-1",
+    "SERIAL_PORT_2": "3",
+    "BAUDRATE": "115200",
+    "BAUDRATE_2": "115200",
+    "DEFAULT_MAX_FEEDRATE": "{ 11.666667 }",
+    "DEFAULT_TRAVEL_ACCELERATION": "20",
+    "NO_MOTION_BEFORE_HOMING": "",
+    "HOME_AFTER_DEACTIVATE": "",
+    "SDSUPPORT": null
+  },
+  "Configuration_adv.h": {
+    "EMERGENCY_PARSER": "",
+    "TMC_DEBUG": "",
+    "MAX_CMD_SIZE": "192",
+    "NO_SD_AUTOSTART": "",
+    "EVENT_GCODE_SD_ABORT": null
+  }
+}

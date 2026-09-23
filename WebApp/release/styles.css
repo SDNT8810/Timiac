@@ -1,0 +1,145 @@
+﻿:root { font-family: Arial, Helvetica, sans-serif; color: #26372e; background: #eae9e1; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+main {
+  min-height: 100vh; min-height: 100dvh; padding: clamp(14px, 2.5vw, 32px);
+  display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  grid-template-rows: auto minmax(180px, 1fr) auto auto auto;
+  grid-template-areas: "header header" "clock controls" "machine machine" "message message" "settings settings";
+  gap: 12px 28px;
+}
+main > * { min-width: 0; }
+header { grid-area: header; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid #c8cdc2; }
+.brand { font-size: 26px; letter-spacing: 5px; color: inherit; text-decoration: none; font-weight: 700; }
+.brand span { display: block; font-size: 9px; letter-spacing: 2px; margin-top: 5px; }
+.badge { font-size: 12px; border: 1px solid #a7b1a5; border-radius: 30px; padding: 8px 12px; }
+.clock-card { grid-area: clock; display: flex; flex-direction: column; justify-content: center; text-align: center; padding: 12px 0; }
+h1 { font-size: 12px; font-weight: 400; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 10px; }
+.clock { font-size: clamp(44px, 7.5vw, 112px); letter-spacing: 1px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.clock-card p { font-size: 13px; line-height: 1.3; margin: 6px 0 0; }
+.muted { color: #667165; }
+.board-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.board-status > div { border: 1px solid #c8cdc2; border-radius: 8px; padding: 6px; min-width: 0; }
+.board-status span, .board-status small { display: block; font-size: 9px; overflow-wrap: anywhere; }
+.board-status strong { display: block; font-size: 12px; margin: 3px 0; }
+.board-status .ready strong { color: #477322; }
+.board-status .fault strong { color: #913d32; }
+.wifi-settings { grid-column: 1 / -1; font-size: 12px; }
+.wifi-settings summary { cursor: pointer; padding: 5px 0; }
+.wifi-settings form { margin-top: 8px; }
+.wifi-settings p { display: block !important; margin: 6px 0; }
+.wifi-settings input, .wifi-settings .form-actions { grid-column: 1 / -1; }
+.machine > p { flex: 1; }
+.clock-card .sensor-readout { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 8px; margin-top: 8px; }
+.sensor-readout strong { font-size: 1.3em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sensor-readout strong.near { color: #477322; }
+.controls { grid-area: controls; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 12px 0; }
+button { font: inherit; cursor: pointer; border: 1px solid #b6c0b1; border-radius: 12px; background: #f5f4ee; color: #26372e; padding: 12px 16px; min-height: 44px; }
+button:hover:enabled { background: #dce4d4; }
+button:focus-visible, input:focus-visible { outline: 3px solid #668249; outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.controls button { text-align: left; display: grid; grid-template-columns: auto 1fr; align-content: center; align-items: center; gap: 6px 14px; padding: clamp(12px, 2vw, 26px); }
+.symbol { grid-row: span 2; font-size: clamp(24px, 3vw, 38px); }
+.controls strong { font-size: clamp(17px, 2vw, 24px); font-weight: 500; }
+.controls small { font-size: 12px; line-height: 1.3; }
+.accent { background: #d1e1b8; border-color: #a5ba87; }
+.machine { grid-area: machine; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #c8cdc2; padding-top: 10px; }
+.machine p, #message { font-size: 13px; line-height: 1.35; margin: 0; overflow-wrap: anywhere; }
+.stop { flex: 0 0 auto; color: #963f33; border-color: #c5a69b; padding: 10px 28px; }
+#message { grid-area: message; color: #405738; }
+#message:empty { display: none; }
+#message.error { color: #913d32; }
+.settings { grid-area: settings; display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); gap: 20px; align-items: center; border-top: 1px solid #c8cdc2; padding-top: 14px; }
+h2 { font-family: Georgia, serif; font-size: 28px; font-weight: 400; margin: 0 0 6px; }
+.settings p { font-size: 13px; line-height: 1.4; color: #64705e; margin: 0; }
+form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 10px; min-width: 0; }
+label { grid-column: 1 / -1; font-size: 12px; }
+input { display: block; width: 100%; min-width: 0; min-height: 44px; background: #f5f4ee; color: #26372e; border: 1px solid #b6c0b1; border-radius: 8px; font: inherit; font-size: 16px; padding: 9px; }
+.form-actions { display: flex; gap: 8px; }
+.form-actions button { font-size: 12px; flex: 1; white-space: nowrap; }
+.dark { background: #304c3c; color: white; }
+.dark:hover:enabled { background: #446b54; }
+form small { grid-column: 1 / -1; font-size: 10px; color: #64705e; }
+
+@media (max-width: 700px) and (orientation: portrait) {
+  main {
+    padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(90px, 1fr) minmax(120px, 1.2fr) auto auto auto;
+    grid-template-areas: "header" "clock" "controls" "machine" "message" "settings";
+    gap: 8px;
+  }
+  header { padding-bottom: 8px; }
+  .brand { font-size: 21px; letter-spacing: 4px; }
+  .brand span { font-size: 7px; letter-spacing: 1px; margin-top: 3px; }
+  .badge { font-size: 10px; padding: 7px 9px; }
+  .clock-card { padding: 0; }
+  h1 { font-size: 10px; margin-bottom: 5px; }
+  .clock { font-size: clamp(36px, 11vw, 64px); }
+  .clock-card p { font-size: 11px; margin-top: 4px; }
+  .controls { gap: 8px; padding: 0; }
+  .controls button { padding: 10px 12px; gap: 3px 10px; }
+  .symbol { font-size: 25px; }
+  .controls strong { font-size: 17px; }
+  .controls small { font-size: 10px; }
+  .machine { padding-top: 8px; }
+  .machine p, #message { font-size: 11px; }
+  .stop { padding: 8px 20px; }
+  .settings { grid-template-columns: minmax(0, 1fr); padding-top: 8px; gap: 6px; }
+  .settings > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  h2 { font-size: 21px; margin: 0; }
+  .settings p { font-size: 10px; }
+  form { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  label { font-size: 10px; }
+  .form-actions { gap: 8px; }
+  form small { font-size: 9px; }
+}
+@media (max-height: 700px) and (max-width: 700px) and (orientation: portrait) {
+  main { gap: 5px; grid-template-rows: auto minmax(80px, 1fr) minmax(112px, 1fr) auto auto auto; }
+  h1, .brand span, .settings p { display: none; }
+  .clock { font-size: 36px; }
+  .controls button { padding: 7px 10px; }
+  .controls strong { font-size: 16px; }
+  h2 { font-size: 19px; }
+  .settings, .machine { padding-top: 5px; }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  main { padding: 8px 14px; gap: 6px 18px; grid-template-rows: auto minmax(100px, 1fr) auto auto auto; }
+  header { padding-bottom: 5px; }
+  .brand { font-size: 20px; }
+  .brand span, h1, .settings p { display: none; }
+  .clock-card, .controls { padding: 0; }
+  .clock { font-size: clamp(36px, 7vw, 64px); }
+  .clock-card p { font-size: 11px; margin-top: 3px; }
+  .controls { gap: 6px; }
+  .controls button { padding: 7px 12px; gap: 2px 10px; }
+  .controls strong { font-size: 16px; }
+  .controls small { font-size: 10px; }
+  .symbol { font-size: 24px; }
+  .machine, .settings { padding-top: 6px; }
+  .machine p, #message { font-size: 11px; }
+  .settings { grid-template-columns: minmax(0, .35fr) minmax(0, 1.65fr); gap: 12px; }
+  h2 { font-size: 21px; margin: 0; }
+  form { gap: 4px 8px; }
+  .form-actions button { padding: 8px 10px; }
+}
+
+/* Four main controls plus a compact row of three animation controls. */
+.controls { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.controls button { grid-column: span 3; }
+.controls .preset { grid-column: span 2; grid-template-columns: minmax(0, 1fr); text-align: center; gap: 4px; padding: 10px 6px; }
+.controls .preset strong { font-size: clamp(13px, 1.6vw, 20px); }
+@media (max-width: 700px) and (orientation: portrait) {
+  main { grid-template-rows: auto minmax(90px, 1fr) minmax(172px, 1.2fr) auto auto auto; }
+  .controls .preset strong { font-size: 13px; }
+  .controls .preset small { display: none; }
+}
+@media (max-height: 700px) and (max-width: 700px) and (orientation: portrait) {
+  main { grid-template-rows: auto minmax(80px, 1fr) minmax(164px, 1fr) auto auto auto; }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .controls .preset small { display: none; }
+  .controls .preset { padding: 5px; }
+  main { gap: 4px 14px; }
+}

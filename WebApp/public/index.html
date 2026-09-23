@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#e7e6e0"><title>Timiac | Twelve motors</title>
+<link rel="stylesheet" href="/styles.css"><link rel="icon" href="data:,">
+</head>
+<body>
+<header class="topbar">
+<a class="brand" href="/"><span class="brand-icon">✳</span><span><strong>TIMIAC</strong><small>TWELVE MOTORS · THREE ESPs</small></span></a>
+<span class="connection" id="connection">CONNECTING</span><button class="stop" id="stop">■ Stop both</button>
+</header>
+<main>
+<div id="demo-banner" class="demo-banner" hidden>DEMO · No hardware connected</div>
+<section class="intro"><div><p class="eyebrow">MOTION CONTROL / 01</p><h1>Twelve axes.<br>One controller.</h1><p>Each Octopus runs X, Y, Z, A, B and C. Use the board-qualified names X1 through C2.</p></div>
+<div class="board-strip"><article id="board-a"><span>ESP1 / OCTOPUS 1</span><strong id="board-status-a">Waiting</strong><small id="board-detail-a">Connecting…</small></article><article id="board-b"><span>ESP2 / OCTOPUS 2</span><strong id="board-status-b">Waiting</strong><small id="board-detail-b">Connecting…</small></article></div></section>
+<div class="toolbar"><button id="claim">Take control</button><button id="relinquish">Release control</button><span id="owner">Connecting…</span></div>
+<section class="endstop-panel panel" aria-label="Micro switches">
+  <div class="section-heading"><span>MICRO SWITCHES</span><span>LIVE WHEN IDLE</span></div>
+  <div class="endstop-boards">
+    <div><div class="endstop-board-heading"><strong>Octopus 1</strong><span id="endstops-a-status">Waiting for readings</span></div>
+      <ul class="endstop-lamps">
+        <li id="endstop-X1" data-state="unknown" role="img" aria-label="X1: Unknown"><i aria-hidden="true"></i><strong>X1</strong><small id="endstop-state-X1">Unknown</small></li>
+        <li id="endstop-Y1" data-state="unknown" role="img" aria-label="Y1: Unknown"><i aria-hidden="true"></i><strong>Y1</strong><small id="endstop-state-Y1">Unknown</small></li>
+        <li id="endstop-Z1" data-state="unknown" role="img" aria-label="Z1: Unknown"><i aria-hidden="true"></i><strong>Z1</strong><small id="endstop-state-Z1">Unknown</small></li>
+        <li id="endstop-A1" data-state="unknown" role="img" aria-label="A1: Unknown"><i aria-hidden="true"></i><strong>A1</strong><small id="endstop-state-A1">Unknown</small></li>
+        <li id="endstop-B1" data-state="unknown" role="img" aria-label="B1: Unknown"><i aria-hidden="true"></i><strong>B1</strong><small id="endstop-state-B1">Unknown</small></li>
+        <li id="endstop-C1" data-state="unknown" role="img" aria-label="C1: Unknown"><i aria-hidden="true"></i><strong>C1</strong><small id="endstop-state-C1">Unknown</small></li>
+      </ul>
+    </div>
+    <div><div class="endstop-board-heading"><strong>Octopus 2</strong><span id="endstops-b-status">Waiting for readings</span></div>
+      <ul class="endstop-lamps">
+        <li id="endstop-X2" data-state="unknown" role="img" aria-label="X2: Unknown"><i aria-hidden="true"></i><strong>X2</strong><small id="endstop-state-X2">Unknown</small></li>
+        <li id="endstop-Y2" data-state="unknown" role="img" aria-label="Y2: Unknown"><i aria-hidden="true"></i><strong>Y2</strong><small id="endstop-state-Y2">Unknown</small></li>
+        <li id="endstop-Z2" data-state="unknown" role="img" aria-label="Z2: Unknown"><i aria-hidden="true"></i><strong>Z2</strong><small id="endstop-state-Z2">Unknown</small></li>
+        <li id="endstop-A2" data-state="unknown" role="img" aria-label="A2: Unknown"><i aria-hidden="true"></i><strong>A2</strong><small id="endstop-state-A2">Unknown</small></li>
+        <li id="endstop-B2" data-state="unknown" role="img" aria-label="B2: Unknown"><i aria-hidden="true"></i><strong>B2</strong><small id="endstop-state-B2">Unknown</small></li>
+        <li id="endstop-C2" data-state="unknown" role="img" aria-label="C2: Unknown"><i aria-hidden="true"></i><strong>C2</strong><small id="endstop-state-C2">Unknown</small></li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Red = released · Green = triggered · Gray = no current reading. Press a switch by hand to identify it. No homing or control needed.</p>
+</section>
+<details class="wifi-settings panel"><summary>Router / hotspot Wi-Fi</summary><p id="wifi-status">Reading connection…</p>
+  <form id="wifi-form"><label for="wifi-ssid">Wi-Fi name (2.4 GHz)</label><input id="wifi-ssid" autocomplete="off" maxlength="32" required>
+    <label for="wifi-password">Password (leave empty for an open network)</label><input id="wifi-password" type="password" autocomplete="new-password" maxlength="63">
+    <div class="toolbar"><button id="wifi-save" type="submit" data-control>Save &amp; connect</button><button id="wifi-forget" type="button" data-control>Forget</button></div>
+  </form>
+</details>
+<section class="clock-panel panel" aria-label="Clock and hand sensor">
+<div class="section-heading"><span>CLOCK / HAND SENSOR</span><span>LIVE</span></div>
+<div class="clock-settings">
+  <div><div id="clock">--:--:--</div><p id="date">Reading the clock…</p><p id="clock-status">Time is kept on your Timiac.</p>
+    <p class="sensor-readout">Hand distance <strong id="sensor-distance">—</strong> <span id="sensor-status">Connecting</span></p></div>
+  <form id="time-form"><label for="local-time">Local date &amp; time</label><input id="local-time" type="datetime-local" step="1" min="2000-01-01T00:00:00" max="2099-12-31T23:59:59" required>
+    <div class="toolbar"><button id="phone-time" type="button">Use phone time</button><button id="save-time" type="submit" data-control>Save time</button></div>
+    <p class="note">Saved to the DS3231. Daylight-saving changes are manual.</p></form>
+</div>
+<div class="toolbar clock-actions">
+  <button data-clock-action="home" data-control>Home all</button><button data-clock-action="open" data-control>Open · 0 mm</button><button data-clock-action="close" data-control>Close · 48 mm</button>
+  <button data-clock-action="show-time" data-control>Show time</button><button data-clock-action="struggle" data-control>Struggle</button><button data-clock-action="next-five" data-control>Next 5 min</button><button data-clock-action="next-hour" data-control>Next hour</button>
+</div><p class="note">Take control to use the buttons. Home/open = 0 mm; closed = 48 mm. The minute arm opens fully, the hour arm halfway. Hand gestures are active when homed and idle.</p>
+</section>
+<div class="workspace">
+<section class="manual-panel panel">
+<div class="section-heading"><span>01 / MANUAL</span><span>SELECT AN AXIS</span></div>
+<div class="arm-picker" id="arm-picker"><button data-axis="X1" class="selected">X1</button><button data-axis="Y1">Y1</button><button data-axis="Z1">Z1</button><button data-axis="A1">A1</button><button data-axis="B1">B1</button><button data-axis="C1">C1</button><button data-axis="X2">X2</button><button data-axis="Y2">Y2</button><button data-axis="Z2">Z2</button><button data-axis="A2">A2</button><button data-axis="B2">B2</button><button data-axis="C2">C2</button></div>
+<div class="manual-title"><div><h2 id="selected-title">X1</h2><p id="selected-route">Octopus 1 · local X</p></div><span class="position" id="reported">— <small>mm</small></span></div>
+<label class="field">Target position (mm)<input id="target" type="number" min="0" max="48" step="0.1" value="1"></label>
+<label class="field">Speed (mm/min)<input id="feed" type="number" min="1" max="700" step="0.1" value="180"></label>
+<div class="toolbar"><button id="move" class="primary" data-control>Move selected axis</button><button id="home" data-control>Home selected</button></div>
+<div class="toolbar"><button id="home-all" data-control>Home all 12 axes</button><button id="release" data-control>Release motors</button></div>
+<p class="note">Verify every home sensor and motor direction individually before homing. Targets are actuator millimetres from home: 0 = fully open, 48 = closed.</p>
+</section>
+<section class="program-panel panel">
+<div class="section-heading"><span>02 / PROGRAM</span><label class="file-button">Open .gcode<input id="file" type="file" accept=".gcode,.gco,.g,.txt" hidden></label></div>
+<p class="note">Use board-qualified axes with a space before each value: <code>G90 X1 10 Y1 20 A2 35 F350</code>.</p>
+<textarea id="program" spellcheck="false" aria-label="G-code program" placeholder="G28 X1 Y1 Z1 A1 B1 C1 X2 Y2 Z2 A2 B2 C2&#10;G90 X1 1 Y1 1 X2 1 Y2 1 F180"></textarea>
+<div class="toolbar"><button id="example">Load small test</button><button id="upload" data-control>Check &amp; upload</button><button class="primary" id="run" data-control>Run uploaded program</button><button id="pause" data-control>Pause</button></div>
+<div class="progress-row"><progress id="progress" value="0" max="1"></progress><span id="program-state">No program</span></div>
+<details><summary>Upload preview</summary><pre id="preview-code">The master checks each line before enabling Run.</pre></details>
+<p class="note">The master stores and runs the uploaded program. Your phone may disconnect. Pause waits for the current step; a board fault stops the program. Wi-Fi starts are approximate.</p>
+</section>
+<section class="terminal-panel panel">
+<div class="section-heading"><span>03 / COMMANDS</span><span>MASTER → BOTH BRIDGES</span></div>
+<form id="terminal"><div class="send-row"><input id="command" aria-label="Timiac command" placeholder="G90 X1 10 Y1 20 A2 35 F350" autocomplete="off" spellcheck="false"><button type="submit" data-control>Send</button></div></form>
+<div class="quick-actions"><button data-command="M115" data-control>Firmware</button><button data-command="M119" data-control>Endstops</button><button data-command="M122" data-control>Drivers</button><button data-command="M114" data-control>Positions</button></div>
+<pre id="logs" aria-label="Controller log">Waiting for controller…</pre>
+<p class="note">Stop cancels motion. Wait for both boards to reconnect, then Home before moving again.</p>
+</section>
+</div><div id="message" role="status" aria-live="polite">Connecting to Timiac…</div>
+</main><footer><span>TIMIAC / CONTROL ROOM</span><span>Wi-Fi: Timiac · 192.168.4.1</span></footer>
+<script type="module" src="/app.js"></script>
+</body></html>

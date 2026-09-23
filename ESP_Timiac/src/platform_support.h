@@ -1,0 +1,50 @@
+#pragma once
+
+// Master uses I2C for the DS3231 and GPIO18/19 for optional AJ-SR04M sensing.
+// It has no Octopus UART connection.
+// ESP-12S bridges alone initialize the Octopus control UART.
+#if TIMIAC_MASTER && !defined(ARDUINO_ARCH_ESP32)
+#error "Build the Timiac master for ESP32"
+#elif !TIMIAC_MASTER && !defined(ARDUINO_ARCH_ESP8266)
+#error "Build the Octopus bridges for ESP8266 / ESP-12S"
+#endif
+
+#if defined(ARDUINO_ARCH_ESP32)
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncJson.h>
+#include <esp_system.h>
+#include <lwip/sockets.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
+// AsyncTCP HTTP callbacks and Arduino loop() execute in different tasks.
+// A recursive mutex also covers status replies nested inside API handlers.
+SemaphoreHandle_t runtimeMutex = nullptr;
+struct RuntimeLock {
+  RuntimeLock() { xSemaphoreTakeRecursive(runtimeMutex, portMAX_DELAY); }
+  ~RuntimeLock() { xSemaphoreGiveRecursive(runtimeMutex); }
+  RuntimeLock(const RuntimeLock&) = delete;
+  RuntimeLock& operator=(const RuntimeLock&) = delete;
+};
+inline uint32_t platformRandom() { return esp_random(); }
+inline String platformChipId() {
+  uint64_t mac = ESP.getEfuseMac();
+  return String(uint32_t(mac >> 32), HEX) + String(uint32_t(mac), HEX);
+}
+#else
+#include <ESP8266WiFi.h>
+inline uint32_t platformRandom() { return os_random(); }
+inline String platformChipId() { return String(ESP.getChipId(), HEX); }
+#endif
+
+inline bool writePeerPacket(WiFiClient& socket, const String& packet) {
+#if defined(ARDUINO_ARCH_ESP32)
+  // ESP32's inherited availableForWrite() reports zero, and WiFiClient::write
+  // can retry for seconds. Never let a stalled bridge block health/Stop traffic.
+  return lwip_send(socket.fd(), packet.c_str(), packet.length(), MSG_DONTWAIT) == int(packet.length());
+#else
+  return socket.availableForWrite() >= int(packet.length()) && socket.print(packet) == packet.length();
+#endif
+}
