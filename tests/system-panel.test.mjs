@@ -33,3 +33,25 @@ test('network status reports router connectivity without claiming internet reach
   renderSystemStatus(state, true, element); assert.equal(element('wifi-status').textContent, 'Connected to Home - 192.168.1.50');
   renderSystemStatus(state, false, element); assert.equal(element('wifi-status').textContent, 'Master disconnected');
 });
+
+test('a missing UART reply is offline, while a confirmed halt requires reset', () => {
+  const state = { b: { bridgeConnected: true, octopusConnected: false,
+    resetRequired: false, fault: 'M119 acknowledgement timed out; checking Octopus link' } };
+  assert.equal(boardStatus(state, 'b', true).label, 'Octopus offline');
+  assert.equal(boardStatus(state, 'b', true).detail, state.b.fault);
+  state.b.resetRequired = true;
+  assert.equal(boardStatus(state, 'b', true).label, 'Reset required');
+});
+
+test('startup diagnostics distinguish an absent bridge from an incomplete driver report', () => {
+  const state = { a: { bridgeConnected: false, lastSeenMs: null }, b: {
+    bridgeConnected: true, octopusConnected: true, drivers: { ok: false },
+    diagnostic: 'Waiting for M122 (8210 ms); last reply 300 ms ago: Testing Z connection... Error: All LOW',
+  } };
+  assert.match(boardStatus(state, 'a', true).detail, /No bridge has joined/);
+  assert.equal(boardStatus(state, 'b', true).detail, state.b.diagnostic);
+  state.a.lastSeenMs = 18321;
+  assert.match(boardStatus(state, 'a', true).detail, /18 s ago/);
+  state.b.fault = 'Driver check failed';
+  assert.equal(boardStatus(state, 'b', true).detail, state.b.fault);
+});

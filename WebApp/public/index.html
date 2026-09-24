@@ -41,6 +41,50 @@
   </div>
   <p class="note">Red = released · Green = triggered · Gray = no current reading. Press a switch by hand to identify it. No homing or control needed.</p>
 </section>
+<section class="panel" aria-label="Motor driver checks">
+<div class="section-heading"><span>MOTOR DRIVERS · LIVE WHEN IDLE</span><span id="firmware-build">Connecting</span></div>
+<p class="note">Automatic checks every 2 seconds while idle. Each board is checked independently; no homing or control is needed. Green = checks passed · Red = no response · Amber = settings mismatch · Gray = no current check.</p>
+<p class="note">Disconnect board power and USB before changing a driver. After power returns, results refresh automatically. No response can mean a damaged driver, socket, jumper or power problem; a green result does not test the motor output.</p>
+<h3>Octopus 1</h3>
+<p class="driver-summary" id="driver-summary-1">Waiting for driver checks</p>
+<ul class="driver-indicators" aria-label="Octopus 1 live driver checks">
+<li id="driver-X1-status" data-state="unknown" role="img" aria-label="X1: Not checked"><i aria-hidden="true"></i><strong>X1 <small id="driver-X1-socket">—</small></strong><b id="driver-X1-result">Not checked</b><span id="driver-X1-detail">Waiting for driver report</span></li>
+<li id="driver-Y1-status" data-state="unknown" role="img" aria-label="Y1: Not checked"><i aria-hidden="true"></i><strong>Y1 <small id="driver-Y1-socket">—</small></strong><b id="driver-Y1-result">Not checked</b><span id="driver-Y1-detail">Waiting for driver report</span></li>
+<li id="driver-Z1-status" data-state="unknown" role="img" aria-label="Z1: Not checked"><i aria-hidden="true"></i><strong>Z1 <small id="driver-Z1-socket">—</small></strong><b id="driver-Z1-result">Not checked</b><span id="driver-Z1-detail">Waiting for driver report</span></li>
+<li id="driver-A1-status" data-state="unknown" role="img" aria-label="A1: Not checked"><i aria-hidden="true"></i><strong>A1 <small id="driver-A1-socket">—</small></strong><b id="driver-A1-result">Not checked</b><span id="driver-A1-detail">Waiting for driver report</span></li>
+<li id="driver-B1-status" data-state="unknown" role="img" aria-label="B1: Not checked"><i aria-hidden="true"></i><strong>B1 <small id="driver-B1-socket">—</small></strong><b id="driver-B1-result">Not checked</b><span id="driver-B1-detail">Waiting for driver report</span></li>
+<li id="driver-C1-status" data-state="unknown" role="img" aria-label="C1: Not checked"><i aria-hidden="true"></i><strong>C1 <small id="driver-C1-socket">—</small></strong><b id="driver-C1-result">Not checked</b><span id="driver-C1-detail">Waiting for driver report</span></li>
+</ul>
+<details><summary>Driver settings</summary>
+<table class="driver-table"><thead><tr><th>Axis</th><th>Socket</th><th>UART</th><th>Set current</th><th>Microsteps</th><th>Mode</th></tr></thead><tbody>
+<tr><th>X1</th><td id="driver-X1-socket-table">—</td><td id="driver-X1-uart">Unknown</td><td id="driver-X1-current">Unknown</td><td id="driver-X1-microsteps">Unknown</td><td id="driver-X1-mode">Unknown</td></tr>
+<tr><th>Y1</th><td id="driver-Y1-socket-table">—</td><td id="driver-Y1-uart">Unknown</td><td id="driver-Y1-current">Unknown</td><td id="driver-Y1-microsteps">Unknown</td><td id="driver-Y1-mode">Unknown</td></tr>
+<tr><th>Z1</th><td id="driver-Z1-socket-table">—</td><td id="driver-Z1-uart">Unknown</td><td id="driver-Z1-current">Unknown</td><td id="driver-Z1-microsteps">Unknown</td><td id="driver-Z1-mode">Unknown</td></tr>
+<tr><th>A1</th><td id="driver-A1-socket-table">—</td><td id="driver-A1-uart">Unknown</td><td id="driver-A1-current">Unknown</td><td id="driver-A1-microsteps">Unknown</td><td id="driver-A1-mode">Unknown</td></tr>
+<tr><th>B1</th><td id="driver-B1-socket-table">—</td><td id="driver-B1-uart">Unknown</td><td id="driver-B1-current">Unknown</td><td id="driver-B1-microsteps">Unknown</td><td id="driver-B1-mode">Unknown</td></tr>
+<tr><th>C1</th><td id="driver-C1-socket-table">—</td><td id="driver-C1-uart">Unknown</td><td id="driver-C1-current">Unknown</td><td id="driver-C1-microsteps">Unknown</td><td id="driver-C1-mode">Unknown</td></tr>
+</tbody></table></details>
+<h3>Octopus 2</h3>
+<p class="driver-summary" id="driver-summary-2">Waiting for driver checks</p>
+<ul class="driver-indicators" aria-label="Octopus 2 live driver checks">
+<li id="driver-X2-status" data-state="unknown" role="img" aria-label="X2: Not checked"><i aria-hidden="true"></i><strong>X2 <small id="driver-X2-socket">—</small></strong><b id="driver-X2-result">Not checked</b><span id="driver-X2-detail">Waiting for driver report</span></li>
+<li id="driver-Y2-status" data-state="unknown" role="img" aria-label="Y2: Not checked"><i aria-hidden="true"></i><strong>Y2 <small id="driver-Y2-socket">—</small></strong><b id="driver-Y2-result">Not checked</b><span id="driver-Y2-detail">Waiting for driver report</span></li>
+<li id="driver-Z2-status" data-state="unknown" role="img" aria-label="Z2: Not checked"><i aria-hidden="true"></i><strong>Z2 <small id="driver-Z2-socket">—</small></strong><b id="driver-Z2-result">Not checked</b><span id="driver-Z2-detail">Waiting for driver report</span></li>
+<li id="driver-A2-status" data-state="unknown" role="img" aria-label="A2: Not checked"><i aria-hidden="true"></i><strong>A2 <small id="driver-A2-socket">—</small></strong><b id="driver-A2-result">Not checked</b><span id="driver-A2-detail">Waiting for driver report</span></li>
+<li id="driver-B2-status" data-state="unknown" role="img" aria-label="B2: Not checked"><i aria-hidden="true"></i><strong>B2 <small id="driver-B2-socket">—</small></strong><b id="driver-B2-result">Not checked</b><span id="driver-B2-detail">Waiting for driver report</span></li>
+<li id="driver-C2-status" data-state="unknown" role="img" aria-label="C2: Not checked"><i aria-hidden="true"></i><strong>C2 <small id="driver-C2-socket">—</small></strong><b id="driver-C2-result">Not checked</b><span id="driver-C2-detail">Waiting for driver report</span></li>
+</ul>
+<details><summary>Driver settings</summary>
+<table class="driver-table"><thead><tr><th>Axis</th><th>Socket</th><th>UART</th><th>Set current</th><th>Microsteps</th><th>Mode</th></tr></thead><tbody>
+<tr><th>X2</th><td id="driver-X2-socket-table">—</td><td id="driver-X2-uart">Unknown</td><td id="driver-X2-current">Unknown</td><td id="driver-X2-microsteps">Unknown</td><td id="driver-X2-mode">Unknown</td></tr>
+<tr><th>Y2</th><td id="driver-Y2-socket-table">—</td><td id="driver-Y2-uart">Unknown</td><td id="driver-Y2-current">Unknown</td><td id="driver-Y2-microsteps">Unknown</td><td id="driver-Y2-mode">Unknown</td></tr>
+<tr><th>Z2</th><td id="driver-Z2-socket-table">—</td><td id="driver-Z2-uart">Unknown</td><td id="driver-Z2-current">Unknown</td><td id="driver-Z2-microsteps">Unknown</td><td id="driver-Z2-mode">Unknown</td></tr>
+<tr><th>A2</th><td id="driver-A2-socket-table">—</td><td id="driver-A2-uart">Unknown</td><td id="driver-A2-current">Unknown</td><td id="driver-A2-microsteps">Unknown</td><td id="driver-A2-mode">Unknown</td></tr>
+<tr><th>B2</th><td id="driver-B2-socket-table">—</td><td id="driver-B2-uart">Unknown</td><td id="driver-B2-current">Unknown</td><td id="driver-B2-microsteps">Unknown</td><td id="driver-B2-mode">Unknown</td></tr>
+<tr><th>C2</th><td id="driver-C2-socket-table">—</td><td id="driver-C2-uart">Unknown</td><td id="driver-C2-current">Unknown</td><td id="driver-C2-microsteps">Unknown</td><td id="driver-C2-mode">Unknown</td></tr>
+</tbody></table></details>
+<p class="note">Set current is the configured firmware value, not a measured current. Settings become unknown when UART fails or the report expires.</p>
+</section>
 <details class="wifi-settings panel"><summary>Router / hotspot Wi-Fi</summary><p id="wifi-status">Reading connection…</p>
   <form id="wifi-form"><label for="wifi-ssid">Wi-Fi name (2.4 GHz)</label><input id="wifi-ssid" autocomplete="off" maxlength="32" required>
     <label for="wifi-password">Password (leave empty for an open network)</label><input id="wifi-password" type="password" autocomplete="new-password" maxlength="63">
@@ -70,6 +114,8 @@
 <label class="field">Speed (mm/min)<input id="feed" type="number" min="1" max="700" step="0.1" value="180"></label>
 <div class="toolbar"><button id="move" class="primary" data-control>Move selected axis</button><button id="home" data-control>Home selected</button></div>
 <div class="toolbar"><button id="home-all" data-control>Home all 12 axes</button><button id="release" data-control>Release motors</button></div>
+<p id="manual-status" class="note" role="status"></p>
+<p class="note">Home selected and Move selected axis use only that axis's board. The other board can be disconnected. Home all, Release motors, clock actions and programs require both boards.</p>
 <p class="note">Verify every home sensor and motor direction individually before homing. Targets are actuator millimetres from home: 0 = fully open, 48 = closed.</p>
 </section>
 <section class="program-panel panel">

@@ -7,6 +7,9 @@ namespace timiac {
 // M122 is parsed independently of the UI log ring; a large diagnostic report
 // must never lose its first lines just because only eight events fit a poll.
 struct DriverReport {
+  // Marlin M122 uses INTERNAL driver labels even though G-code uses A/B/C.
+  // This translation is confined to diagnostics; it never changes commands.
+  static const char* labels() { return "XYZIJK"; }
   uint8_t connected = 0, tested = 0, settings = 0;
   uint8_t modeOk = 0, currentOk = 0, stepsOk = 0;
   bool columns = false;
@@ -14,9 +17,9 @@ struct DriverReport {
   bool good() const { return tested == 63 && connected == 63 && columns && settings == 7 && modeOk == 63 && currentOk == 63 && stepsOk == 63; }
   void receive(const char* line) {
     if (!strncmp(line, "Testing ", 8)) {
-      const char* axis = strchr(axes, line[8]);
-      if (!axis || axis == axes + 6 || strncmp(line + 9, " connection... ", 15)) return;
-      const uint8_t bit = 1U << (axis - axes);
+      const char* axis = strchr(labels(), line[8]);
+      if (!axis || axis == labels() + 6 || strncmp(line + 9, " connection... ", 15)) return;
+      const uint8_t bit = 1U << (axis - labels());
       tested |= bit;
       if (!strcmp(line + 24, "OK")) connected |= bit;
       else connected &= ~bit;
@@ -30,9 +33,9 @@ struct DriverReport {
     char* tokens[8] = {}; unsigned count = 0;
     char* save = nullptr;
     for (char* p = strtok_r(copy, "\t", &save); p && count < 8; p = strtok_r(nullptr, "\t", &save)) tokens[count++] = p;
-    if (count == 6) {
+    if (count == 6 && tokens[0][0] == 'X' && tokens[0][1] == 0) {
       columns = true;
-      for (unsigned i = 0; i < 6; ++i) columns &= tokens[i][0] == axes[i] && tokens[i][1] == 0;
+      for (unsigned i = 0; i < 6; ++i) columns &= tokens[i][0] == labels()[i] && tokens[i][1] == 0;
       if (columns) return;
     }
     if (!columns || count != 7) return;

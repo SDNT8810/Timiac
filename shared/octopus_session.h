@@ -21,7 +21,9 @@ class OctopusSession {
   bool waiting = false, identity = false;
   bool monitor = false;
   bool homingInFlight = false;
+  bool driverReportAvailable = false;
   uint32_t sent = 0, lastRx = 0, lastPoll = 0;
+  uint32_t driverReportAge(uint32_t now) const { return uint32_t(now - driverAt); }
   bool online(uint32_t now) const {
     return identity && state != State::Halted && uint32_t(now - lastRx) < (running() ? 180000U : 15000U);
   }
@@ -64,17 +66,21 @@ class OctopusSession {
     const bool homing = homingInFlight;
     size = cursor = 0; clearPosition(); endstops.clear();
     if (state == State::Halted) return nullptr;
+    if (state == State::Drain) return nullptr;
     if (homing) {
       fail("Homing stopped. Reset this Octopus before continuing.", true);
       return "M112";
     }
-    // Drain all old acknowledgements. A unique M118 marker must be observed
-    // before a fresh handshake can use an ok. Never treat a late G28 ok as M115.
-    state = State::Drain; waiting = false; identity = false; lastRx = sent = now;
-    return "M410\nM400\nM118 TIMIAC_DRAINED";
+    // Drain all old acknowledgements, including M118's own ok, before a fresh
+    // handshake. A late reply to an earlier drain attempt cannot complete it.
+    return beginDrain(now);
   }
   void fail(const char* message, bool hard = false) {
-    if (!fault[0]) { snprintf(fault, sizeof(fault), "%s", message); ++failures; }
+    // Only an actual board restart may release a confirmed halt.
+    if (state == State::Halted) return;
+    if (!fault[0]) snprintf(fault, sizeof(fault), "%s", message);
+    // Retaining the first fault must not hide a later loss of communication.
+    ++failures;
     size = cursor = 0; clearPosition(); endstops.clear(); waiting = false;
     state = hard ? State::Halted : State::Offline;
     if (hard) identity = false;
@@ -82,12 +88,23 @@ class OctopusSession {
   const char* next(uint32_t now) {
     if (state == State::Halted) return nullptr;
     if (state == State::Drain) {
-      if (uint32_t(now - sent) >= 10000) fail("Stop acknowledgement missing; check Octopus connection", true);
+      if (uint32_t(now - sent) >= 10000) {
+        if (!fault[0]) {
+          snprintf(fault, sizeof(fault), "Octopus link unavailable after Stop; retrying"); ++failures;
+        }
+        // Missing serial traffic is not evidence of a killed Marlin. Keep
+        // motion blocked and retry only the stop/drain, never the lost job.
+        return beginDrain(now);
+      }
       return nullptr;
     }
     if (waiting) {
       const uint32_t limit = running() ? acknowledgementTimeout(active) : 10000;
-      if (uint32_t(now - sent) >= limit) fail(homingCommand(active) ? "Homing acknowledgement timed out" : "Octopus acknowledgement timed out");
+      if (uint32_t(now - sent) >= limit) {
+        char message[180];
+        snprintf(message, sizeof(message), "%s acknowledgement timed out; checking Octopus link", active);
+        fail(message);
+      }
       return nullptr;
     }
     if (state == State::Offline) {
@@ -95,9 +112,9 @@ class OctopusSession {
       state = State::Identify; identity = false; lastPoll = now;
       return transmit("M115", now);
     }
-    if (state == State::Drivers) { drivers.begin(); return transmit("M122", now); }
+    if (state == State::Drivers) return transmit("M122", now);
     if (state == State::Prepare) {
-      if (requireDriverCheck) { requireDriverCheck = false; drivers.begin(); return transmit("M122", now); }
+      if (requireDriverCheck) { requireDriverCheck = false; return transmit("M122", now); }
       state = State::Prepared; return nullptr;
     }
     if (state == State::Run) {
@@ -106,9 +123,9 @@ class OctopusSession {
     }
     if (state == State::Ready && uint32_t(now - lastPoll) >= (monitor ? 500U : 5000U)) {
       lastPoll = now;
-      // Switches remain available with a driver fault; failed drivers retry
-      // automatically, but no movement is automatically replayed.
-      if (!drivers.good() && uint32_t(now - driverAt) >= 5000) { drivers.begin(); return transmit("M122", now); }
+      // Read-only checks continue independently on each board, even when the
+      // other board is offline. Refresh passing reports too; never replay motion.
+      if (uint32_t(now - driverAt) >= (monitor ? 2000U : 5000U)) return transmit("M122", now);
       return transmit("M119", now);
     }
     return nullptr;
@@ -117,6 +134,7 @@ class OctopusSession {
     if (!strcmp(line, "start")) {
       const bool interrupted = busy();
       state = State::Offline; identity = waiting = false; drivers.begin(); clearPosition(); endstops.clear();
+      driverReportAvailable = false;
       homingInFlight = false;
       fault[0] = 0; size = cursor = 0; lastPoll = now; ++resets;
       if (interrupted) { snprintf(fault, sizeof(fault), "Octopus restarted during work"); ++failures; }
@@ -126,7 +144,9 @@ class OctopusSession {
     if (!strncmp(line, "echo:Bad ", 9) && strstr(line, " Endstop?")) { fail(line, true); return; }
     if (state == State::Halted) return;
     if (state == State::Drain) {
-      if (!strcmp(line, "TIMIAC_DRAINED") || !strcmp(line, "echo:TIMIAC_DRAINED")) {
+      const char* marker = !strncmp(line, "echo:", 5) ? line + 5 : line;
+      if (!strcmp(marker, drainMarker)) drainMarkerSeen = true;
+      else if (drainMarkerSeen && (!strcmp(line, "ok") || !strncmp(line, "ok ", 3))) {
         state = State::Offline; waiting = false; lastPoll = now; fault[0] = 0;
       }
       return;
@@ -138,9 +158,8 @@ class OctopusSession {
     if (!waiting) return;
     lastRx = now;
     if (!strcmp(active, "M115") && strstr(line, "FIRMWARE_NAME:"))
-      identity = strstr(line, machineId) && strstr(line, "AXIS_COUNT:6") &&
-        !strstr(line, "AXIS_COUNT:60");
-    if (!strcmp(active, "M122")) drivers.receive(line);
+      identity = fieldMatches(line, "MACHINE_TYPE:", machineId) && fieldMatches(line, "AXIS_COUNT:", "6");
+    if (!strcmp(active, "M122")) pendingDrivers.receive(line);
     if (!strcmp(active, "M119")) endstops.receive(line);
     if (!strcmp(active, "M114") || homingCommand(active)) readPosition(line);
     if (strcmp(line, "ok") && strncmp(line, "ok ", 3)) return;
@@ -150,6 +169,8 @@ class OctopusSession {
       if (!identity) { fail("Wrong Octopus firmware: flash the matching TIMIAC2 image"); return; }
       state = State::Drivers;
     } else if (!strcmp(active, "M122")) {
+      drivers = pendingDrivers;
+      driverReportAvailable = true;
       driverAt = now;
       if (!drivers.good()) {
         snprintf(fault, sizeof(fault), "Driver check failed: connection/current/microsteps/mode; see driver panel");
@@ -177,6 +198,23 @@ class OctopusSession {
   unsigned size = 0, cursor = 0;
   bool requireDriverCheck = false;
   uint32_t driverAt = 0;
+  uint32_t drainSequence = 0;
+  char drainMarker[40] = {};
+  bool drainMarkerSeen = false;
+  DriverReport pendingDrivers;
+  const char* beginDrain(uint32_t now) {
+    state = State::Drain; waiting = identity = false; sent = now;
+    drainMarkerSeen = false;
+    snprintf(drainMarker, sizeof(drainMarker), "TIMIAC_DRAINED_%lu", static_cast<unsigned long>(++drainSequence));
+    snprintf(active, sizeof(active), "M410\nM400\nM118 %s", drainMarker);
+    return active;
+  }
+  static bool fieldMatches(const char* line, const char* key, const char* value) {
+    const char* p = strstr(line, key);
+    if (!p) return false;
+    p += strlen(key); const size_t length = strlen(value);
+    return !strncmp(p, value, length) && (!p[length] || p[length] == ' ');
+  }
   bool add(const char* line) {
     if (size >= 44 || strlen(line) >= 128) { size = 0; return false; }
     strcpy(queue[size++], line); return true;
@@ -185,6 +223,7 @@ class OctopusSession {
     snprintf(active, sizeof(active), "%s", command); waiting = true; sent = now;
     homingInFlight = homingCommand(active);
     if (!strcmp(active, "M119")) endstops.begin();
+    if (!strcmp(active, "M122")) pendingDrivers.begin();
     return active;
   }
   void readPosition(const char* line) {

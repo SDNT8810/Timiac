@@ -1,10 +1,14 @@
 export function boardStatus(state, key, connected) {
   const board = state?.[key];
   if (!connected) return { label: 'Unknown', detail: 'Master disconnected' };
-  if (!(board?.bridgeConnected ?? board?.online ?? board?.ready)) return { label: 'ESP offline', detail: 'Reconnecting to master...' };
+  if (board?.fault?.includes('firmware mismatch')) return { label: 'Firmware mismatch', detail: board.fault };
+  if (!(board?.bridgeConnected ?? board?.online ?? board?.ready)) return { label: 'ESP offline', detail:
+    board?.lastSeenMs === null ? 'No bridge has joined with this board number; check its power and ESP1/ESP2 firmware role' :
+    Number.isFinite(board?.lastSeenMs) ? `Last bridge report ${Math.floor(board.lastSeenMs / 1000)} s ago; reconnecting` : 'Reconnecting to master...' };
   if (board.resetRequired) return { label: 'Reset required', detail: board.fault || 'Marlin halted; check the fault, then reset this Octopus' };
+  if (!(board.octopusConnected ?? board.online ?? board.ready)) return { label: 'Octopus offline', detail: board.fault || 'ESP connected - waiting for motor board' };
+  if (board.drivers && board.drivers.ok === false && board.octopusConnected) return { label: 'Driver check', detail: board.fault || board.diagnostic || 'Checking six TMC2209 drivers before motion' };
   if (board.fault) return { label: 'Stopped', detail: board.fault };
-  if (!(board.octopusConnected ?? board.online ?? board.ready)) return { label: 'Octopus offline', detail: 'ESP connected - waiting for motor board' };
   if (board.busy) return { label: state.operation?.homing ? 'Homing' : 'Moving', detail: 'ESP and Octopus connected' };
   if (!board.ready) return { label: 'Stopped', detail: 'Check the Octopus connection, then Home' };
   return { label: board.homed === 63 ? 'Ready' : 'Home required', detail: 'ESP and Octopus connected' };

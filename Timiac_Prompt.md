@@ -103,3 +103,16 @@ B2 ----> 2 o'clock
 C2 ----> 1 o'clock
 
 so please update the logic and g-codes accordingly
+
+--------------------------------------------------------------------
+
+ah it was a wiring issue that i fixed and worked fine
+now lets make the motors less noisy !
+when i start the project and take controll , its silent , but after i home the arms . they are making a continioues noise (like a fan) to hold the possition. 
+movement is fine , but when they dont move, they are making a nois !
+
+how can we resolve it ?
+
+
+also i like to have the sensoreless homing option , so i can home all arms even without end stop micro switches , becouse am going to remove them later ! 
+just prepair it so i can test it in master dashboard

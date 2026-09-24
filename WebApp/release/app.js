@@ -50,7 +50,7 @@ document.querySelectorAll('[data-action]').forEach(button => button.addEventList
 $('stop').addEventListener('click', async () => {
   ++stopGeneration;
   stopping = true; render();
-  try { await controller.stop(); message('Motion stopped. Wait for both boards, then Home before moving again.'); }
+  try { await controller.stop(); message('Stop requested. Wait for board status; interrupted homing requires Octopus reset.'); }
   catch (error) { message(`Stop could not be confirmed: ${error.message}`, true); }
   finally { stopping = false; render(); }
 });

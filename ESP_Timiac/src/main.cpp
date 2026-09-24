@@ -5,10 +5,12 @@
 #include <LittleFS.h>
 #include "config.h"
 #include "../../shared/safety.h"
+#include "../../shared/peer_outbox.h"
 #include "../../shared/timeouts.h"
 #include "../../shared/gcode.h"
 #include "../../shared/endstops.h"
 #include "../../shared/driver_report.h"
+#include "../../shared/octopus_session.h"
 #include "../../shared/clock.h"
 #if TIMIAC_MASTER
 #include "../../shared/presets.h"
@@ -58,6 +60,7 @@ void setup() {
   configureProximity();
   LittleFS.begin(); configureHttp(); listener.begin();
 #else
+  bridgeResetReason = ESP.getResetReason();
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
   Serial.setRxBufferSize(2048);
   Serial.begin(kBaud); Serial.setDebugOutput(false);

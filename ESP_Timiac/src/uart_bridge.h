@@ -11,17 +11,30 @@ struct UartBridge {
   bool (&known)[6] = session.known;
   uint32_t& resetCount = session.resets;
   String fault;
+  String lastReply;
+  uint32_t lastReplyAt = 0;
   bool halted = false, job = false;
   uint32_t monitorAt = 0, seenFailures = 0, seenCompletions = 0;
   bool online() const { return session.online(millis()); }
   bool healthy() const { return session.healthy(millis()); }
   bool prepared() const { return session.prepared(); }
+  String diagnostic() const {
+    String detail = session.waiting ? String("Waiting for ") + session.active + " (" + String(millis() - session.sent) + " ms)" :
+      session.state == timiac::OctopusSession::State::Drain ? "Recovering Octopus link" :
+      session.halted() ? "Marlin halted" : session.identity ? "Octopus identified" : "Identifying Octopus";
+    if (!lastReply.isEmpty()) detail += "; last reply " + String(millis() - lastReplyAt) + " ms ago: " + lastReply;
+    else detail += "; no serial reply received";
+    return detail;
+  }
   void monitorEndstops(bool enabled) { session.monitor = enabled; monitorAt = millis(); }
   void sync() {
     fault = session.fault; halted = session.halted(); job = session.running();
     if (session.failures != seenFailures) {
       seenFailures = session.failures;
-      stopAll(fault);
+      // A prior fault may already have latched the system. The new UART
+      // failure still needs to drain replies (or send M112 during homing).
+      if (systemLatched) abort(fault);
+      else stopAll(fault);
     }
     if (session.completions != seenCompletions) {
       seenCompletions = session.completions;
@@ -59,6 +72,8 @@ struct UartBridge {
     sync();
   }
   void receive(const String& line) {
+    if (line == "start") logMessage("Octopus startup banner received (actual restart)");
+    if (!line.isEmpty()) { lastReply = line.substring(0, 100); lastReplyAt = millis(); }
     if (session.running() || line.indexOf("FIRMWARE_NAME:") >= 0 || line.indexOf("Error:") >= 0 || line.startsWith("echo:Bad "))
       logMessage(String(TIMIAC_BOARD_ID == 1 ? "1 < " : "2 < ") + line);
     session.receive(line.c_str(), millis()); sync();

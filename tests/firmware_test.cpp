@@ -1,5 +1,6 @@
 #include "../shared/gcode.h"
 #include "../shared/safety.h"
+#include "../shared/peer_outbox.h"
 #include "../shared/timeouts.h"
 #include "../shared/clock.h"
 #include "../shared/presets.h"
@@ -13,6 +14,22 @@
 #endif
 using namespace timiac;
 int main(int argc, char** argv) {
+  PeerOutbox outbox;
+  const std::string first = std::string(2200, 'a') + '\n', second = std::string(2000, 'b') + '\n';
+  assert(outbox.append(first.c_str(), first.size(), 0xfffffff0U));
+  assert(!outbox.append(second.c_str(), second.size(), 0xfffffff0U));
+  outbox.advance(1500, 0xfffffff0U); assert(outbox.partialFrame);
+  assert(outbox.append(second.c_str(), second.size(), 0xfffffff0U)); // Compacts the unsent suffix.
+  assert(std::string(outbox.data(), outbox.pending()) == first.substr(1500) + second);
+  assert(!outbox.stalled(0xfffffff0U + 14999U, 15000));
+  assert(outbox.stalled(0xfffffff0U + 15000U, 15000));
+  outbox.advance(first.size() - 1500, 100); assert(!outbox.partialFrame);
+  assert(std::string(outbox.data(), outbox.pending()) == second);
+  outbox.advance(second.size(), 101); assert(!outbox.pending() && !outbox.partialFrame);
+  assert(!outbox.append("unfinished", 10, 0));
+  const std::string huge = std::string(PeerOutbox::maxPacket, 'x') + '\n';
+  assert(!outbox.append(huge.c_str(), huge.size(), 0));
+
   assert(nextClockMinute(13 * 60 + 58, true) == 14 * 60);
   assert(nextClockMinute(13 * 60 + 55, true) == 14 * 60);
   assert(nextClockMinute(23 * 60 + 59, true) == 0);
@@ -195,5 +212,24 @@ int main(int argc, char** argv) {
   barrier.phase = Phase::Running; barrier.done(2); assert(barrier.active());
   barrier.done(1); assert(barrier.phase == Phase::Done);
   barrier.begin(1); barrier.fail(); barrier.done(3); assert(barrier.phase == Phase::Failed);
+  // One-board commissioning uses only the boards containing validated lines.
+  for (unsigned b = 0; b < 2; ++b) {
+    const uint8_t mask = 1U << b, other = mask ^ 3;
+    GcodeState manual;
+    assert(!compileLine(b ? "G28 Z2 A2 B2 C2" : "G28 Z1 A1 B1 C1", manual, step, 6, 48, 700));
+    assert(commandBoards(step.count[0], step.count[1]) == mask);
+    barrier.begin(10, mask);
+    assert(barrier.includes(b) && !barrier.includes(1 - b));
+    barrier.prepared = other; assert(!barrier.canStart(true));
+    barrier.prepared = mask; assert(barrier.canStart(true) && !barrier.canStart(false));
+    barrier.phase = Phase::Running; barrier.done(other); assert(barrier.active());
+    barrier.done(mask); assert(barrier.phase == Phase::Done);
+    barrier.begin(20, mask); barrier.fail(); barrier.done(mask); assert(barrier.phase == Phase::Failed);
+  }
+  assert(commandBoards(0, 0) == 0 && commandBoards(1, 1) == 3);
+  for (uint8_t invalid : {0, 4, 255}) {
+    barrier.begin(0, invalid); barrier.prepared = 3;
+    assert(barrier.phase == Phase::Failed && !barrier.canStart(true));
+  }
   std::cout << "Firmware parser, native gate, timeout, and barrier tests passed\n";
 }

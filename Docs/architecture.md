@@ -7,12 +7,12 @@ Phone(s) -- Wi-Fi --> Master ESP32 (192.168.4.1)
                          |                |
                     ESP bridge 1     ESP bridge 2
                          | UART3          | UART3
-                    Octopus 1 / X    Octopus 2 / X
-                       X1 motor         X2 motor
+                    Octopus 1        Octopus 2
+                    XYZABC (1)       XYZABC (2)
 ~~~
 
 Only the master creates the access point and HTTP server. Both bridges are
-stations. Protocol v4 identifies board 1/2 explicitly with a shared pairing key,
+stations. Protocol v5 checks the generated machine identity and identifies board 1/2 explicitly with a shared pairing key,
 boot identity, and master session. Connection order and IP address do not
 determine axis routing. Duplicate board IDs are refused. The pairing key
 separates bridge traffic from ordinary clients; it is not transport encryption.
@@ -27,7 +27,7 @@ reads the same letters in M114 reports. Marlin uses I/J/K internally for the
 last three drivers, with AXIS4/5/6_NAME explicitly set to A/B/C for G-code.
 
 The development master enables switch telemetry in its authenticated peer
-heartbeat. Each bridge polls M119 at most every 250 ms while idle; polling never
+heartbeat. Each bridge polls M119 at most every 500 ms while idle; polling never
 interleaves with a prepared job, movement, or homing. A report becomes visible
 only after its `ok`. The existing state packets and `/api/status` carry six
 `endstops` booleans per board in XYZABC order (`true` = triggered), with null
@@ -35,7 +35,14 @@ for unknown values and `endstopsAgeMs` for freshness. The master preserves the
 age across bridge heartbeats, and both the API and dashboard reject readings
 at least two seconds old. A restart clears all known switch readings.
 The development page refreshes status every 500 ms and requires no control
-lease to view switches. Release mode does not request automatic M119 polling.
+lease to view switches. Release mode uses a five-second M119 health cadence.
+
+Each idle bridge repeats M122 two seconds after its last completed driver
+report in development mode, or five seconds in release mode. This includes
+passing drivers. Reports publish atomically after `ok`, carry their original
+age across bridge heartbeats, and expire after 15 seconds. The twelve driver
+lamps hide readings during motion or disconnection. Expected current and
+microsteps are generated for the browser and firmware from `machine.json`.
 
 G90/G91 with targets are custom move shorthands. Source relative
 coordinates are checked and converted to explicit absolute local G1 moves.
@@ -68,12 +75,24 @@ playback each move is checked against fresh homing state. Releasing motors
 clears trusted position; homing is required again. Manual commands cannot
 interleave with program execution.
 
-## One step across two boards
+## Command participants
 
-1. Both bridges and both Octopus boards must answer normal Marlin status traffic.
-2. Master sends prepare to both bridges, including an empty half if only one
-   motor is targeted. Each bridge validates/stages local commands without
-   sending them to Marlin.
+Development manual commands derive their board set from the validated local
+command arrays. `G28 X1` and `G90 X1 1 F180` require only Octopus 1; commands
+targeting only suffix 2 require only Octopus 2. All six drivers on the selected
+board must pass, and movement still requires that particular axis to be homed.
+An offline, faulted or restarting unused board does not cancel this manual test.
+The API exposes per-board `manualReady` and the operation's `boardMask`.
+Home all, clock actions, uploaded programs and unqualified diagnostics/release
+commands continue to require both boards. A program retains both participants
+even when an individual step contains commands for only one board.
+
+## One coordinated step across two boards
+
+1. Both bridges must match the master configuration. Each Octopus must pass M115 identity and complete M122 driver checks.
+2. Master sends prepare to both bridges, including an empty half when a program
+   step targets only one board. Each bridge validates/stages local commands without
+   sending motion to Marlin. Homing preparation runs fresh M122 checks.
 3. Once both acknowledge preparation, master sends commit to both.
 4. Each bridge sets G21/G90, streams one native line at a time, waits for its
    acknowledgement, and finishes with M400 then M114.
@@ -88,7 +107,18 @@ additional timing/trigger design and hardware measurements.
 
 ## Faults and restart
 
-- Peer/state timeout: 15 seconds; prepare timeout: 4 seconds.
+- TCP output uses a fixed 4 KB queue per peer and advances by the number of
+  bytes actually accepted. Temporary send-buffer exhaustion and partial writes
+  no longer disconnect the bridge. Pending status/log/ping traffic is skipped
+  instead of accumulating; current status is sent again at the next heartbeat.
+  Control packets are retained in order. A send error or 15 seconds without
+  transmit progress still closes the link and cancels active work. Stop discards
+  unsent control packets; a partly transmitted frame forces a disconnect rather
+  than sending a truncated command. Queues are cleared before reconnection.
+- Connection logs distinguish the same ESP boot reconnecting from a new boot.
+  Marlin's actual `start` banner is logged separately and increments the existing
+  Octopus restart counter. An M115 identification reply is not a restart event.
+- Peer/state timeout: 15 seconds; prepare timeout: 15 seconds.
 - The bridge treats Marlin's normal `ok` and `M114` replies as health traffic.
 - Homing (G28) acknowledgement and whole homing operation: 180 seconds.
   Ordinary commands retain 3-minute acknowledgements and 5-minute operations.
@@ -96,20 +126,34 @@ additional timing/trigger design and hardware measurements.
 - Marlin stepper inactivity timeout: 10 minutes (previously 120 seconds).
 - Bridge failures, command errors, missing acknowledgements, reboots during
   work, and link loss during active/paused programs latch a system stop.
-  Master repeats the stop token until both bridges acknowledge.
-- Each reachable bridge sends M410 for Stop or a confirmed motion fault. These
+  Master repeats the stop token until every participating or connected bridge
+  acknowledges. A lost participant must return and acknowledge; an unused board
+  that has never connected cannot block recovery. Readiness after Stop is checked
+  on the interrupted job's participants. An unused ESP with no Octopus attached
+  only has to acknowledge cancellation. A late/reconnected bridge receives the
+  latest Stop before it can be selected for a new job.
+- Each reachable bridge sends M410 for ordinary Stop, or M112 if a G28 is
+  in flight. M410 alone cannot cancel the following homing bump moves. These
   paths do not guarantee identical stopping instants.
 - Idle connection loss reconnects automatically. Interrupted programs never
   replay automatically.
 - M410 leaves stock Marlin running. The bridge clears trusted position, resumes
-  normal handshaking, and requires Home again. No remote-reset command or
+  normal handshaking after draining old replies, and requires Home again.
+  Drain retries use distinct M118 markers every ten seconds and consume the
+  matching marker's `ok` before handshaking. Missing replies remain a recoverable
+  offline condition; they do not imply a killed firmware. Retries never resend
+  a motion job. A new UART failure still drains replies when already latched.
+  A killed Octopus requires a physical reset. No remote-reset command or
   custom Marlin watchdog is installed.
 - M400/M114 and steps do not detect a stalled motor or missed physical steps.
   Driver diagnostics can be queried with M122. There is no encoder feedback.
 
-Marlin preparation modifies only .build/marlin-two-motor, applies the twelve
-axis profile, and disables runtime SD autostart. The original sources are
-preserved. The staged directory is recreated for each build.
+Marlin preparation extracts the clean 2.1.2.7 tag into `%TEMP%/TimiacBuild/marlin`,
+then adapts the pinned Lumiac configuration with `machine.json`. The original
+Lumiac files and their hashes live in `Marlin/profiles/lumiac-reference`.
+The only motion-source change checks homing for the axes selected by G0/G1,
+allowing independent arm tests. Runtime SD/autostart and EEPROM overrides are
+disabled. The vendored working tree remains untouched. See [rebuild.md](rebuild.md).
 
 The local demo invokes the actual C++ parser with simulated positions.
 It is not an emulator of the ESP TCP/UART state machines or stop latency.

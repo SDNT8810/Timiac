@@ -71,18 +71,19 @@ disabled in `master`. Override `TIMIAC_PROXIMITY_ENABLED` with 0 or 1 in
 
 ## Per-axis commissioning baseline
 
-Both boards use the identical six-axis image. The current X settings are used
-as a commissioning baseline for every axis; confirm direction and calibration
+Both boards use the identical six-axis image, adapted from Lumiac's working
+configuration for TMC2209 UART and Timiac's mechanics. See
+[lumiac-comparison.md](lumiac-comparison.md); confirm direction and calibration
 on each physical mechanism before production use.
 
 | Setting | Value |
 |---|---|
 | Board / MCU | BIGTREETECH Octopus V1.1 / STM32F446ZET6 |
 | Motor / driver | X/Y/Z/A/B/C in G-code; Marlin internally calls the last three drivers I/J/K |
-| Current / microsteps | 600 mA RMS / 4 |
-| Steps / travel | 720 steps/mm / 0–48 mm |
+| Current / microsteps | 600 mA RMS / 32 |
+| Steps / travel | 5,760 steps/mm / 0–48 mm |
 | Maximum feed | 11.67 mm/s = 700 mm/min |
-| Acceleration | 20 mm/s² |
+| Acceleration | S-curve: 25 mm/s² travel, 80 mm/s² per-axis ceiling |
 | Homing speed / direction | 675 mm/min / toward each axis minimum |
 | Stepper inactivity timeout | 600 seconds |
 | Home input | Per-axis input in the table below, pull-up, normally closed switch to GND |
@@ -97,9 +98,12 @@ Both bridges and Octopus boards execute native actuator coordinates directly.
 
 The active twelve-motor profile uses the reported actuator measurement on all
 arms: 40 mm commanded produced 50 mm from home, so steps/mm becomes
-`900 × 40 / 50 = 720`. The old 240 mm/min homing setting physically produced
+`900 × 40 / 50 = 720` at four microsteps. At the requested 32 microsteps,
+the equivalent calibration is `720 × 32 / 4 = 5,760` steps/mm.
+The old 240 mm/min homing setting physically produced
 300 mm/min; the first calibrated increase was to 450 mm/min. The latest request
-adds another 50%, giving 675 mm/min. The generated image is named TIMIAC 12 AXIS.
+adds another 50%, giving 675 mm/min. The generated image identifies itself
+with the `TIMIAC2-` machine hash shared by all ESP images.
 
 Flash the new `firmware.bin` to both Octopus boards, plus the updated master
 and both bridge ESP images for the longer homing budgets. Home first, then
@@ -120,7 +124,7 @@ not confirmation of the actual motor wiring or physical home direction.
 The wiring counts the first endstop input as 1: X/Y/Z/A/B/C use the first six
 inputs. A uses the 4th input (PG11 / STOP3), B the 5th (PG12 / STOP4), and
 C the 6th (PG13 / STOP5). The previous PG12/PG13/PG14 mapping was one input
-too high for this wiring. Motor outputs remain MOTOR4/MOTOR5/MOTOR6 for A/B/C;
+too high for this wiring. The current Lumiac layout uses MOTOR3/MOTOR4/MOTOR5 for A/B/C;
 the motor output number does not select the endstop input.
 
 For these physical switches, remove any DIAG3/DIAG4/DIAG5 jumpers connecting
@@ -137,7 +141,7 @@ as triggered after the 2 mm homing backoff. The message confirms it recognized
 axis A. This can happen if the switch is held, another arm's switch is connected
 to the A input, the circuit is open, the driver/motor does not back off, or the
 mechanism has not released the switch. The message alone does not distinguish
-those causes. On Board 1 the A1 input is STOP3 / PG11 and its motor is MOTOR4.
+those causes. On Board 1 the A1 input is STOP3 / PG11 and its motor is now MOTOR3.
 
 This error calls Marlin's `kill()` and requires the affected Octopus RESET
 button or a power cycle. After reset, use the development switch lamps with
@@ -195,12 +199,13 @@ the default UART0 socket wiring.
    Both boards must report AXIS_COUNT:6 and answer normal Marlin status queries.
 5. Home each local X/Y/Z/A/B/C axis separately, then test a 1 mm move on each motor.
 6. Under supervision, verify Stop and interrupted-link behavior before larger
-   programs. Stop uses the non-latching M410 quick-stop; keep loads supported and
+   programs. Stop uses M410 for ordinary movement and M112 during homing;
+   interrupted homing requires an Octopus reset. Keep loads supported and
    a physical motor-power cutoff available.
 
-After Stop, wait for both bridges to reconnect, then Home again. A board already
-showing `Printer halted. kill() called!` was stopped by the old M112 behavior and
-needs one final power cycle. Do not send USB motion or settings commands while
+After an ordinary Stop, wait for both bridges to reconnect, then Home again.
+A board showing `Printer halted. kill() called!` needs its reset button or a
+power cycle. Do not send USB motion or settings commands while
 using the network controller.
 
 ## Active axis mapping
@@ -209,17 +214,23 @@ using the network controller.
 |---|---|---|---|---|---|
 | X1 | X2 | X | MOTOR0 | 1st | STOP0 / X-STOP / PG6 |
 | Y1 | Y2 | Y | MOTOR1 | 2nd | STOP1 / Y-STOP / PG9 |
-| Z1 | Z2 | Z | MOTOR3 | 3rd | STOP2 / Z-STOP / PG10 |
-| A1 | A2 | A | MOTOR4 | 4th | STOP3 / Z2-STOP / PG11 |
-| B1 | B2 | B | MOTOR5 | 5th | STOP4 / E0-DET / PG12 |
-| C1 | C2 | C | MOTOR6 | 6th | STOP5 / E1-DET / PG13 |
+| Z1 | Z2 | Z | MOTOR2_1 / DRIVER2 | 3rd | STOP2 / Z-STOP / PG10 |
+| A1 | A2 | A | MOTOR3 / DRIVER3 | 4th | STOP3 / Z2-STOP / PG11 |
+| B1 | B2 | B | MOTOR4 / DRIVER4 | 5th | STOP4 / E0-DET / PG12 |
+| C1 | C2 | C | MOTOR5 / DRIVER5 | 6th | STOP5 / E1-DET / PG13 |
 
-MOTOR2 / MOTOR2_1 remains unused. Z is deliberately reassigned to the
-physical MOTOR3 socket (the board's Z2 slot) on both Octopus boards. Its
-TMC2209 UART pin is reassigned with it, so `M122` continues to report Z.
-Move each Z driver and motor cable from MOTOR2 to MOTOR3 while all board power
-is off. X/Y remain on MOTOR0/MOTOR1; A/B/C remain on MOTOR4/MOTOR5/MOTOR6.
-The home switches do not move: Z1/Z2 continue to use STOP2 / PG10.
+The active mapping now matches Lumiac: DRIVER0 through DRIVER5. Z uses the
+MOTOR2 channel; MOTOR2_1 and MOTOR2_2 are parallel outputs of the same driver.
+Use MOTOR2_1 for the single Z actuator and leave MOTOR2_2 empty. MOTOR6/7 are
+unused. UART pins are PC4, PD11, PC6, PC7, PF2 and PE4 in X/Y/Z/A/B/C order.
+
+To change from the preceding bypass layout, disconnect all board power and USB,
+then move each driver and motor cable: Z 3→2, A 4→3, B 5→4, C 6→5. X/Y remain
+on MOTOR0/1. The home switches do not move. Fit TMC2209 UART jumpers at all six
+occupied slots; Lumiac uses a different SPI jumper arrangement. The user is
+replacing both boards with new boards, so the old damaged channels no longer
+determine this layout. Counting from DRIVER0, the third driver slot is DRIVER2
+and serves both MOTOR2 connectors; the fourth slot is DRIVER3 and serves MOTOR3.
 
 Pin references are in the vendored
 Marlin/src/pins/stm32f4/pins_BTT_OCTOPUS_V1_common.h.

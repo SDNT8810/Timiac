@@ -2,6 +2,7 @@ import { HardwareController, programLines } from './hardware.js';
 import { localDate, clockActionNeedsRtc, renderClockReadouts } from './clock-panel.js';
 import { renderSystemStatus, bindWifiSettings } from './system-panel.js';
 import { renderEndstops } from './endstop-panel.js';
+import { renderDrivers } from './driver-panel.js';
 const $ = selector => document.querySelector(selector);
 const api = new HardwareController();
 const INSTALLED_AXES = ['X1', 'Y1', 'Z1', 'A1', 'B1', 'C1', 'X2', 'Y2', 'Z2', 'A2', 'B2', 'C2'];
@@ -10,17 +11,30 @@ let selected = 'X1', busy = false, connected = false, lastRenew = 0, initialized
 let programName = 'Twelve-motor program', uploadSource = '', uploadId = '';
 const message = (text, error = false) => { $('#message').textContent = text; $('#message').classList.toggle('error', error); };
 function locks() {
+  const state = api.status;
   const active = ['preparing', 'running'].includes(api.status?.operation?.state);
   const playing = ['running', 'paused'].includes(api.status?.program?.state);
+  const reserved = playing || state?.program?.state === 'uploading';
+  const board = state?.[selected[1] === '1' ? 'a' : 'b'];
+  const manualReady = board?.manualReady ?? state?.machineReady;
+  const axisHomed = Boolean((board?.homed || 0) & (1 << LOCAL_AXES.indexOf(selected[0])));
   document.querySelectorAll('[data-control]').forEach(el => el.disabled = !connected || !api.ownsControl() || busy);
   for (const id of ['move', 'home', 'home-all', 'release', 'upload'])
     $('#' + id).disabled ||= active || playing;
+  for (const id of ['move', 'home']) $('#' + id).disabled ||= reserved || !manualReady || Boolean(state?.stopPending);
+  $('#move').disabled ||= !axisHomed;
+  for (const id of ['home-all', 'release']) $('#' + id).disabled ||= reserved || !state?.machineReady || Boolean(state?.stopPending);
+  $('#manual-status').textContent = !connected ? 'Connect to the master to test an axis.' :
+    state?.stopPending ? 'Waiting for Stop acknowledgement from the required board(s).' :
+    !manualReady ? 'Octopus ' + selected[1] + ': ' + (board?.fault || (!board?.online ? 'offline. Connect this board to home ' + selected + '.' : 'waiting for driver checks or Stop recovery.')) :
+    active || busy ? 'Command in progress.' : reserved ? 'Finish or stop the program before manual testing.' :
+    !api.ownsControl() ? 'Take control to home ' + selected + '.' :
+    'Ready to home ' + selected + ' on Octopus ' + selected[1] + ' independently.' + (!axisHomed ? ' Home this axis before moving it.' : ' This axis can also move.');
   $('#run').disabled ||= api.status?.program?.state !== 'ready' || !api.status?.machineReady || uploadSource !== $('#program').value || uploadId !== api.status?.program?.id;
   $('#pause').disabled ||= !playing;
   $('#pause').textContent = api.status?.program?.state === 'paused' ? 'Resume' : 'Pause';
   $('#claim').disabled = !connected || busy || api.ownsControl();
   $('#relinquish').disabled = !connected || !api.ownsControl() || busy;
-  const state = api.status;
   const homed = state?.a?.homed === 63 && state?.b?.homed === 63;
   document.querySelectorAll('[data-clock-action]').forEach(button => {
     button.disabled ||= active || ['uploading', 'running', 'paused'].includes(state?.program?.state) || !state?.machineReady || state?.stopPending ||
@@ -36,6 +50,7 @@ function render(state) {
   $('#owner').textContent = api.ownsControl() ? 'You have control' : state.control?.owner ? 'Control: ' + state.control.label : 'No phone has control';
   renderSystemStatus(state, connected, id => $('#' + id));
   renderEndstops(state, connected, id => $('#' + id));
+  renderDrivers(state, connected, id => $('#' + id));
   const b = selected[1] === '1' ? 'a' : 'b', value = state[b]?.positions?.[LOCAL_AXES.indexOf(selected[0])];
   $('#reported').textContent = value == null ? '— mm' : value.toFixed(2) + ' mm';
   $('#target').max = state.travelMm; $('#feed').max = state.maxFeed;
@@ -55,7 +70,7 @@ async function action(fn) {
   finally { busy = false; if (api.status) render(api.status); else locks(); }
 }
 async function execute(gcode) {
-  message('Waiting for both boards to complete…');
+  message('Waiting for the command to complete…');
   await api.execute(gcode, render); message('Command completed.');
 }
 document.querySelectorAll('[data-axis]').forEach(button => button.onclick = () => {
@@ -89,7 +104,7 @@ $('#time-form').onsubmit = event => {
   action(async () => { render(await api.post('/api/time', { localTime: value })); message('Date and time saved to your Timiac.'); });
 };
 $('#stop').onclick = async () => {
-  try { render(await api.stop()); message('Motion stopped. Wait for both boards, then Home before moving again.', true); }
+  try { render(await api.stop()); message('Stop requested. Wait for board status; interrupted homing requires Octopus reset.', true); }
   catch (error) { message('Stop delivery unconfirmed. ' + error.message, true); }
 };
 bindWifiSettings(id => $('#' + id), action, async (path, data) => render(await api.post(path, data)), message);
@@ -132,6 +147,7 @@ async function poll() {
     renderClockReadouts(api.status, false, id => $('#' + id));
     renderSystemStatus(api.status, false, id => $('#' + id));
     renderEndstops(api.status, false, id => $('#' + id));
+    renderDrivers(api.status, false, id => $('#' + id));
     message('Controller status request failed: ' + (error?.message || String(error)), true); locks();
   }
   setTimeout(poll, 500);

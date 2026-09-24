@@ -38,6 +38,7 @@ SUPPORTED_FILESYSTEMS = {"FAT", "FAT32", "EXFAT"}
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("verify", help="verify every firmware image and the shared machine identity without flashing")
 
     for name, help_text in (
         ("esp1", "flash esp_board1.bin to bridge 1"),
@@ -85,6 +86,34 @@ def verified_release_file(name: str) -> Path:
     if expected != actual:
         raise ValueError(f"Checksum mismatch for {path.name}; rebuild the release before flashing")
     return path
+
+
+def verify_release() -> str:
+    """Do not let a valid checksum disguise a mixture of old and new firmware."""
+    from tools.machine_config import load
+    _, identity = load()
+    machine_path = RELEASE_DIR / "machine.json"
+    if not machine_path.is_file() or json.loads(machine_path.read_text()).get("identity") != identity:
+        raise ValueError("Release machine configuration is missing or stale; run python build.py all")
+    for name in ("firmware.bin", "esp_board1.bin", "esp_board2.bin", "esp_master.bin", "esp_master_release.bin"):
+        image = verified_release_file(name)
+        if identity.encode() not in image.read_bytes():
+            raise ValueError(f"{name} does not contain {identity}; rebuild all targets before flashing")
+    for role in ("master", "master_release"):
+        layout_path = RELEASE_DIR / f"{role}_flash.json"
+        layout = json.loads(layout_path.read_text())
+        expected = {
+            "0x1000": f"{role}_bootloader.bin", "0x8000": f"{role}_partitions.bin",
+            "0xe000": f"{role}_boot_app0.bin", "0x10000": f"esp_{role}.bin",
+            "0x290000": f"{role}_littlefs.bin",
+        }
+        actual = {entry["offset"].lower(): entry["file"] for entry in layout["images"]}
+        if layout.get("chip") != "esp32" or actual != expected or len(layout["images"]) != len(expected):
+            raise ValueError(f"Unexpected ESP32 flash layout: {layout_path}")
+        for name in expected.values():
+            verified_release_file(name)
+    print(f"Verified {identity}: both Octopus boards, both ESP bridges, both master modes and web images.")
+    return identity
 
 
 def ensure_esptool() -> None:
@@ -222,6 +251,9 @@ def prepare_octopus_card(sd_root: Path, allow_fixed_drive: bool) -> None:
 
 def main() -> int:
     args = parse_args()
+    verify_release()
+    if args.command == "verify":
+        return 0
     if args.command == "esp1":
         flash_esp8266("esp_board1.bin", args.port, args.baud)
     elif args.command == "esp2":

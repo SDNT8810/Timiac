@@ -1,5 +1,25 @@
 # Timiac: twelve motors, three ESP modules
 
+**Generation 2 rebuild:** see [the rebuild and installation guide](Docs/rebuild.md).
+The original project is fully archived under `BackUp/`. Machine configuration
+now comes from `machine.json`; all six TMC2209 drivers use the same SpreadCycle
+mode. The new bridge checks firmware identity and every driver before motion.
+When migrating to generation 2, update **both Octopus boards, both bridges and the master** together. Verify
+the prepared package with `python run.py verify`.
+
+**Connection stability update (2026-09-24.4):** update the master and installed
+ESP bridges for the TCP send-buffer fix. With only Octopus 1 connected, use
+`python run.py master --port COM5` and `python run.py esp1 --port COM5`, replacing
+the port and physically connecting the correct module for each command.
+Update bridge 2 as `esp2` when adding it later. No Octopus SD update is needed.
+This fixes a software path that disconnected after status/log bursts; see
+[the update details](Docs/rebuild.md#wi-fi-send-buffer-fix--2026-09-244).
+
+**Independent manual testing (introduced in 2026-09-24.3):** reload the page,
+take control, and use **Home selected** on X1 through C1 while
+Octopus 2 is disconnected, or vice versa. Move selected axis requires that
+axis to be homed. Home all, clock actions and uploaded programs need both boards.
+
 The **master ESP** creates Wi-Fi **Timiac**, password **12345678**, and serves
 the control panel at **http://192.168.4.1**. “Timiac” is the Wi-Fi network name
 (SSID); there is no separate Wi-Fi username.
@@ -32,10 +52,13 @@ insert the card with the board powered off, then power on. Check that the
 bootloader renamed it to **FIRMWARE.CUR**. Do not put an ESP binary on these
 cards. Runtime SD programs and autostart are disabled in this new firmware.
 
-The Octopus build follows the latest existing single-motor configuration:
-**Octopus V1.1 / STM32F446, TMC2209 UART, X/MOTOR0, 600 mA RMS,
-4 microsteps, 720 steps/mm, 0–48 mm travel, 11.67 mm/s (700 mm/min)
-maximum speed, 20 mm/s² acceleration**. The minimum home input uses the
+The Octopus build starts from clean Marlin 2.1.2.7 and the explicit six-axis machine definition:
+**Octopus V1.1 / STM32F446, TMC2209 UART, MOTOR0/1/2/3/4/5, 600 mA RMS,
+32 microsteps, 5,760 steps/mm, 0–48 mm travel, 11.67 mm/s (700 mm/min)
+maximum speed, 25 mm/s² S-curve acceleration** (80 mm/s² axis ceiling).
+The build adapts the pinned Lumiac six-arm configuration; see
+[the comparison and upload instructions](Docs/lumiac-comparison.md).
+The minimum home input uses the
 existing **normally closed switch** configuration. See [wiring.md](Docs/wiring.md).
 
 ## Build and upload the three ESPs
@@ -57,7 +80,7 @@ python build.py board2
 python build.py marlin
 ~~~
 
-The Marlin source is generated in .build/marlin-two-motor. The ready-to-flash
+The Marlin source is generated in `%TEMP%/TimiacBuild/marlin`. The ready-to-flash
 release files are created in `firmware/two-motor`.
 
 ## Flash the ready-to-flash release
@@ -91,7 +114,8 @@ python run.py master_release --port COM5  # User dashboard
 
 Both serve **http://192.168.4.1/** on the same Timiac Wi-Fi network. The user
 dashboard contains Home, Open, Close, Show time, a live RTC readout, and a
-date/time setting box. Stop uses a non-latching quick-stop; wait for both boards
+date/time setting box. Stop uses a quick-stop for ordinary motion; interrupted
+homing requires an Octopus reset. Wait for both boards
 to report back, then Home before moving again. Control is acquired automatically,
 with one device controlling at a time. The development G-code and
 program endpoints are disabled in release mode.
@@ -158,7 +182,8 @@ Manual moves, board-qualified hardware G-code, bridge UART commands, and Octopus
 position reports all remain millimetres from the existing home endstop. They
 are already actuator coordinates and receive no additional inversion. Positive
 relative motion closes an arm; negative motion opens it. Homing direction,
-endstop wiring and 720 steps/mm calibration remain unchanged. Homing now uses
+endstop wiring and physical calibration remain unchanged (now 5,760 steps/mm
+at 32 microsteps, formerly 720 at four). Homing now uses
 675 mm/min (50% above the preceding 450 mm/min setting), with a 180-second
 acknowledgement/completion budget. Marlin uses its normal serial command path;
 there is no custom host watchdog or remote-reset command.
@@ -270,16 +295,17 @@ image, flash the shared `firmware.bin` to both boards too.
 
 1. Connect each bridge's GPIO1/TX to its Octopus PD9/RX, GPIO3/RX to PD8/TX,
    and GND to GND. Use a stable 3.3 V supply. UART is **115200 baud**.
-2. Power both Octopus boards and all three ESPs. Connect your phone to
+2. For a manual test, power the master and the selected Octopus and its bridge.
+   For clock actions/programs, power both boards and both bridges. Connect to
    **Timiac / 12345678** and open **http://192.168.4.1**.
-3. Wait for both board cards to show Ready, then press **Take control**.
+3. Wait for the selected board's six driver checks to pass, then press **Take control**.
    Multiple phones can observe; one phone at a time can issue commands.
    Every connected phone can press Stop.
-4. Use Firmware, Drivers, and Endstops to verify both boards. Check every
+4. Use the live driver and microswitch panels to verify the connected board. Check every
    local X/Y/Z/A/B/C sensor reports open when released and TRIGGERED when actuated.
 5. Home and test **one axis at a time**, checking its direction and sensor
    operation. Do not use the all-axis test until all twelve axes are commissioned.
-6. After Stop or a recoverable communication fault, wait for both boards to
+6. After Stop or a recoverable communication fault, wait for the participating boards to
    report back, then Home. Interrupted motion is never replayed.
 
 No homing or movement starts on boot. A physical power cutoff is still
@@ -290,13 +316,15 @@ needed; software shutdown can release motor torque.
 Both dashboards distinguish **ESP offline**, **Octopus offline**, **Homing**,
 **Moving**, **Stopped**, **Home required**, and **Ready**. Fault details identify
 the affected board. The ESP bridges retry Wi-Fi/TCP connections automatically.
-A temporary bridge-link loss during G28 lets the local Marlin homing command
-continue; an interrupted ordinary motion stays stopped.
+A missed packet does not interrupt homing. A bridge-link loss past the
+15-second heartbeat deadline cancels active work on the reachable boards.
 
-Stop and automatic bridge aborts send Marlin's non-latching quick-stop `M410`.
+Stop and automatic bridge aborts send Marlin's quick-stop `M410` for ordinary
+motion. An in-flight `G28` requires `M112` and a physical reset, because M410
+alone cannot cancel the following homing bump moves.
 The bridge clears trusted positions, reconnects, and requires Home before the
-next movement. A board already showing `Printer halted. kill() called!` was
-stopped by an old `M112` and still needs one final power cycle.
+next movement. A board showing `Printer halted. kill() called!` requires
+its reset button or a power cycle after the fault is checked.
 Homing commands and the overall Home operation have a 180-second limit;
 ordinary operations retain their existing limits.
 
@@ -414,7 +442,12 @@ three driver channels `I`, `J`, and `K`, while its configured G-code names are
 |---|---|---|
 | X1 / X2 | X | MOTOR0 |
 | Y1 / Y2 | Y | MOTOR1 |
-| Z1 / Z2 | Z | MOTOR3 |
-| A1 / A2 | A | MOTOR4 |
-| B1 / B2 | B | MOTOR5 |
-| C1 / C2 | C | MOTOR6 |
+| Z1 / Z2 | Z | MOTOR2_1 (DRIVER2) |
+| A1 / A2 | A | MOTOR3 |
+| B1 / B2 | B | MOTOR4 |
+| C1 / C2 | C | MOTOR5 |
+
+This is Lumiac's socket order. MOTOR2_1 and MOTOR2_2 share one driver; leave
+MOTOR2_2 empty for the single Z actuator. Endstops remain STOP0 through STOP5.
+The previous MOTOR2 bypass is superseded; the user is replacing both boards
+with new boards. See [the wiring and changes from the previous layout](Docs/lumiac-comparison.md).

@@ -12,6 +12,7 @@ void statusReply(AsyncWebServerRequest* request) {
   doc["mode"] = "hardware"; doc["session"] = bootId; doc["revision"] = ++snapshotSerial;
   doc["dashboard"] = TIMIAC_RELEASE ? "release" : "development";
   doc["firmware"] = timiac::machineId; doc["protocol"] = timiac::protocolVersion;
+  doc["software"] = kSoftwareRevision;
   JsonObject clock = doc.createNestedObject("clock");
   writeRtcStatus(clock);
   writeNtpStatus(clock);
@@ -27,6 +28,7 @@ void statusReply(AsyncWebServerRequest* request) {
   JsonObject op = doc.createNestedObject("operation");
   op["id"] = operation.id; op["state"] = operation.barrier.name(); op["error"] = operation.error;
   op["homing"] = operation.homing; op["timeoutMs"] = timiac::operationTimeout(operation.homing);
+  op["boardMask"] = operation.barrier.required;
   if (request->hasParam("operation")) {
     String id = request->getParam("operation")->value();
     JsonObject result = doc.createNestedObject("result"); result["id"] = id; result["state"] = "unknown";
@@ -196,10 +198,17 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
       errorReply(request, 409, "Stale command sequence; refused to replay"); return;
     }
     if (operation.barrier.active() || program.reserved()) { errorReply(request, 409, "A command or program owns the machine"); return; }
-    if (!bothHealthy()) { errorReply(request, 503, "Both Octopus boards must be healthy and synchronized"); return; }
+    // Derive the participants from validated commands, never a caller's mask.
+    // Clock actions and program playback retain the two-board barrier.
+    const uint8_t mask = doc["actionHash"].is<uint32_t>() ? 3 : timiac::commandBoards(doc["a"].size(), doc["b"].size());
+    if (!boardsHealthy(mask)) {
+      errorReply(request, 503, mask == 1 ? "Octopus 1 must be online, pass driver checks, and finish Stop recovery" :
+        mask == 2 ? "Octopus 2 must be online, pass driver checks, and finish Stop recovery" :
+        "Both Octopus boards must be healthy and synchronized"); return;
+    }
     if (!homingReady(doc)) { errorReply(request, 409, "Home all moving axes first"); return; }
     lease.lastSeq = doc["seq"].as<uint32_t>(); manualParser = nextParser;
-    startOperation(doc["a"].as<JsonArray>(), doc["b"].as<JsonArray>(), id, hash);
+    startOperation(doc["a"].as<JsonArray>(), doc["b"].as<JsonArray>(), id, hash, mask);
     armTimeMinutes = !systemLatched ? (doc["armMinute"] | -1) : -1;
   } else if (path == "/api/program/begin") {
     unsigned total = doc["total"] | 0;

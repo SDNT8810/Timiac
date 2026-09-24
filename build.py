@@ -3,20 +3,18 @@ from pathlib import Path
 import argparse
 import hashlib
 import json
-import re
 import shutil
 import subprocess
 import sys
 import os
 import tempfile
 import zipfile
-from tools.machine_config import generate, definitions, replace_definitions
+from tools.machine_config import generate, definitions, replace_definitions, baseline
 
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "Marlin/marlin-2.1.2.7"
 BUILD_ROOT = Path(os.environ.get("TIMIAC_BUILD_DIR", str(Path(tempfile.gettempdir()) / "TimiacBuild"))).resolve()
 STAGED = BUILD_ROOT / "marlin"
-PROFILE = ROOT / "Marlin/profiles/twelve-motor/profile.json"
 
 
 def prepare_marlin():
@@ -31,9 +29,12 @@ def prepare_marlin():
     subprocess.run(["git", "-C", str(SOURCE), "archive", "--format=zip", "--output", str(archive), "2.1.2.7"], check=True)
     with zipfile.ZipFile(archive) as source:
         source.extractall(STAGED)
+    _, reference = baseline()
     for name, values in definitions(machine, identity).items():
         path = STAGED / "Marlin" / name
-        path.write_text(replace_definitions(path.read_text(encoding="utf-8"), values), encoding="utf-8")
+        # Pin the working six-arm Lumiac configuration, then adapt the driver,
+        # mechanics, and host interfaces to Timiac. No dependency on ../Lumiac.
+        path.write_text(replace_definitions(reference[name], values), encoding="utf-8")
     # Apply explicit signals at the END of the board header, BEFORE pins_postprocess.
     # No late patch to MarlinConfig and no implicit I/J/K extruder socket allocation.
     board = STAGED / "Marlin/src/pins/stm32f4/pins_BTT_OCTOPUS_V1_1.h"
@@ -42,12 +43,25 @@ def prepare_marlin():
         key = axis["marlin"]
         mapping = {"STEP_PIN": "step", "DIR_PIN": "dir", "ENABLE_PIN": "enable",
                    "CS_PIN": "uart", "SERIAL_TX_PIN": "uart", "SERIAL_RX_PIN": "uart",
-                   "MIN_PIN": "endstop"}
+                   ("STOP_PIN" if key in "XYZ" else "MIN_PIN"): "endstop"}
         for suffix, field in mapping.items():
             pins += [f"#undef {key}_{suffix}", f"#define {key}_{suffix} {axis[field]}"]
     board.write_text(board.read_text(encoding="utf-8") + "\n".join(pins) + "\n", encoding="utf-8")
+    # Independent actuators: keep Marlin's homing protection, but check the
+    # axes in this G0/G1 instead of requiring every other arm to be homed.
+    movement = STAGED / "Marlin/src/gcode/motion/G0_G1.cpp"
+    source = movement.read_text(encoding="utf-8")
+    guard = "  if (!MOTION_CONDITIONS) return;"
+    if source.count(guard) != 1:
+        raise ValueError("Unexpected upstream G0/G1 homing guard")
+    source = source.replace(guard, """  // Timiac independent axes: retain protection for every commanded axis.
+  if (!IsRunning()) return;
+  main_axes_bits_t requested_axes = 0;
+  LOOP_NUM_AXES(axis) if (parser.seen_test(AXIS_CHAR(axis))) requested_axes |= _BV(axis);
+  if (homing_needed_error(requested_axes)) return;""")
+    movement.write_text(source, encoding="utf-8")
     shutil.copy2(ROOT / "tests/marlin_motor_socket_mapping.cpp", STAGED / "Marlin/src/timiac_contract.cpp")
-    print(f"Prepared {identity} from clean Marlin 2.1.2.7: {STAGED}", flush=True)
+    print(f"Prepared {identity}: Marlin 2.1.2.7 with {machine['marlin_configuration_base']} configuration: {STAGED}", flush=True)
     return STAGED
 
 
@@ -97,7 +111,20 @@ def main():
         # Stock ESP32 4 MB default.csv: filesystem begins at 0x290000.
         layout["images"].append({"offset": "0x290000", "file": f"{role}_littlefs.bin"})
         (release / f"{role}_flash.json").write_text(json.dumps(layout, indent=2) + "\n", encoding="utf-8")
-    checksums = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(release.glob("*.bin"))}
+    # Only update hashes for images actually produced by this build. Never
+    # bless a changed/stale unrelated binary by re-hashing the whole folder.
+    previous = release / "SHA256.json"
+    checksums = json.loads(previous.read_text()) if previous.is_file() else {}
+    updated = []
+    if args.target in ("all", "marlin"):
+        updated.append("firmware.bin")
+    for role in ("board1", "board2", "master", "master_release"):
+        if args.target in ("all", role):
+            updated.append(f"esp_{role}.bin")
+            if role.startswith("master"):
+                updated.extend(f"{role}_{suffix}.bin" for suffix in ("bootloader", "partitions", "boot_app0", "littlefs"))
+    for name in updated:
+        checksums[name] = hashlib.sha256((release / name).read_bytes()).hexdigest()
     (release / "SHA256.json").write_text(json.dumps(checksums, indent=2) + "\n", encoding="utf-8")
 
 

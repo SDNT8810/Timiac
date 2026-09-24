@@ -3,22 +3,30 @@ struct LogEntry { uint32_t id = 0, at = 0; String text; };
 LogEntry logs[32];
 uint32_t logSequence = 0, sequence = 0;
 String bootId, coordinatorBoot, serialLine;
+String bridgeResetReason;
+uint32_t lastPeerRejection = 0;
 bool serialDiscard = false, stopRequested = false, systemLatched = false, stopPending = false;
 bool networkChanging = false;
-String systemFault, stopToken, acknowledgedStop;
+String systemFault, stopToken, stopReason, acknowledgedStop;
+uint8_t stopRequired = 0, stopRecoveryRequired = 0;
 uint32_t lastStateTx = 0, reconnectAt = 0, reconnectDelay = 500, lastWifiRetry = 0;
 
 struct Peer {
   WiFiClient socket;
-  String line, boot;
+  String line, boot, closeReason;
+  timiac::PeerOutbox outbox;
   int board = -1;
   bool paired = false, discard = false;
   uint32_t rx = 0, tx = 0;
-} peers[2];
+} peers[TIMIAC_MASTER ? 2 : 1];
 struct RemoteBoard {
   timiac::EndstopReport endstops;
   timiac::DriverReport drivers;
   String firmware;
+  String diagnostic, software;
+  uint32_t uptime = 0;
+  bool driverReportAvailable = false;
+  uint32_t driverReportAt = 0;
   bool online = false, busy = false, latched = false, resetRequired = false;
   uint8_t homed = 0;
   uint32_t reset = 0, stateAt = 0;
@@ -70,8 +78,9 @@ void sendState();
 void stopAll(const String& reason);
 bool bothOnline();
 bool bothHealthy();
+bool boardsHealthy(uint8_t mask);
 void finishLocal();
-void startOperation(JsonArray a, JsonArray b, const String& id, uint32_t hash);
+void startOperation(JsonArray a, JsonArray b, const String& id, uint32_t hash, uint8_t mask = 3);
 void recordReceipt() {
   for (auto& r : receipts) if (r.id == operation.id) {
     r.state = operation.barrier.name(); r.error = operation.error; return;

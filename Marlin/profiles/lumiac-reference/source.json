@@ -1,0 +1,11 @@
+{
+  "id": "lumiac-b250656",
+  "source_project": "Lumiac",
+  "source_commit": "b250656cc6c2fd1dc9e4ab9d40bd20718aa19aaf",
+  "source_directory": "Marlin/marlin-2.1.2.6/Marlin",
+  "captured_on": "2026-09-24",
+  "sha256": {
+    "Configuration.h": "2310f335bc71914aad56f2274d5b1f303018814d3d56a512da4362c993fd7f79",
+    "Configuration_adv.h": "ed850d0d7b6c48f90b2dba6901085cd27e2b7ea65480f4a55213c59131d295fe"
+  }
+}

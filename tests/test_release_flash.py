@@ -54,6 +54,32 @@ class MasterFlashTests(unittest.TestCase):
             runner.flash_master("COM5", 460800, True)
         execute.assert_not_called()
 
+    def test_full_release_rejects_checksum_valid_old_machine_image(self):
+        from tools.machine_config import load
+        _, identity = load()
+        (self.root / "machine.json").write_text(json.dumps({"identity": identity}))
+        hashes = {}
+        names = {"firmware.bin", "esp_board1.bin", "esp_board2.bin"}
+        for role in ("master", "master_release"):
+            entries = [("0x1000", f"{role}_bootloader.bin"), ("0x8000", f"{role}_partitions.bin"),
+                       ("0xe000", f"{role}_boot_app0.bin"), ("0x10000", f"esp_{role}.bin"),
+                       ("0x290000", f"{role}_littlefs.bin")]
+            names.update(name for _, name in entries)
+            (self.root / f"{role}_flash.json").write_text(json.dumps({
+                "chip": "esp32", "images": [{"offset": offset, "file": name} for offset, name in entries]}))
+        for name in names:
+            data = f"test {name} {identity}".encode()
+            (self.root / name).write_bytes(data)
+            hashes[name] = hashlib.sha256(data).hexdigest()
+        (self.root / "SHA256.json").write_text(json.dumps(hashes))
+        self.assertEqual(runner.verify_release(), identity)
+        stale = b"old bridge with a valid checksum"
+        (self.root / "esp_board2.bin").write_bytes(stale)
+        hashes["esp_board2.bin"] = hashlib.sha256(stale).hexdigest()
+        (self.root / "SHA256.json").write_text(json.dumps(hashes))
+        with self.assertRaisesRegex(ValueError, "does not contain"):
+            runner.verify_release()
+
 
 if __name__ == "__main__":
     unittest.main()

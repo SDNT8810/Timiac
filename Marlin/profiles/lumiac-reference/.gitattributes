@@ -1,0 +1,2 @@
+# Preserve the exact captured bytes used by source.json, including line endings.
+Configuration*.h -text

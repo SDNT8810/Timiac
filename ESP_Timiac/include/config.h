@@ -66,6 +66,8 @@
 #define TIMIAC_SERIAL_SWAP 0
 #endif
 constexpr unsigned long kBaud = 115200;
+// Application revision is separate from the hardware identity shared with Marlin.
+constexpr char kSoftwareRevision[] = "2026-09-24.4";
 // Wi-Fi/serial telemetry can be delayed while every axis is homing. These are
 // link-loss limits, separate from the 180-second G28 completion limit.
 constexpr unsigned long kPeerTimeout = 15000;
