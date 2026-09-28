@@ -12,7 +12,7 @@ namespace timiac {
 // The master selects the board using the 1/2 suffix; bridges keep XYZABC intact.
 struct GcodeState {
   bool absolute = true;
-  float feed = 180, position[12] = {};
+  float feed = maxFeed < 180 ? maxFeed : 180, position[12] = {};
   bool known[12] = {};
 };
 struct Step {

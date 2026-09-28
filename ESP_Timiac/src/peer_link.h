@@ -69,6 +69,7 @@ void writeBoard(JsonObject board, unsigned index) {
   board["resetRequired"] = TIMIAC_MASTER ? remote.resetRequired : uart.halted;
   board["homed"] = online ? (TIMIAC_MASTER ? remote.homed : uart.homed) : 0;
   board["reset"] = TIMIAC_MASTER ? remote.reset : uart.resetCount;
+  board["homingMode"] = online ? "switch" : "unknown";
   board["firmware"] = TIMIAC_MASTER ? remote.firmware : (uart.session.identity ? timiac::machineId : "");
   board["software"] = TIMIAC_MASTER ? remote.software.c_str() : kSoftwareRevision;
   board["diagnostic"] = TIMIAC_MASTER ? remote.diagnostic : uart.diagnostic();
@@ -86,6 +87,14 @@ void writeBoard(JsonObject board, unsigned index) {
   checks["current"] = drivers.currentOk; checks["microsteps"] = drivers.stepsOk;
   checks["mode"] = drivers.modeOk; checks["columns"] = drivers.columns;
   checks["settings"] = drivers.settings; checks["ok"] = drivers.good();
+  // Send the report's values, not just pass/fail masks. A stale browser must
+  // never turn a passing bit into an old hard-coded current or resolution.
+  JsonArray currents = checks.createNestedArray("currentMa");
+  JsonArray microsteps = checks.createNestedArray("microstepValues");
+  for (unsigned i = 0; i < 6; ++i) {
+    if (drivers.currentMa[i] >= 0) currents.add(drivers.currentMa[i]); else currents.add(nullptr);
+    if (drivers.microsteps[i] >= 0) microsteps.add(drivers.microsteps[i]); else microsteps.add(nullptr);
+  }
   if (online && (TIMIAC_MASTER ? remote.driverReportAvailable : uart.session.driverReportAvailable))
     checks["ageMs"] = TIMIAC_MASTER ? uint32_t(millis() - remote.driverReportAt) : uart.session.driverReportAge(millis());
   else checks["ageMs"] = nullptr;
@@ -113,6 +122,7 @@ void sendState() {
   sendPeer(peers[0], doc); lastStateTx = millis();
 }
 void stopAll(const String& reason) {
+  releaseClockEnabled = false;
   if (systemLatched) return;
   // A never-connected, unused board cannot hold recovery hostage. A lost
   // participant must still acknowledge Stop before another job can run.
@@ -245,6 +255,10 @@ void processPeer(Peer& p, const String& line) {
     board.drivers.modeOk = checks["mode"] | 0;
     board.drivers.columns = checks["columns"] | false;
     board.drivers.settings = checks["settings"] | 0;
+    for (unsigned i = 0; i < 6; ++i) {
+      board.drivers.currentMa[i] = checks["currentMa"][i].is<uint16_t>() ? checks["currentMa"][i].as<int32_t>() : -1;
+      board.drivers.microsteps[i] = checks["microstepValues"][i].is<uint16_t>() ? checks["microstepValues"][i].as<int32_t>() : -1;
+    }
     if (board.latched && board.fault.isEmpty()) {
       board.fault = doc["error"] | "";
       if (board.fault.isEmpty()) board.fault = "Bridge fault; check the board log";

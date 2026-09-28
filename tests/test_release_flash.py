@@ -80,6 +80,37 @@ class MasterFlashTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not contain"):
             runner.verify_release()
 
+    def test_card_contains_only_firmware_and_needs_no_gcode_directory(self):
+        with patch.object(runner, "validate_sd_root", return_value=self.root), \
+             patch.object(runner, "verified_release_file", return_value=self.root / "source.bin") as selected, \
+             patch.object(runner, "verified_copy") as copied:
+            runner.prepare_octopus_card(self.root, False)
+            selected.assert_called_once_with("firmware.bin")
+            copied.assert_called_once_with(self.root / "source.bin", self.root / "firmware.bin")
+
+    def test_all_eight_commands_route_to_the_correct_image(self):
+        for mode in ("dev", "release"):
+            for role in ("esp1", "esp2", "master", "octopus"):
+                with self.subTest(mode=mode, role=role), \
+                     patch.object(runner.sys, "argv", ["run.py", f"{role}_{mode}"] + (["--sd", "I:/"] if role == "octopus" else ["--port", "COM5"])), \
+                     patch.object(runner, "verify_release"), \
+                     patch.object(runner, "flash_master") as master, \
+                     patch.object(runner, "flash_esp8266") as bridge, \
+                     patch.object(runner, "prepare_octopus_card") as octopus:
+                    self.assertEqual(runner.main(), 0)
+                    if role == "master":
+                        master.assert_called_once_with("COM5", 460800, release=mode == "release")
+                    elif role == "octopus":
+                        octopus.assert_called_once_with(Path("I:/"), False)
+                    else:
+                        bridge.assert_called_once_with(f"esp_board{role[-1]}.bin", "COM5", 460800)
+
+    def test_sensorless_option_is_rejected(self):
+        with patch.object(runner.sys, "argv", ["run.py", "octopus_dev", "--sensorless"]), patch.object(runner.sys, "stderr"):
+            with self.assertRaises(SystemExit) as error:
+                runner.parse_args()
+            self.assertEqual(error.exception.code, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

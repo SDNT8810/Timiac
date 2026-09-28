@@ -1,0 +1,596 @@
+--- a/Marlin/src/module/motion.cpp
++++ b/Marlin/src/module/motion.cpp
+@@ -32,6 +32,9 @@
+ #include "../gcode/gcode.h"
+ #include "../lcd/marlinui.h"
+ #include "../inc/MarlinConfig.h"
++#if ENABLED(SPIDER_CONCURRENT_HOMING)
++  #include "../MarlinCore.h"
++#endif
+ 
+ #if IS_SCARA
+   #include "../libs/buzzer.h"
+@@ -1826,10 +1829,10 @@
+       // check if home phase is disabled for this axis.
+       if (home_phase[axis] < 0) return;
+ 
+-      int16_t phasePerUStep,      // TMC µsteps(phase) per Marlin µsteps
+-              phaseCurrent,       // The TMC µsteps(phase) count of the current position
++      int16_t phasePerUStep,      // TMC Âµsteps(phase) per Marlin Âµsteps
++              phaseCurrent,       // The TMC Âµsteps(phase) count of the current position
+               effectorBackoutDir, // Direction in which the effector mm coordinates move away from endstop.
+-              stepperBackoutDir;  // Direction in which the TMC µstep count(phase) move away from endstop.
++              stepperBackoutDir;  // Direction in which the TMC Âµstep count(phase) move away from endstop.
+ 
+       #define PHASE_PER_MICROSTEP(N) (256 / _MAX(1, N##_MICROSTEPS))
+ 
+@@ -1921,7 +1924,7 @@
+       // Skip to next if target position is behind current. So it only moves away from endstop.
+       if (phaseDelta < 0) phaseDelta += 1024;
+ 
+-      // Convert TMC µsteps(phase) to whole Marlin µsteps to effector backout direction to mm
++      // Convert TMC Âµsteps(phase) to whole Marlin Âµsteps to effector backout direction to mm
+       const float mmDelta = int16_t(phaseDelta / phasePerUStep) * effectorBackoutDir * planner.mm_per_step[axis];
+ 
+       // Optional debug messages
+@@ -2284,6 +2287,105 @@
+ 
+   } // homeaxis()
+ 
++  #if ENABLED(SPIDER_CONCURRENT_HOMING)
++
++    static uint8_t spider_pressed_endstops() {
++      constexpr EndstopEnum switches[] = { X_MIN, Y_MIN, Z_MIN, I_MIN, J_MIN, K_MIN };
++      const auto state = endstops.state();
++      uint8_t pressed = 0;
++      LOOP_NUM_AXES(a) if (TEST(state, switches[a])) SBI(pressed, a);
++      return pressed;
++    }
++
++    // Keep axis names on the same line as the fault so the bridge retains
++    // them even when later kill messages or a TCP log burst follow.
++    static void spider_report_axes(const char* message, const uint8_t affected, const bool error=false) {
++      if (error) SERIAL_ERROR_START();
++      SERIAL_ECHO(message);
++      SERIAL_ECHOPGM(" [axes:");
++      LOOP_NUM_AXES(a) if (TEST(affected, a)) SERIAL_CHAR(' ', AXIS_CHAR(a));
++      SERIAL_ECHOLNPGM("]");
++    }
++
++    void home_spider_group() {
++      SERIAL_ECHOLNPGM("Starting continuous six-arm homing.");
++      planner.synchronize();
++      const uint32_t stop_count = planner.quick_stop_count;
++      const auto cancelled = [stop_count]() {
++        if (planner.quick_stop_count == stop_count) return false;
++        SERIAL_ECHOLNPGM("Six-arm homing cancelled.");
++        return true;
++      };
++      LOOP_NUM_AXES(a) set_axis_never_homed(AxisEnum(a));
++      endstops.hit_on_purpose();
++
++      feedRate_t fr = homing_feedrate(X_AXIS);
++      LOOP_NUM_AXES(a) fr = _MIN(fr, homing_feedrate(AxisEnum(a)));
++
++      // Establish a temporary machine origin. No G-code offsets or software
++      // travel limits are applied to homing moves, just as in do_homing_move.
++      abce_pos_t target{0};
++      planner.set_machine_position_mm(target);
++      const uint8_t pressed = spider_pressed_endstops();
++      if (pressed) {
++        spider_report_axes("Six-arm homing: releasing 2 mm", pressed);
++        LOOP_NUM_AXES(a) if (TEST(pressed, a)) target[a] = SPIDER_HOME_RELEASE_MM;
++        PlannerHints release_hints;
++        release_hints.millimeters = SPIDER_HOME_RELEASE_MM;
++        planner.buffer_segment(target, fr, active_extruder, release_hints);
++        planner.synchronize();
++        if (cancelled()) return; // An intentional remote stop is not an endstop fault.
++        uint8_t interrupted = 0;
++        LOOP_NUM_AXES(a)
++          if (TEST(pressed, a) && ABS(planner.get_axis_position_mm(AxisEnum(a)) - target[a]) > planner.mm_per_step[a])
++            SBI(interrupted, a);
++        if (interrupted) {
++          spider_report_axes("Six-arm homing: release move interrupted", interrupted, true);
++          kill(GET_TEXT_F(MSG_KILL_HOMING_FAILED));
++          return;
++        }
++        endstops.enable(true); // Resample and wait for any configured debounce.
++        const uint8_t unreleased = spider_pressed_endstops();
++        if (unreleased) {
++          spider_report_axes("Six-arm homing: endstop did not release", unreleased, true);
++          kill(GET_TEXT_F(MSG_KILL_HOMING_FAILED));
++          return;
++        }
++      }
++
++      target.reset();
++      planner.set_machine_position_mm(target);
++      PlannerHints seek_hints;
++      LOOP_NUM_AXES(a) {
++        const float distance = 1.5f * max_length(AxisEnum(a));
++        target[a] = -distance;
++        seek_hints.millimeters = _MAX(seek_hints.millimeters, distance);
++      }
++      // Explicit path length keeps each equal-stroke arm at its homing speed rather
++      // than slowing XYZ by the diagonal's square-root-of-three factor.
++      endstops.hit_on_purpose();
++      stepper.begin_spider_homing();
++      planner.buffer_segment(target, fr, active_extruder, seek_hints);
++      planner.synchronize();
++      const uint8_t stopped = stepper.end_spider_homing();
++      endstops.hit_on_purpose();
++
++      if (cancelled()) return;
++
++      if (!spider_homing::complete(stopped)) {
++        spider_report_axes("Six-arm homing: not all endstops reached", spider_homing::all_axes & ~stopped, true);
++        kill(GET_TEXT_F(MSG_KILL_HOMING_FAILED));
++        return;
++      }
++
++      LOOP_NUM_AXES(a) set_axis_is_at_home(AxisEnum(a));
++      sync_plan_position();
++      destination = current_position;
++      SERIAL_ECHOLNPGM("Continuous six-arm homing complete.");
++    }
++
++  #endif // SPIDER_CONCURRENT_HOMING
++
+ #endif // HAS_ENDSTOPS
+ 
+ /**
+--- a/Marlin/src/module/motion.h
++++ b/Marlin/src/module/motion.h
+@@ -430,6 +430,9 @@
+    */
+   extern main_axes_bits_t axes_homed, axes_trusted;
+   void homeaxis(const AxisEnum axis);
++  #if ENABLED(SPIDER_CONCURRENT_HOMING)
++    void home_spider_group();
++  #endif
+   void set_axis_never_homed(const AxisEnum axis);
+   main_axes_bits_t axes_should_home(main_axes_bits_t axes_mask=main_axes_mask);
+   bool homing_needed_error(main_axes_bits_t axes_mask=main_axes_mask);
+--- a/Marlin/src/module/stepper.cpp
++++ b/Marlin/src/module/stepper.cpp
+@@ -165,6 +165,11 @@
+             Stepper::axis_did_move; // = 0
+ 
+ bool Stepper::abort_current_block;
++
++#if ENABLED(SPIDER_CONCURRENT_HOMING)
++  volatile bool Stepper::spider_homing_active = false;
++  volatile uint8_t Stepper::spider_homing_stopped = 0;
++#endif
+ 
+ #if DISABLED(MIXING_EXTRUDER) && HAS_MULTI_EXTRUDER
+   uint8_t Stepper::last_moved_extruder = 0xFF;
+@@ -1712,7 +1717,7 @@
+ 
+     // Start an active pulse if needed
+     #define PULSE_START(AXIS) do{ \
+-      if (step_needed[_AXIS(AXIS)]) { \
++      if (step_needed[_AXIS(AXIS)] && TERN1(SPIDER_CONCURRENT_HOMING, !spider_homing::stopped(spider_homing_stopped, _AXIS(AXIS)))) { \
+         count_position[_AXIS(AXIS)] += count_direction[_AXIS(AXIS)]; \
+         _APPLY_STEP(AXIS, !_INVERT_STEP_PIN(AXIS), 0); \
+       } \
+@@ -3196,6 +3201,24 @@
+   #endif
+ }
+ 
++#if ENABLED(SPIDER_CONCURRENT_HOMING)
++  void Stepper::begin_spider_homing() {
++    CRITICAL_SECTION_START();
++    spider_homing_stopped = 0;
++    spider_homing_active = true;
++    CRITICAL_SECTION_END();
++  }
++
++  uint8_t Stepper::end_spider_homing() {
++    CRITICAL_SECTION_START();
++    const uint8_t stopped = spider_homing_stopped;
++    spider_homing_active = false;
++    spider_homing_stopped = 0;
++    CRITICAL_SECTION_END();
++    return stopped;
++  }
++#endif
++
+ // Signal endstops were triggered - This function can be called from
+ // an ISR context  (Temperature, Stepper or limits ISR), so we must
+ // be very careful here. If the interrupt being preempted was the
+@@ -3225,7 +3248,19 @@
+   );
+ 
+   // Discard the rest of the move if there is a current block
+-  quick_stop();
++  // During concurrent homing, latch this motor off while the other motors
++  // continue the same block. Switch bounce cannot restart a stopped motor.
++  // Normal endstop hits and unexpected axes still abort the whole block.
++  bool stop_block = true;
++  #if ENABLED(SPIDER_CONCURRENT_HOMING)
++    if (spider_homing_active && axis <= K_AXIS) {
++      CRITICAL_SECTION_START();
++      spider_homing_stopped = spider_homing::latch(spider_homing_stopped, axis);
++      stop_block = spider_homing::complete(spider_homing_stopped);
++      CRITICAL_SECTION_END();
++    }
++  #endif
++  if (stop_block) quick_stop();
+ 
+   if (was_enabled) wake_up();
+ }
+--- a/Marlin/src/module/stepper.h
++++ b/Marlin/src/module/stepper.h
+@@ -45,6 +45,9 @@
+ 
+ #include "planner.h"
+ #include "stepper/indirection.h"
++#if ENABLED(SPIDER_CONCURRENT_HOMING)
++  #include "spider_homing.h"
++#endif
+ #ifdef __AVR__
+   #include "stepper/speed_lookuptable.h"
+ #endif
+@@ -519,6 +522,11 @@
+     static axis_bits_t last_direction_bits, // The next stepping-bits to be output
+                        axis_did_move;       // Last Movement in the given direction is not null, as computed when the last movement was fetched from planner
+ 
++    #if ENABLED(SPIDER_CONCURRENT_HOMING)
++      static volatile bool spider_homing_active;
++      static volatile uint8_t spider_homing_stopped;
++    #endif
++
+     static bool abort_current_block;        // Signals to the stepper that current block should be aborted
+ 
+     #if ENABLED(X_DUAL_ENDSTOPS)
+@@ -712,6 +720,11 @@
+ 
+     // Handle a triggered endstop
+     static void endstop_triggered(const AxisEnum axis);
++
++    #if ENABLED(SPIDER_CONCURRENT_HOMING)
++      static void begin_spider_homing();
++      static uint8_t end_spider_homing();
++    #endif
+ 
+     // Triggered position of an axis in steps
+     static int32_t triggered_position(const AxisEnum axis);
+--- a/Marlin/src/module/planner.cpp
++++ b/Marlin/src/module/planner.cpp
+@@ -1675,7 +1675,14 @@
+ 
+ #endif
+ 
++#if ENABLED(SPIDER_CONCURRENT_HOMING)
++  uint32_t Planner::quick_stop_count = 0;
++#endif
++
+ void Planner::quick_stop() {
++  #if ENABLED(SPIDER_CONCURRENT_HOMING)
++    ++quick_stop_count;
++  #endif
+ 
+   // Remove all the queued blocks. Note that this function is NOT
+   // called from the Stepper ISR, so we must consider tail as readonly!
+--- a/Marlin/src/module/planner.h
++++ b/Marlin/src/module/planner.h
+@@ -927,6 +927,9 @@
+     // Called to force a quick stop of the machine (for example, when
+     // a Full Shutdown is required, or when endstops are hit)
+     static void quick_stop();
++    #if ENABLED(SPIDER_CONCURRENT_HOMING)
++      static uint32_t quick_stop_count;
++    #endif
+ 
+     #if ENABLED(REALTIME_REPORTING_COMMANDS)
+       // Force a quick pause of the machine (e.g., when a pause is required in the middle of move).
+--- a/Marlin/src/gcode/calibrate/G28.cpp
++++ b/Marlin/src/gcode/calibrate/G28.cpp
+@@ -265,7 +265,7 @@
+   reset_stepper_timeout();
+ 
+   #define HAS_CURRENT_HOME(N) (defined(N##_CURRENT_HOME) && N##_CURRENT_HOME != N##_CURRENT)
+-  #if HAS_CURRENT_HOME(X) || HAS_CURRENT_HOME(X2) || HAS_CURRENT_HOME(Y) || HAS_CURRENT_HOME(Y2) || (ENABLED(DELTA) && HAS_CURRENT_HOME(Z)) || HAS_CURRENT_HOME(I) || HAS_CURRENT_HOME(J) || HAS_CURRENT_HOME(K) || HAS_CURRENT_HOME(U) || HAS_CURRENT_HOME(V) || HAS_CURRENT_HOME(W)
++  #if HAS_CURRENT_HOME(X) || HAS_CURRENT_HOME(X2) || HAS_CURRENT_HOME(Y) || HAS_CURRENT_HOME(Y2) || (ANY(DELTA, SPIDER_CONCURRENT_HOMING) && HAS_CURRENT_HOME(Z)) || HAS_CURRENT_HOME(I) || HAS_CURRENT_HOME(J) || HAS_CURRENT_HOME(K) || HAS_CURRENT_HOME(U) || HAS_CURRENT_HOME(V) || HAS_CURRENT_HOME(W)
+     #define HAS_HOMING_CURRENT 1
+   #endif
+ 
+@@ -293,7 +293,7 @@
+       stepperY2.rms_current(Y2_CURRENT_HOME);
+       if (DEBUGGING(LEVELING)) debug_current(F(STR_Y2), tmc_save_current_Y2, Y2_CURRENT_HOME);
+     #endif
+-    #if HAS_CURRENT_HOME(Z) && ENABLED(DELTA)
++    #if HAS_CURRENT_HOME(Z) && ANY(DELTA, SPIDER_CONCURRENT_HOMING)
+       const int16_t tmc_save_current_Z = stepperZ.getMilliamps();
+       stepperZ.rms_current(Z_CURRENT_HOME);
+       if (DEBUGGING(LEVELING)) debug_current(F(STR_Z), tmc_save_current_Z, Z_CURRENT_HOME);
+@@ -407,116 +407,125 @@
+       #endif
+     #endif
+ 
+-    // Z may home first, e.g., when homing away from the bed
+-    TERN_(HOME_Z_FIRST, if (doZ) homeaxis(Z_AXIS));
+-
+-    // 'R' to specify a specific raise. 'R0' indicates no raise, e.g., for recovery.resume
+-    // When 'R0' is used, there should already be adequate clearance, e.g., from homing Z to max.
+-    const bool seenR = parser.seenval('R');
+-
+-    // Use raise given by 'R' or Z_HOMING_HEIGHT (above the probe trigger point)
+-    float z_homing_height = seenR ? parser.value_linear_units() : Z_HOMING_HEIGHT;
+-
+-    // Check for any lateral motion that might require clearance
+-    const bool may_skate = seenR || NUM_AXIS_GANG(doX, || doY, || TERN0(Z_SAFE_HOMING, doZ), || doI, || doJ, || doK, || doU, || doV, || doW);
+-
+-    if (seenR && z_homing_height == 0) {
+-      if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("R0 = No Z raise");
++    #if ENABLED(SPIDER_CONCURRENT_HOMING)
++      if (home_all) {
++        home_spider_group();
++        TERN_(IMPROVE_HOMING_RELIABILITY, end_slow_homing(saved_motion_state));
++      }
++      else
++    #endif
++    {
++      // Z may home first, e.g., when homing away from the bed
++      TERN_(HOME_Z_FIRST, if (doZ) homeaxis(Z_AXIS));
++
++      // 'R' to specify a specific raise. 'R0' indicates no raise, e.g., for recovery.resume
++      // When 'R0' is used, there should already be adequate clearance, e.g., from homing Z to max.
++      const bool seenR = parser.seenval('R');
++
++      // Use raise given by 'R' or Z_HOMING_HEIGHT (above the probe trigger point)
++      float z_homing_height = seenR ? parser.value_linear_units() : Z_HOMING_HEIGHT;
++
++      // Check for any lateral motion that might require clearance
++      const bool may_skate = seenR || NUM_AXIS_GANG(doX, || doY, || TERN0(Z_SAFE_HOMING, doZ), || doI, || doJ, || doK, || doU, || doV, || doW);
++
++      if (seenR && z_homing_height == 0) {
++        if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("R0 = No Z raise");
++      }
++      else if (z_homing_height && may_skate) {
++        // Raise Z before homing any other axes and z is not already high enough (never lower z)
++        if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Raise Z before homing:");
++        do_z_clearance(z_homing_height);
++      }
++
++      // Init BLTouch ahead of any lateral motion, even if not homing with the probe
++      TERN_(BLTOUCH, if (may_skate) bltouch.init());
++
++      // Diagonal move first if both are homing
++      TERN_(QUICK_HOME, if (doX && doY) quick_home_xy());
++
++      #if HAS_Y_AXIS
++        // Home Y (before X)
++        if (ENABLED(HOME_Y_BEFORE_X) && (doY || TERN0(CODEPENDENT_XY_HOMING, doX)))
++          homeaxis(Y_AXIS);
++      #endif
++
++      // Home X
++      if (doX || (doY && ENABLED(CODEPENDENT_XY_HOMING) && DISABLED(HOME_Y_BEFORE_X))) {
++
++        #if ENABLED(DUAL_X_CARRIAGE)
++
++          // Always home the 2nd (right) extruder first
++          active_extruder = 1;
++          homeaxis(X_AXIS);
++
++          // Remember this extruder's position for later tool change
++          inactive_extruder_x = current_position.x;
++
++          // Home the 1st (left) extruder
++          active_extruder = 0;
++          homeaxis(X_AXIS);
++
++          // Consider the active extruder to be in its "parked" position
++          idex_set_parked();
++
++        #else
++
++          homeaxis(X_AXIS);
++
++        #endif
++      }
++
++      #if ALL(FOAMCUTTER_XYUV, HAS_I_AXIS)
++        // Home I (after X)
++        if (doI) homeaxis(I_AXIS);
++      #endif
++
++      #if HAS_Y_AXIS
++        // Home Y (after X)
++        if (DISABLED(HOME_Y_BEFORE_X) && doY)
++          homeaxis(Y_AXIS);
++      #endif
++
++      #if ALL(FOAMCUTTER_XYUV, HAS_J_AXIS)
++        // Home J (after Y)
++        if (doJ) homeaxis(J_AXIS);
++      #endif
++
++      TERN_(IMPROVE_HOMING_RELIABILITY, end_slow_homing(saved_motion_state));
++
++      #if ENABLED(FOAMCUTTER_XYUV)
++        // skip homing of unused Z axis for foamcutters
++        if (doZ) set_axis_is_at_home(Z_AXIS);
++      #else
++        // Home Z last if homing towards the bed
++        #if HAS_Z_AXIS && DISABLED(HOME_Z_FIRST)
++          if (doZ) {
++            #if ANY(Z_MULTI_ENDSTOPS, Z_STEPPER_AUTO_ALIGN)
++              stepper.set_all_z_lock(false);
++              stepper.set_separate_multi_axis(false);
++            #endif
++
++            #if ENABLED(Z_SAFE_HOMING)
++              if (TERN1(POWER_LOSS_RECOVERY, !parser.seen_test('H'))) home_z_safely(); else homeaxis(Z_AXIS);
++            #else
++              homeaxis(Z_AXIS);
++            #endif
++            TERN_(HAS_BED_PROBE, probe.move_z_after_homing());
++          }
++        #endif
++
++        SECONDARY_AXIS_CODE(
++          if (doI) homeaxis(I_AXIS),
++          if (doJ) homeaxis(J_AXIS),
++          if (doK) homeaxis(K_AXIS),
++          if (doU) homeaxis(U_AXIS),
++          if (doV) homeaxis(V_AXIS),
++          if (doW) homeaxis(W_AXIS)
++        );
++      #endif
++
++      sync_plan_position();
+     }
+-    else if (z_homing_height && may_skate) {
+-      // Raise Z before homing any other axes and z is not already high enough (never lower z)
+-      if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Raise Z before homing:");
+-      do_z_clearance(z_homing_height);
+-    }
+-
+-    // Init BLTouch ahead of any lateral motion, even if not homing with the probe
+-    TERN_(BLTOUCH, if (may_skate) bltouch.init());
+-
+-    // Diagonal move first if both are homing
+-    TERN_(QUICK_HOME, if (doX && doY) quick_home_xy());
+-
+-    #if HAS_Y_AXIS
+-      // Home Y (before X)
+-      if (ENABLED(HOME_Y_BEFORE_X) && (doY || TERN0(CODEPENDENT_XY_HOMING, doX)))
+-        homeaxis(Y_AXIS);
+-    #endif
+-
+-    // Home X
+-    if (doX || (doY && ENABLED(CODEPENDENT_XY_HOMING) && DISABLED(HOME_Y_BEFORE_X))) {
+-
+-      #if ENABLED(DUAL_X_CARRIAGE)
+-
+-        // Always home the 2nd (right) extruder first
+-        active_extruder = 1;
+-        homeaxis(X_AXIS);
+-
+-        // Remember this extruder's position for later tool change
+-        inactive_extruder_x = current_position.x;
+-
+-        // Home the 1st (left) extruder
+-        active_extruder = 0;
+-        homeaxis(X_AXIS);
+-
+-        // Consider the active extruder to be in its "parked" position
+-        idex_set_parked();
+-
+-      #else
+-
+-        homeaxis(X_AXIS);
+-
+-      #endif
+-    }
+-
+-    #if ALL(FOAMCUTTER_XYUV, HAS_I_AXIS)
+-      // Home I (after X)
+-      if (doI) homeaxis(I_AXIS);
+-    #endif
+-
+-    #if HAS_Y_AXIS
+-      // Home Y (after X)
+-      if (DISABLED(HOME_Y_BEFORE_X) && doY)
+-        homeaxis(Y_AXIS);
+-    #endif
+-
+-    #if ALL(FOAMCUTTER_XYUV, HAS_J_AXIS)
+-      // Home J (after Y)
+-      if (doJ) homeaxis(J_AXIS);
+-    #endif
+-
+-    TERN_(IMPROVE_HOMING_RELIABILITY, end_slow_homing(saved_motion_state));
+-
+-    #if ENABLED(FOAMCUTTER_XYUV)
+-      // skip homing of unused Z axis for foamcutters
+-      if (doZ) set_axis_is_at_home(Z_AXIS);
+-    #else
+-      // Home Z last if homing towards the bed
+-      #if HAS_Z_AXIS && DISABLED(HOME_Z_FIRST)
+-        if (doZ) {
+-          #if ANY(Z_MULTI_ENDSTOPS, Z_STEPPER_AUTO_ALIGN)
+-            stepper.set_all_z_lock(false);
+-            stepper.set_separate_multi_axis(false);
+-          #endif
+-
+-          #if ENABLED(Z_SAFE_HOMING)
+-            if (TERN1(POWER_LOSS_RECOVERY, !parser.seen_test('H'))) home_z_safely(); else homeaxis(Z_AXIS);
+-          #else
+-            homeaxis(Z_AXIS);
+-          #endif
+-          TERN_(HAS_BED_PROBE, probe.move_z_after_homing());
+-        }
+-      #endif
+-
+-      SECONDARY_AXIS_CODE(
+-        if (doI) homeaxis(I_AXIS),
+-        if (doJ) homeaxis(J_AXIS),
+-        if (doK) homeaxis(K_AXIS),
+-        if (doU) homeaxis(U_AXIS),
+-        if (doV) homeaxis(V_AXIS),
+-        if (doW) homeaxis(W_AXIS)
+-      );
+-    #endif
+-
+-    sync_plan_position();
+ 
+   #endif
+ 
+@@ -585,7 +594,7 @@
+     #if HAS_CURRENT_HOME(Y2)
+       stepperY2.rms_current(tmc_save_current_Y2);
+     #endif
+-    #if HAS_CURRENT_HOME(Z) && ENABLED(DELTA)
++    #if HAS_CURRENT_HOME(Z) && ANY(DELTA, SPIDER_CONCURRENT_HOMING)
+       stepperZ.rms_current(tmc_save_current_Z);
+     #endif
+     #if HAS_CURRENT_HOME(I)
+--- a/Marlin/src/inc/SanityCheck.h
++++ b/Marlin/src/inc/SanityCheck.h
+@@ -3902,3 +3902,16 @@
+ #undef _TEST_PWM
+ #undef _NUM_AXES_STR
+ #undef _LOGICAL_AXES_STR
++
++#if ENABLED(SPIDER_CONCURRENT_HOMING)
++  #if NUM_AXES != 6 || !IS_CARTESIAN || IS_CORE || ANY(MARKFORGED_XY, MARKFORGED_YX, FOAMCUTTER_XYUV)
++    #error "SPIDER_CONCURRENT_HOMING requires six independent Cartesian motor axes."
++  #elif HAS_BED_PROBE || HAS_EXTRA_ENDSTOPS || HAS_X2_STEPPER || HAS_Y2_STEPPER || NUM_Z_STEPPERS > 1 || ANY(SENSORLESS_HOMING, DIRECT_STEPPING, INPUT_SHAPING_X, INPUT_SHAPING_Y, DUAL_X_CARRIAGE)
++    #error "SPIDER_CONCURRENT_HOMING requires one motor and one physical endstop per axis, without input shaping."
++  #elif !ALL(USE_X_MIN, USE_Y_MIN, USE_Z_MIN, USE_I_MIN, USE_J_MIN, USE_K_MIN)
++    #error "SPIDER_CONCURRENT_HOMING requires all six MIN endstop pins."
++  #elif X_HOME_DIR != -1 || Y_HOME_DIR != -1 || Z_HOME_DIR != -1 || I_HOME_DIR != -1 || J_HOME_DIR != -1 || K_HOME_DIR != -1
++    #error "SPIDER_CONCURRENT_HOMING requires all six axes to home toward MIN."
++  #endif
++  static_assert(SPIDER_HOME_RELEASE_MM > 0, "SPIDER_HOME_RELEASE_MM must be positive.");
++#endif
+--- a/Marlin/src/module/spider_homing.h
++++ b/Marlin/src/module/spider_homing.h
+@@ -0,0 +1,23 @@
++/**
++ * Lumiac six-axis homing endstop latch.
++ * SPDX-License-Identifier: GPL-3.0-or-later
++ */
++#pragma once
++
++#include <stdint.h>
++
++namespace spider_homing {
++  constexpr uint8_t all_axes = 0x3F; // X, Y, Z, I(A), J(B), K(C)
++
++  constexpr uint8_t latch(const uint8_t stopped, const uint8_t axis) {
++    return stopped | uint8_t(1U << axis);
++  }
++
++  constexpr bool stopped(const uint8_t mask, const uint8_t axis) {
++    return (mask & (1U << axis)) != 0;
++  }
++
++  constexpr bool complete(const uint8_t mask) {
++    return (mask & all_axes) == all_axes;
++  }
++}

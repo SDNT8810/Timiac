@@ -3,6 +3,7 @@ import { localDate, clockActionNeedsRtc, renderClockReadouts } from './clock-pan
 import { renderSystemStatus, bindWifiSettings } from './system-panel.js';
 import { renderEndstops } from './endstop-panel.js';
 import { renderDrivers } from './driver-panel.js';
+import { machine } from './machine-generated.js';
 const $ = selector => document.querySelector(selector);
 const api = new HardwareController();
 const INSTALLED_AXES = ['X1', 'Y1', 'Z1', 'A1', 'B1', 'C1', 'X2', 'Y2', 'Z2', 'A2', 'B2', 'C2'];
@@ -54,6 +55,7 @@ function render(state) {
   const b = selected[1] === '1' ? 'a' : 'b', value = state[b]?.positions?.[LOCAL_AXES.indexOf(selected[0])];
   $('#reported').textContent = value == null ? '— mm' : value.toFixed(2) + ' mm';
   $('#target').max = state.travelMm; $('#feed').max = state.maxFeed;
+  if (Number($('#feed').value) > state.maxFeed) $('#feed').value = state.maxFeed;
   $('#logs').textContent = api.events.map(e => e.text).join('\n'); $('#logs').scrollTop = $('#logs').scrollHeight;
   const job = state.program;
   $('#progress').max = job.total || 1; $('#progress').value = job.completed;

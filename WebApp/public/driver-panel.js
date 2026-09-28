@@ -1,5 +1,10 @@
 import { machine } from './machine-generated.js';
 const { axes, sockets } = machine;
+const mismatch = value => value === 'Mismatch' || value.endsWith(' (mismatch)');
+function reportedSetting(value, available, matches, unit = '') {
+  if (!available || !Number.isInteger(value) || value < 0) return 'Unknown';
+  return `${value}${unit}${matches ? '' : ' (mismatch)'}`;
+}
 function unavailableReason(board, connected) {
   if (!connected) return 'Master disconnected';
   if (board?.bridgeConnected === false) return 'ESP offline; driver cannot be checked';
@@ -22,9 +27,10 @@ export function driverRows(board, connected) {
     const settings = tested && (checks.connected & bit) && checks.columns;
     return { axis, socket: sockets[i],
       uart: !tested ? 'Unknown' : checks.connected & bit ? 'OK' : 'No response',
-      current: !settings || !(checks.settings & 1) ? 'Unknown' : checks.current & bit ? `${machine.currentMa} mA` : 'Mismatch',
-      microsteps: !settings || !(checks.settings & 2) ? 'Unknown' : checks.microsteps & bit ? String(machine.microsteps) : 'Mismatch',
-      mode: !settings || !(checks.settings & 4) ? 'Unknown' : checks.mode & bit ? 'SpreadCycle' : 'Mismatch',
+      current: reportedSetting(checks?.currentMa?.[i], settings && (checks.settings & 1), checks?.current & bit, ' mA'),
+      microsteps: reportedSetting(checks?.microstepValues?.[i], settings && (checks.settings & 2), checks?.microsteps & bit),
+      mode: !settings || !(checks.settings & 4) ? 'Unknown' : checks.mode & bit ?
+        machine.driverMode : 'Mismatch',
     };
   });
 }
@@ -34,7 +40,7 @@ export function driverIndicators(board, connected) {
     if (unavailable) return { ...row, state: 'unknown', result: 'Not checked', detail: unavailable };
     if (row.uart === 'No response') return { ...row, state: 'fault', result: 'No response', detail: 'Suspect driver, socket, UART jumper or power' };
     if (row.uart === 'Unknown') return { ...row, state: 'unknown', result: 'Not checked', detail: 'No connection result for this driver' };
-    if ([row.current, row.microsteps, row.mode].includes('Mismatch'))
+    if ([row.current, row.microsteps, row.mode].some(mismatch))
       return { ...row, state: 'warning', result: 'Settings mismatch', detail: 'Driver responds; configuration needs checking' };
     if ([row.current, row.microsteps, row.mode].includes('Unknown'))
       return { ...row, state: 'unknown', result: 'Check incomplete', detail: 'Driver responds; some settings are missing' };
@@ -60,7 +66,7 @@ export function renderDrivers(state, connected, element) {
       for (const field of ['uart', 'current', 'microsteps', 'mode']) {
         const cell = element(`driver-${row.axis}${boardNumber}-${field}`);
         cell.textContent = row[field];
-        cell.dataset.state = row[field] === 'Mismatch' || row[field] === 'No response' ? 'fault' : row[field] === 'Unknown' ? 'unknown' : 'ok';
+        cell.dataset.state = mismatch(row[field]) || row[field] === 'No response' ? 'fault' : row[field] === 'Unknown' ? 'unknown' : 'ok';
       }
     }
   }

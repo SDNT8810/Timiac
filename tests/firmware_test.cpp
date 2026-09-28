@@ -61,10 +61,10 @@ int main(int argc, char** argv) {
     float positions[12] = {};
     for (unsigned i = 0; i < presetCount(preset); ++i) {
       Step frame;
-      assert(presetStep(preset, i, 3 * 60 + 30, 48, 700, frame));
+      assert(presetStep(preset, i, 3 * 60 + 30, 48, timiac::maxFeed, frame));
       for (unsigned b = 0; b < 2; ++b) for (unsigned j = 0; j < frame.count[b]; ++j) {
         const char* line = frame.lines[b][j];
-        assert(validNative(line, 6, 48, 700));
+        assert(validNative(line, 6, 48, timiac::maxFeed));
         if (!strncmp(line, "G4 ", 3)) ++dwells;
         if (strncmp(line, "G1 ", 3)) continue;
         ++moves;
@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
       assert(dwells == 16);
       for (unsigned i = 0; i < 12; ++i) assert(fabsf(positions[i] - (i == 6 ? 41.28f : 44.16f)) < .001f);
     }
-    Step invalid; assert(!presetStep(preset, presetCount(preset), 0, 48, 700, invalid));
+    Step invalid; assert(!presetStep(preset, presetCount(preset), 0, 48, timiac::maxFeed, invalid));
   }
   assert(validClockDate(2024, 2, 29, 23, 59, 59));
   assert(!validClockDate(2025, 2, 29, 0, 0, 0));
@@ -96,9 +96,9 @@ int main(int argc, char** argv) {
   // Every clock pose must pass the same native gate used by both bridges.
   for (unsigned hour = 0; hour < 24; ++hour) for (unsigned minute = 0; minute < 60; ++minute) {
     Step pose;
-    assert(userAction("show-time", hour, minute, 48, 700, pose));
+    assert(userAction("show-time", hour, minute, 48, timiac::maxFeed, pose));
     for (unsigned b = 0; b < 2; ++b) {
-      for (unsigned n = 0; n < pose.count[b]; ++n) assert(validNative(pose.lines[b][n], 6, 48, 700));
+      for (unsigned n = 0; n < pose.count[b]; ++n) assert(validNative(pose.lines[b][n], 6, 48, timiac::maxFeed));
       for (unsigned a = 0; a < 6; ++a) {
         const char* axis = strchr(pose.lines[b][1], axes[a]); assert(axis);
         const unsigned index = b * 6 + a;
@@ -107,9 +107,9 @@ int main(int argc, char** argv) {
     }
   }
   for (const char* action : {"home", "open", "close"}) {
-    Step pose; assert(userAction(action, 0, 0, 48, 700, pose));
+    Step pose; assert(userAction(action, 0, 0, 48, timiac::maxFeed, pose));
     for (unsigned b = 0; b < 2; ++b) for (unsigned n = 0; n < pose.count[b]; ++n)
-      assert(validNative(pose.lines[b][n], 6, 48, 700));
+      assert(validNative(pose.lines[b][n], 6, 48, timiac::maxFeed));
     if (!strcmp(action, "home")) assert(!strcmp(pose.lines[1][0], "G28 X Y Z A B C"));
     else for (unsigned b = 0; b < 2; ++b) for (char axis : std::string(axes))
       assert(strtof(strchr(pose.lines[b][1], axis) + 1, nullptr) == (!strcmp(action, "open") ? 0 : 48));
@@ -127,21 +127,21 @@ int main(int argc, char** argv) {
     while (std::getline(input, line)) {
       if (!line.empty() && line.back() == '\r') line.pop_back();
       Step actual;
-      const char* error = compileLine(line.c_str(), parser, actual, 6, 48, 700);
+      const char* error = compileLine(line.c_str(), parser, actual, 6, 48, timiac::maxFeed);
       if (error) std::cerr << examples[file] << ": " << line << ": " << error << "\n";
       assert(!error);
       for (unsigned b = 0; b < 2; ++b) for (unsigned i = 0; i < actual.count[b]; ++i)
-        assert(validNative(actual.lines[b][i], 6, 48, 700));
+        assert(validNative(actual.lines[b][i], 6, 48, timiac::maxFeed));
       if (file < 3 && (line.find("G1 ") == 0 || line.find("G4 ") == 0)) {
-        Step expected; assert(presetStep(presets[file], frame++, 60, 48, 700, expected));
+        Step expected; assert(presetStep(presets[file], frame++, 60, 48, timiac::maxFeed, expected));
         assert(!memcmp(&expected, &actual, sizeof(Step)));
       }
     }
     if (file < 3) assert(frame == presetCount(presets[file]));
   }
   Step rejected;
-  assert(!userAction("unknown", 0, 0, 48, 700, rejected));
-  assert(!userAction("show-time", 24, 0, 48, 700, rejected));
+  assert(!userAction("unknown", 0, 0, 48, timiac::maxFeed, rejected));
+  assert(!userAction("show-time", 24, 0, 48, timiac::maxFeed, rejected));
   GcodeState state; Step step;
   auto parse = [&](const char* line) { const char* e = compileLine(line, state, step); if (e) std::cerr << line << ": " << e << "\n"; assert(!e); };
   parse("G90 X1 10 X2 35 F350");
@@ -205,7 +205,8 @@ int main(int argc, char** argv) {
   }
   assert(!homingCommand(nullptr));
   assert(!expired(179999, 0, operationTimeout(true)));
-  assert(expired(180000, 0, operationTimeout(true)));
+  assert(!expired(180000, 0, operationTimeout(true)));
+  assert(expired(300000, 0, operationTimeout(true)));
   assert(expired(300000, 0, operationTimeout(false)));
   Barrier barrier; barrier.begin(0); barrier.prepared = 1; assert(!barrier.canStart(true));
   barrier.prepared = 3; assert(!barrier.canStart(false) && barrier.canStart(true));
@@ -216,7 +217,7 @@ int main(int argc, char** argv) {
   for (unsigned b = 0; b < 2; ++b) {
     const uint8_t mask = 1U << b, other = mask ^ 3;
     GcodeState manual;
-    assert(!compileLine(b ? "G28 Z2 A2 B2 C2" : "G28 Z1 A1 B1 C1", manual, step, 6, 48, 700));
+    assert(!compileLine(b ? "G28 Z2 A2 B2 C2" : "G28 Z1 A1 B1 C1", manual, step, 6, 48, timiac::maxFeed));
     assert(commandBoards(step.count[0], step.count[1]) == mask);
     barrier.begin(10, mask);
     assert(barrier.includes(b) && !barrier.includes(1 - b));

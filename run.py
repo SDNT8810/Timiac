@@ -1,11 +1,11 @@
-"""Flash the prepared Timiac release or prepare an Octopus microSD card.
+r"""Flash prepared Timiac development/release firmware (without rebuilding).
 
 Examples:
-  python run.py esp1
-  python run.py esp2
-  python run.py master --port COM4
+  python run.py esp1_dev --port COM5
+  python run.py esp2_release --port COM5
+  python run.py master_dev --port COM5
   python run.py master_release --port COM5
-  python run.py octopus
+  python run.py octopus_release --sd I:\\
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 RELEASE_DIR = ROOT / "firmware" / "two-motor"
 CHECKSUMS_FILE = RELEASE_DIR / "SHA256.json"
-GCODES_DIR = ROOT / "gcodes"
 DEFAULT_ESP_PORT = "COM5"
 DEFAULT_SD_ROOT = Path("E:/")
 
@@ -40,23 +39,20 @@ def parse_args() -> argparse.Namespace:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("verify", help="verify every firmware image and the shared machine identity without flashing")
 
-    for name, help_text in (
-        ("esp1", "flash esp_board1.bin to bridge 1"),
-        ("esp2", "flash esp_board2.bin to bridge 2"),
-        ("master", "flash all master ESP images, including its web filesystem"),
-        ("master_release", "flash the user dashboard and DS3231-enabled master"),
-    ):
-        command = commands.add_parser(name, help=help_text)
-        command.add_argument("--port", default=DEFAULT_ESP_PORT, help="USB serial port (default: COM5)")
-        command.add_argument("--baud", type=int, default=460800, help="flash baud rate (default: 460800)")
-
-    octopus = commands.add_parser("octopus", help="copy firmware.bin and example G-code files to a microSD card")
-    octopus.add_argument("--sd", type=Path, default=DEFAULT_SD_ROOT, help=r"microSD drive root (default: E:\\)")
-    octopus.add_argument(
-        "--allow-fixed-drive",
-        action="store_true",
-        help="allow the selected card reader when Windows reports it as fixed",
-    )
+    for mode in ("dev", "release"):
+        for role in ("esp1", "esp2", "master", "octopus"):
+            command = commands.add_parser(
+                f"{role}_{mode}", aliases=[role] if mode == "dev" else [],
+                help=f"flash {role} for {mode} mode" + (" (shared microswitch firmware)" if role != "master" else " with matching dashboard"),
+            )
+            command.set_defaults(role=role, mode=mode)
+            if role == "octopus":
+                command.add_argument("--sd", type=Path, default=DEFAULT_SD_ROOT, help=r"microSD drive root (default: E:\\)")
+                command.add_argument("--allow-fixed-drive", action="store_true",
+                                     help="allow the selected card reader when Windows reports it as fixed")
+            else:
+                command.add_argument("--port", default=DEFAULT_ESP_PORT, help="USB serial port (default: COM5)")
+                command.add_argument("--baud", type=int, default=460800, help="flash baud rate (default: 460800)")
     return parser.parse_args()
 
 
@@ -112,7 +108,7 @@ def verify_release() -> str:
             raise ValueError(f"Unexpected ESP32 flash layout: {layout_path}")
         for name in expected.values():
             verified_release_file(name)
-    print(f"Verified {identity}: both Octopus boards, both ESP bridges, both master modes and web images.")
+    print(f"Verified {identity}: microswitch Octopus, shared bridges, dev/release masters and web images.")
     return identity
 
 
@@ -234,19 +230,13 @@ def verified_copy(source: Path, destination: Path) -> None:
 def prepare_octopus_card(sd_root: Path, allow_fixed_drive: bool) -> None:
     root = validate_sd_root(sd_root, allow_fixed_drive)
     firmware = verified_release_file("firmware.bin")
+    print("Homing profile: MICROSWITCH (dev and release).")
     verified_copy(firmware, root / "firmware.bin")
-
-    if not GCODES_DIR.is_dir():
-        raise FileNotFoundError(f"Missing example G-code directory: {GCODES_DIR}")
-    gcode_files = sorted(path for path in GCODES_DIR.rglob("*") if path.is_file())
-    if not gcode_files:
-        raise FileNotFoundError(f"No G-code files found in {GCODES_DIR}")
-    for source in gcode_files:
-        verified_copy(source, root / "gcodes" / source.relative_to(GCODES_DIR))
 
     print("Done. Insert the card into a powered-off Octopus, then power it on.")
     print("The board should rename firmware.bin to FIRMWARE.CUR after a successful flash.")
-    print("The copied G-code files are reference files; run them through the master web panel.")
+    print("After confirming the flash, power off, remove the card, and power on again.")
+    print("The master ESP32 stores and streams all motion programs; no runtime SD card is needed.")
 
 
 def main() -> int:
@@ -254,12 +244,12 @@ def main() -> int:
     verify_release()
     if args.command == "verify":
         return 0
-    if args.command == "esp1":
+    if args.role == "esp1":
         flash_esp8266("esp_board1.bin", args.port, args.baud)
-    elif args.command == "esp2":
+    elif args.role == "esp2":
         flash_esp8266("esp_board2.bin", args.port, args.baud)
-    elif args.command in ("master", "master_release"):
-        flash_master(args.port, args.baud, release=args.command == "master_release")
+    elif args.role == "master":
+        flash_master(args.port, args.baud, release=args.mode == "release")
     else:
         prepare_octopus_card(args.sd, args.allow_fixed_drive)
     return 0

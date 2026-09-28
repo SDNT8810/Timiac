@@ -12,6 +12,8 @@ struct DriverReport {
   static const char* labels() { return "XYZIJK"; }
   uint8_t connected = 0, tested = 0, settings = 0;
   uint8_t modeOk = 0, currentOk = 0, stepsOk = 0;
+  int32_t currentMa[6] = {-1, -1, -1, -1, -1, -1};
+  int32_t microsteps[6] = {-1, -1, -1, -1, -1, -1};
   bool columns = false;
   void begin() { *this = DriverReport(); }
   bool good() const { return tested == 63 && connected == 63 && columns && settings == 7 && modeOk == 63 && currentOk == 63 && stepsOk == 63; }
@@ -48,7 +50,10 @@ struct DriverReport {
     for (unsigned i = 0; i < 6; ++i) {
       char* end = nullptr;
       const unsigned value = strtoul(tokens[i + 1], &end, 10);
-      const bool match = mask == &modeOk ? !strcmp(tokens[i + 1], "false") : end != tokens[i + 1] && !*end && value == expected;
+      const bool numeric = tokens[i + 1][0] >= '0' && tokens[i + 1][0] <= '9' && !*end && value <= 65535;
+      if (mask == &currentOk) currentMa[i] = numeric ? int32_t(value) : -1;
+      if (mask == &stepsOk) microsteps[i] = numeric ? int32_t(value) : -1;
+      const bool match = mask == &modeOk ? !strcmp(tokens[i + 1], "true") : numeric && value == expected;
       if (match) *mask |= 1U << i;
     }
   }

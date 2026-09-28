@@ -1,3 +1,21 @@
+# Current installation - 2026-09-29.1
+
+Use 800 mA, 64 commanded microsteps interpolated to 256, and concurrent Home all in both modes.
+Reflash all five boards as shown in [README](../README.md), including the
+master web filesystem, and reload the dashboard. Old 250/600/1,414 mA or
+32- or native-256-microstep packages are incompatible. Historical incremental-upload advice
+below does not apply to this package.
+
+# Current dev/release package
+
+See [README](../README.md) for the eight `_dev` / `_release` upload commands.
+Both modes require microswitches; sensorless firmware is retired. The master
+ESP32 owns motion programs and the Octopus card is only used for flashing.
+Revision 2026-09-29.1 sets all drivers to 800 mA RMS requested current and
+64 commanded microsteps interpolated to 256, with Lumiac's concurrent Home all. Update both Octopus
+boards, both bridges and master together for identity TIMIAC2-f5b8d948e714.
+Older revision notes below describe their historical behavior.
+
 # Timiac generation 2 rebuild
 
 ## Backup
@@ -57,9 +75,12 @@ driver slot; MS1/MS2 select UART address zero. Leave DIAG-to-endstop jumpers
 removed when using the physical switches. The six switches remain on STOP0-5;
 they do not shift with the motor socket.
 
-Every axis now explicitly uses TMC2209 UART, 600 mA, 32 microsteps,
-SpreadCycle, the existing 12 V chopper timing, 5,760 steps/mm, 48 mm travel,
-675 mm/min homing and 700 mm/min maximum feed. Lumiac's S-curve acceleration
+Every axis now explicitly uses TMC2209 UART, 800 mA, 64 commanded microsteps interpolated to 256,
+StealthChop holding with SpreadCycle above 1 mm/s (since quiet update .6),
+24 V chopper timing for the reported 24 V / 7 A supply, 11,520 steps/mm, 48 mm travel,
+120 mm/min concurrent microswitch homing and 500 mm/min maximum feed.
+Sensorless homing is unavailable in both modes.
+Lumiac's S-curve acceleration
 uses 25 mm/s² travel acceleration, an 80 mm/s² per-axis ceiling, and 0.003 mm
 junction deviation. The calibration is stored as 180 full steps/mm and scaled
 with microsteps so changing resolution preserves physical travel.
@@ -72,7 +93,7 @@ unhomed. Both the bridge and Marlin still reject movement on an unhomed axis.
 
 ## Readiness, homing and Stop
 
-Protocol 5 requires a matching generated identity on master and both bridges.
+Protocol 6 requires a matching generated identity on master and both bridges.
 Each bridge verifies the Octopus identity and six-axis count using M115,
 then checks a complete M122 report: UART connection, configured current,
 microsteps and driver mode. A driver failure keeps motion unavailable and is
@@ -92,11 +113,12 @@ Homing performs another driver check during preparation. Development manual
 commands prepare and wait only for the boards they target. You can home and
 move X1 through C1 while Octopus 2 is disconnected, and vice versa. Home all,
 clock actions and uploaded programs still require both bridges to finish
-preparation before either is committed. A multi-axis home is sent as
-individual `G28 X`, `G28 Y`, etc. The first failing axis is retained in the
-log; later axes are not silently retried. One UART command is outstanding at
-a time, and every job ends in M400/M114. A homing operation has 180 seconds
-from commit, independently of the ESP heartbeat timer.
+preparation before either is committed. The bridge preserves `G28 X Y Z A B C` as one command. Octopus uses the
+Lumiac concurrent seek: each motor stops at its own switch. A pressed switch
+first releases 2 mm; a switch that stays pressed or never triggers fails the
+operation. Single-axis and partial-group commands retain standard Marlin homing. One UART command is outstanding at
+a time, and every job ends in M400/M114. A homing operation has 300 seconds
+from commit (180 seconds per UART acknowledgement), independently of the ESP heartbeat timer.
 
 Stop sends **M410** for ordinary motion, invalidates all positions, and drains
 old replies through M400 and an M118 marker before re-identifying the Octopus.

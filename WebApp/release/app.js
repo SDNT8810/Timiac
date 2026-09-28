@@ -19,6 +19,9 @@ function render(state = controller.status) {
   $('save-time').disabled = Boolean(busy || !connected || otherOwner || !state?.clock?.present);
   for (const id of ['wifi-save', 'wifi-forget']) $(id).disabled = Boolean(busy || !connected || otherOwner);
   $('connection').textContent = connected ? 'Connected to Timiac' : 'Disconnected';
+  $('running-status').textContent = !connected ? 'Waiting for clock status…' : !homed ? 'Home the arms to start the clock.' :
+    !state.clock?.running ? 'Clock paused. Press Start clock to follow the time.' : !state.clock.valid ? 'Clock waiting for a valid time.' :
+    'Clock running. Arms follow the time every five minutes, even with this page closed.';
   $('machine-status').textContent = !connected ? 'Connection lost. Waiting for Timiac…' : state.fault || (otherOwner ? 'Another device has control. Please wait.' : moving ? 'Arms are moving…' : !state.machineReady ? 'Waiting for both motor boards…' : !homed ? 'Ready to home. Home all arms before moving.' : 'All 12 arms are ready.');
   if (connected && programBusy && !state.fault) $('machine-status').textContent = `${state.program.name || 'Movement'} · ${state.program.completed}/${state.program.total} steps`;
   if (connected && !moving && !otherOwner && !state.fault && homed && state.machineReady && state.proximity?.enabled && !state.proximity.armed) {

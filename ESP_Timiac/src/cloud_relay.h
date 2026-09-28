@@ -20,6 +20,7 @@ void cloudSnapshot(JsonObject snapshot) {
   snapshot["fault"] = systemFault; snapshot["stopPending"] = stopPending || stopRequested;
   JsonObject clock = snapshot.createNestedObject("clock");
   writeRtcStatus(clock); writeNtpStatus(clock);
+  clock["automatic"] = bool(TIMIAC_RELEASE); clock["running"] = releaseClockEnabled;
   JsonObject operationStatus = snapshot.createNestedObject("operation");
   operationStatus["id"] = operation.id; operationStatus["state"] = operation.barrier.name();
   operationStatus["error"] = operation.error; operationStatus["homing"] = operation.homing;
@@ -56,7 +57,10 @@ const char* startCloudAction(const String& type, const String& requestId, const 
   lease.renewed = millis();
   startOperation(command["a"].as<JsonArray>(), command["b"].as<JsonArray>(),
                  "cloud-" + requestId.substring(0, 72), hashText("cloud:" + type + ":" + requestId));
-  armTimeMinutes = type == "show-time" ? int(targetMinute) : -1;
+  armTimeMinutes = !systemLatched && type == "show-time" ? int(targetMinute) : -1;
+#if TIMIAC_RELEASE
+  releaseClockEnabled = !systemLatched && (type == "home" || type == "show-time");
+#endif
   return nullptr;
 }
 void receiveCloudAction(JsonVariant action) {

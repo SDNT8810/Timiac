@@ -17,6 +17,8 @@ void statusReply(AsyncWebServerRequest* request) {
   writeRtcStatus(clock);
   writeNtpStatus(clock);
   clock["armMinute"] = armTimeMinutes;
+  clock["automatic"] = bool(TIMIAC_RELEASE);
+  clock["running"] = releaseClockEnabled;
   writeProximityStatus(doc.createNestedObject("proximity"));
   writeUplinkStatus(doc.createNestedObject("wifi"));
   writeCloudStatus(doc.createNestedObject("cloud"));
@@ -48,6 +50,7 @@ void statusReply(AsyncWebServerRequest* request) {
   job["total"] = program.total; job["uploaded"] = program.uploaded; job["completed"] = program.completed;
   job["error"] = program.error; job["translation"] = program.translation;
   job["builtin"] = program.builtin;
+#if !TIMIAC_RELEASE
   JsonArray history = doc.createNestedArray("events");
   uint32_t after = request->hasParam("after") ? strtoul(request->getParam("after")->value().c_str(), nullptr, 10) : 0;
   uint32_t first = logSequence > 8 ? logSequence - 8 : 0;
@@ -56,6 +59,7 @@ void statusReply(AsyncWebServerRequest* request) {
     JsonObject event = history.createNestedObject(); event["id"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
   }
   doc["logSequence"] = logSequence;
+#endif
   String text; serializeJson(doc, text);
   AsyncWebServerResponse* response = request->beginResponse(200, "application/json", text);
   response->addHeader("Cache-Control", "no-store"); response->addHeader("Connection", "close"); request->send(response);
@@ -98,6 +102,11 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
   }
   if (path == "/api/action") {
     String action = doc["action"] | "";
+#if TIMIAC_RELEASE
+    if (action != "home" && action != "open" && action != "close" && action != "show-time") {
+      errorReply(request, 404, "Development actions are unavailable in release mode"); return;
+    }
+#endif
     bool animation = action == "struggle" || action == "next-hour";
     bool nextTime = action == "next-five" || action == "next-hour";
     if (action != "home" && action != "open" && action != "close" && action != "show-time" && action != "next-five" && !animation) {
@@ -210,6 +219,9 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
     lease.lastSeq = doc["seq"].as<uint32_t>(); manualParser = nextParser;
     startOperation(doc["a"].as<JsonArray>(), doc["b"].as<JsonArray>(), id, hash, mask);
     armTimeMinutes = !systemLatched ? (doc["armMinute"] | -1) : -1;
+#if TIMIAC_RELEASE
+    releaseClockEnabled = !systemLatched && (doc["action"] == "home" || doc["action"] == "show-time");
+#endif
   } else if (path == "/api/program/begin") {
     unsigned total = doc["total"] | 0;
     if (!total || total > 4096) { errorReply(request, 400, "Program must contain 1–4096 steps"); return; }
@@ -261,6 +273,7 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
 }
 void configureHttp() {
   http.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) { statusReply(request); });
+#if !TIMIAC_RELEASE
   http.on("/api/rtc", HTTP_GET, [](AsyncWebServerRequest* request) {
     RuntimeLock lock;
     StaticJsonDocument<1024> doc; writeRtcStatus(doc.to<JsonObject>(), true); writeNtpStatus(doc.to<JsonObject>());
@@ -268,16 +281,17 @@ void configureHttp() {
     auto* response = request->beginResponse(200, "application/json", text);
     response->addHeader("Cache-Control", "no-store"); request->send(response);
   });
+#endif
   for (const char* path : {"/api/claim", "/api/lease", "/api/release", "/api/command", "/api/action", "/api/time", "/api/wifi", "/api/stop",
        "/api/program/begin", "/api/program/append", "/api/program/start", "/api/program/pause", "/api/program/resume"}) {
     auto* handler = new AsyncCallbackJsonWebHandler(path, [](AsyncWebServerRequest* request, JsonVariant& json) { handleApi(request, json); }, 4096);
     handler->setMethod(HTTP_POST); handler->setMaxContentLength(2300); http.addHandler(handler);
   }
-  http.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("no-cache");
-  http.serveStatic("/app.js", LittleFS, "/app.js").setCacheControl("no-cache");
-  http.serveStatic("/control.js", LittleFS, "/control.js").setCacheControl("no-cache");
-  http.serveStatic("/hardware.js", LittleFS, "/hardware.js").setCacheControl("no-cache");
-  http.serveStatic("/styles.css", LittleFS, "/styles.css").setCacheControl("no-cache");
+  http.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("no-store");
+  http.serveStatic("/app.js", LittleFS, "/app.js").setCacheControl("no-store");
+  http.serveStatic("/control.js", LittleFS, "/control.js").setCacheControl("no-store");
+  http.serveStatic("/hardware.js", LittleFS, "/hardware.js").setCacheControl("no-store");
+  http.serveStatic("/styles.css", LittleFS, "/styles.css").setCacheControl("no-store");
   http.onNotFound([](AsyncWebServerRequest* request) {
     if (request->url().startsWith("/api/")) errorReply(request, 404, "Unknown endpoint");
     else if (!LittleFS.exists("/index.html")) errorReply(request, 503, "Upload master LittleFS with uploadfs");

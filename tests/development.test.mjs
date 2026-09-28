@@ -6,6 +6,7 @@ import { localDate, clockActionNeedsRtc, renderClockReadouts } from '../WebApp/p
 import { renderSystemStatus, bindWifiSettings } from '../WebApp/public/system-panel.js';
 import { renderEndstops } from '../WebApp/public/endstop-panel.js';
 import { renderDrivers } from '../WebApp/public/driver-panel.js';
+import { machine } from '../WebApp/public/machine-generated.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 async function dashboard() {
@@ -42,9 +43,10 @@ async function dashboard() {
     async post(path, data) { calls.push({ path, data }); return state; }
     async action(name) { calls.push(name); return state; }
     async execute(gcode) { calls.push({ gcode }); return state; }
+    async executeRequest(path, data) { calls.push({ path, data }); return state; }
     async stop() { calls.push('stop'); return state; }
   }
-  const context = vm.createContext({ HardwareController: Controller, localDate, clockActionNeedsRtc, renderClockReadouts, renderSystemStatus, bindWifiSettings, renderEndstops, renderDrivers, Date, setTimeout() {},
+  const context = vm.createContext({ HardwareController: Controller, localDate, clockActionNeedsRtc, renderClockReadouts, renderSystemStatus, bindWifiSettings, renderEndstops, renderDrivers, machine, Date, setTimeout() {},
     document: {
       querySelector(selector) { const [id, child] = selector.slice(1).split(' '); return child ? element(id).querySelector(child) : element(id); },
       querySelectorAll(selector) { const attr = selector.slice(1, -1); return nodes.filter(n => attr in n.attrs); },
@@ -112,6 +114,7 @@ test('all twelve live driver lamps update independently without a control lease 
   const { context, state, element, calls, disconnect } = await dashboard();
   state.a = { bridgeConnected: true, octopusConnected: true, drivers: {
     ageMs: 80, tested: 63, connected: 59, columns: true, settings: 7, current: 63, microsteps: 59, mode: 63,
+    currentMa: [800, 800, 800, 800, 800, 800, 800], microstepValues: [64, 64, 64, 64, 64, 64],
   } };
   state.b = { bridgeConnected: false, octopusConnected: false };
   vm.runInContext('render(api.status)', context);

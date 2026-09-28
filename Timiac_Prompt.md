@@ -116,3 +116,37 @@ how can we resolve it ?
 
 also i like to have the sensoreless homing option , so i can home all arms even without end stop micro switches , becouse am going to remove them later ! 
 just prepair it so i can test it in master dashboard
+
+--------------------------------------------------------------------
+
+now lets have two version for timiac project:
+one for developer mode dashboard (as it is)
+and one for release mode : running clock without debugings features
+
+so i can upload the firmwares with :
+python run.py octopus_dev --sd I:\
+python run.py esp1_dev --port COM5
+python run.py esp2_dev --port COM5
+python run.py master_dev --port COM5
+
+for developer mode
+
+and with :
+python run.py octopus_release --sd I:\
+python run.py esp1_release --port COM5
+python run.py esp2_release --port COM5
+python run.py master_release --port COM5
+
+for release version
+
+but befor that, make sure sensorless homeing is not used ! i didn't liked that !
+
+also please make sure all gcodes and movements are handled in master ESP32 not in microSD cart. so i can remove the SDcart after i uploaded the octopus firmware (like the way we handled it in Lumiac project)
+
+
+
+
+G90 X1 1 Y1 1 Z1 1 A1 1 B1 1 C1 1 X2 1 Y2 1 Z2 1 A2 1 B2 1 C2 1 F180
+G90 X1 30 Y1 30 Z1 30 A1 30 B1 30 C1 30 X2 30 Y2 30 Z2 30 A2 30 B2 30 C2 30 F300
+
+

@@ -33,20 +33,50 @@ class AxisProfileTests(unittest.TestCase):
             with self.subTest(axis=axis["name"]):
                 self.assertEqual(tuple(axis[k] for k in ("step", "dir", "enable", "uart", "endstop")), pins)
 
-    def test_all_six_drivers_match_the_working_xy_mode(self):
+    def test_all_six_drivers_use_quiet_mode_and_restored_current(self):
         config = json.loads((ROOT / "Marlin/profiles/twelve-motor/profile.json").read_text())["Configuration_adv.h"]
         for group in ("XY", "Z", "I", "J", "K"):
-            self.assertIsNone(config[f"STEALTHCHOP_{group}"])
+            self.assertEqual(config[f"STEALTHCHOP_{group}"], "")
+        self.assertEqual(config["HOLD_MULTIPLIER"], "0.5")
+        self.assertEqual(config["CHOPPER_TIMING"], "CHOPPER_DEFAULT_24V")
+        self.assertIsNone(config["SENSORLESS_HOMING"])
+        self.assertEqual(config["HYBRID_THRESHOLD"], "")
         for axis in "XYZIJK":
-            self.assertEqual(config[f"{axis}_CURRENT"], "600")
-            self.assertEqual(config[f"{axis}_MICROSTEPS"], "32")
+            self.assertEqual(config[f"{axis}_HYBRID_THRESHOLD"], "1")
+            self.assertEqual(config[f"{axis}_CURRENT"], "800")
+            self.assertEqual(config[f"{axis}_CURRENT_HOME"], f"{axis}_CURRENT")
+            self.assertEqual(config[f"{axis}_RSENSE"], "0.11")
+            self.assertEqual(config[f"{axis}_MICROSTEPS"], "64")
             self.assertEqual(config[f"{axis}_SLAVE_ADDRESS"], "0")
+
+    def test_run_and_home_use_800_ma_with_24v_timing(self):
+        machine, _ = load()
+        self.assertEqual(machine["current_ma"], 800)
+        settings = definitions(machine, "test")["Configuration_adv.h"]
+        self.assertEqual(settings["SPIDER_RUN_CURRENT_MA"], "800")
+        self.assertEqual(settings["SPIDER_HOME_CURRENT_MA"], "800")
+        self.assertEqual(settings["CHOPPER_TIMING"], "CHOPPER_DEFAULT_24V")
+        self.assertEqual(settings["INTERPOLATE"], "true")
+        self.assertEqual(machine["homing_strategy"], "concurrent-all")
+        self.assertLessEqual(machine["steps_per_mm"] * machine["max_feed_mm_min"] / 60, 100000)
 
     def test_microstep_change_preserves_measured_travel(self):
         machine, _ = load()
-        self.assertEqual(machine["microsteps"], 32)
-        self.assertEqual(machine["steps_per_mm"], 5760)
+        self.assertEqual(machine["microsteps"], 64)
+        self.assertEqual(machine["steps_per_mm"], 11520)
+        self.assertEqual(machine["max_feed_mm_min"], 500)
         self.assertEqual(machine["steps_per_mm"] / machine["microsteps"], 720 / 4)
+
+    def test_only_microswitch_homing_and_no_sd_runtime(self):
+        machine, identity = load()
+        settings = definitions(machine, identity)
+        self.assertEqual(machine["homing_mode"], "microswitch")
+        self.assertIsNone(settings["Configuration.h"]["SDSUPPORT"])
+        advanced = settings["Configuration_adv.h"]
+        self.assertIsNone(advanced["SENSORLESS_HOMING"])
+        self.assertEqual(advanced["NO_SD_AUTOSTART"], "")
+        for axis in "XYZIJK":
+            self.assertIsNone(advanced[f"{axis}_STALL_SENSITIVITY"])
 
     def test_pinned_lumiac_baseline_is_adapted_without_spi_or_pin_conflicts(self):
         machine, identity = load()
@@ -59,6 +89,7 @@ class AxisProfileTests(unittest.TestCase):
             self.assertNotIn("#define I_STEP_PIN", adapted)
             self.assertNotIn("#define CASE_LIGHT_ENABLE", adapted)
         self.assertEqual(settings["Configuration.h"]["DEFAULT_ACCELERATION"], "25")
+        self.assertEqual(settings["Configuration.h"]["HOMING_FEEDRATE_MM_M"], "{ 120, 120, 120, 120, 120, 120 }")
         self.assertEqual(settings["Configuration.h"]["JUNCTION_DEVIATION_MM"], "0.003")
         self.assertEqual(settings["Configuration.h"]["S_CURVE_ACCELERATION"], "")
         self.assertEqual(settings["Configuration_adv.h"]["ENDSTOPS_ALWAYS_ON_DEFAULT"], "")

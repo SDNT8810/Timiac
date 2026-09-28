@@ -1,4 +1,222 @@
+# Current package: 2026-09-29.1 - 800 mA, 24 V, 500 mm/min
+
+Prepared and verified **TIMIAC2-f5b8d948e714** (protocol 6) in both modes.
+All twelve TMC2209 axes request **800 mA RMS** for running and homing.
+The reported 24 V / 7 A supply uses **CHOPPER_DEFAULT_24V**. The user approved
+**64 commanded microsteps with interpolation to 256** to permit a **500 mm/min**
+maximum while preserving calibration at **11,520 steps/mm**, 48 mm travel.
+Homing stays at **120 mm/min**; holding multiplier stays 0.5.
+
+The maximum feed requires 96,000 step pulses/s. The compiled six-axis
+STM32F446 contract checks the 100 kHz configuration budget and 80% of Marlin's
+estimated single-step ISR ceiling. This is not a hardware timing measurement.
+
+Home all retains Lumiac's concurrent independent switch stopping, release
+validation, and cancellation checks. New diagnostics name affected axes for
+initial release, interrupted release, unreleased switches and missing seek
+hits. The observed C2 switch-release failure remains physically unverified.
+
+Validation:
+
+- `python build.py all`: Octopus, both bridges, both masters, both web images passed.
+- `python run.py verify`: all package hashes, identities and flash layouts passed.
+- 14 Python tests, 44 web tests, and all C++ host suites passed.
+- The bridge and master parser accept F500 and reject F500.1. Readiness rejects
+  old 250/600/1,414 mA settings and old 4/32/256-microstep configurations.
+- Marlin compile-time checks cover all six current, microstep, calibration,
+  feed, interpolation and 24 V timing settings, plus endstop and thermal protections.
+- Homing tests cover independent switch stopping, release/cancellation,
+  720 switch orders, missing/stuck switches, and exact axis diagnostics.
+
+Logs: `.build-24v-800-500.log`, `.test-800-500-python.log`,
+`.test-800-500-host.log`, `.test-800-500-web.log`.
+No physical board was flashed. Reflash both Octopus boards, both bridges and
+the selected master mode with its filesystem, then reload the dashboard.
+Expected driver display: **800 mA**, **64 microsteps**. The table reports the
+commanded resolution; interpolation to 256 is enabled in firmware.
+
+# Previous package: 2026-09-28.3 - 250 mA, 256 microsteps, concurrent homing
+
+Octopus diagnostic follow-up: concurrent homing now reports the exact public
+axes for initial release, interrupted release, unreleased switches, and missing
+seek hits. Motor settings, homing behavior, machine identity and ESP compatibility
+are unchanged. Build log: `.build-endstop-axes.log`. This identifies an observed
+Board 2 release fault; it does not establish its physical cause.
+
+Prepared and verified **TIMIAC2-62cb6386688c** (protocol 6) for both dashboard
+modes. All twelve TMC2209 axes request **250 mA RMS** for running and homing,
+with native **256 microsteps**, **46,080 steps/mm**, 48 mm travel and a
+**120 mm/min** movement/homing limit. Holding multiplier remains 0.5.
+This supersedes the previous 1,414 mA request.
+
+The cap requires 92,160 steps/s. The compiled six-axis STM32F446 contract
+checks that against 75% of Marlin's estimated single-step ISR ceiling.
+This is a software budget check, not a measured timing or torque benchmark.
+
+Home all preserves one G28 group per board and uses the Lumiac homing port.
+Each physical switch independently latches its motor off. Initially pressed
+switches release 2 mm; missing or stuck switches fail without marking home.
+The master prepares both boards before committing their groups; network
+starts are coordinated but not guaranteed simultaneous to the microsecond.
+
+The driver table receives numerical M122 Set current and msteps values
+through bridge and master, with missing/mismatched data shown explicitly.
+Static master web assets use no-store caching. Sensorless homing, EEPROM
+overrides, and runtime SD programs remain disabled.
+
+Validation:
+
+- All Octopus, ESP bridge, dev/release master and filesystem builds succeeded.
+- `python run.py verify` passed all hashes, identities and flash layouts.
+- 14 Python tests and 44 web tests passed.
+- All C++ host suites passed, including grouped acknowledgements, cancellation,
+  old-current rejection, numerical telemetry forwarding, partial TCP writes,
+  Stop/recovery and no replay.
+- The actual patched Marlin homing routine passed simulated initial-switch
+  release, stuck/disconnected switches, every incomplete hit mask, interrupted
+  release and cancellation during release/seek. The per-motor latch passed all
+  720 switch orders and repeated/bouncing hits.
+
+Logs: `.build-250-256.log`, `.test-250-256-python.log`,
+`.test-250-256-host.log`, `.test-250-256-web.log`.
+No physical board was flashed. PSU droop and available torque at 250 mA
+remain unmeasured. Reflash both Octopus boards, both bridges and the chosen
+master with its filesystem, then reload the dashboard.
+
+# Previous package: 2026-09-28.2 — 80% driver current
+
+Prepared and verified **TIMIAC2-fb3efdad1c8e** (protocol 6). All twelve
+TMC2209 axes request **1,414 mA RMS** during running and microswitch homing.
+This is 80% of the calculated 1,767.8 mA full-scale output for the configured
+0.11 Ω sense resistors. TMCStepper 0.7.3 selects IRUN=24, giving approximately
+1,381 mA RMS nominal output after register rounding. The holding multiplier
+remains 0.5. Motor ratings, cooling and delivered current have not been
+physically measured or validated.
+
+- `python build.py all`: Octopus, both bridges, both masters and both web images passed.
+- `python run.py verify`: all hashes, identities and master flash layouts passed.
+- Python: 13 tests passed; web: 43 tests passed; all C++ host suites passed.
+- Marlin compile-time checks verify all six running/homing currents, sense
+  resistors, thermal monitoring, 50 mA thermal step-down, driver fault stops,
+  microswitch homing and disabled runtime SD support.
+- Bridge tests reject both the old 600 mA configuration and current reduced
+  by thermal monitoring before accepting another motion job.
+
+Reflash both Octopus boards, both bridges and the chosen master mode together.
+Build log: `.build-current80.log`; host logs: `.test-current80-firmware.log`
+and `.test-current80-web.log`. No hardware was flashed.
+
+# Previous package: 2026-09-28.1
+
+Microswitch-only dev/release builds replace all sensorless profiles.
+Validation for this revision covers all eight CLI routes, firmware-only SD
+copying, rejection of sensorless identities/M914 and SD execution commands,
+master clock scheduling in both modes, and dashboard controls.
+The previous entries below are historical, including the retired DIAG tests.
+No physical flashing or homing is claimed by software checks.
+
+Verified package identity: **TIMIAC2-17eea50a6245** (protocol 6).
+`python build.py all` passed for Octopus, both bridges, both master modes,
+and both LittleFS images. `python run.py verify` passed all package hashes,
+machine identities and ESP32 flash layouts. The release filesystem contains
+only its dashboard and shared clock/network clients.
+
+- Python: 12 tests passed, including all eight upload routes and firmware-only SD copying.
+- Web: 43 tests passed, including release controls and preserved dev controls.
+- C++: parser, Octopus session, dev/release coordinator, and bridge tests passed.
+  The actual master clock loop was exercised without a browser, including
+  invalid RTC, unhomed/offline boards, busy programs, five-minute boundaries,
+  gesture completion, midnight/time corrections, and Stop. Dev does not
+  schedule automatic clock movements.
+
+Build output: `.build-modes.log`; test output: `.test-python.log`,
+`.test-web.log`, `.test-firmware.log` (local ignored logs).
+
 # Validation: two motors / three ESPs
+
+## Sensorless homing at half speed — 2026-09-24.7
+
+Prepared and verified **TIMIAC2-ac03df417d27** (protocol 6), with sensorless
+Octopus identity **TIMIAC2-ac03df417d27-SG**. The user confirmed that fitting
+DIAG jumpers restored sensorless detection, then requested a 50% speed reduction.
+The sensorless profile now uses **337.5 mm/min** on all six local axes;
+the microswitch profile retains **675 mm/min**. The generated browser settings
+display the sensorless speed and the panel explains per-arm sensitivity tuning.
+The default 128 threshold remains uncalibrated.
+
+- Both Octopus profiles, all four ESP applications and both LittleFS images
+  built successfully. Compiled contracts check every axis's homing feed, along
+  with the existing socket, current, microstep and mode requirements.
+- All four host firmware suites, ten Python tests and 44 web tests passed.
+  Profile checks cover the exact 50% reduction and the separate switch speed;
+  the dashboard test checks the displayed 337.5 value and default sensitivity.
+- `python run.py verify` passed for the completed package. All connected
+  ESPs and Octopus boards need matching images because the machine identity
+  changed. Build details: `.build/sensorless-half-speed-build.log`.
+- PowerShell marked compiler warning output as `NativeCommandError`; every
+  PlatformIO target reported SUCCESS and the resulting package passed verification.
+
+The 180-second homing budgets remain in place. Six complete 72 mm search
+moves at 337.5 mm/min total 76.8 seconds before acceleration and command
+overhead. No hardware was flashed or moved by this update; contact force,
+sound and repeatable homing at the reduced speed need a physical retest.
+
+## Quiet movement correction — 2026-09-24.6
+
+Prepared and verified **TIMIAC2-763964f457fd** (protocol 6). The normal
+microswitch profile now enables Marlin hybrid mode on all six axes with
+a 1 mm/s threshold: quiet holding/slow motion, SpreadCycle at ordinary
+homing and movement speeds. The sensorless image remains full-time
+StealthChop for TMC2209 StallGuard4. Compile-time contracts enforce this
+difference. Motor current, travel, speed limits and acceleration are unchanged.
+
+The user confirmed the X2/Y2 incident occurred with normal firmware,
+microswitches connected, no DIAG jumpers, and ordinary Home selected.
+Y2 using its switch is expected. X2 buzzing without motion has not been
+physically diagnosed; the revised movement profile is prepared for a
+controlled retest, not claimed as a verified hardware fix.
+
+Read-only master status showed revision .5 and both bridges offline at the
+time of inspection. No control was claimed and no motion or flash was sent.
+
+Both Octopus profiles, all four ESP roles and both LittleFS images built.
+All four host firmware test suites, ten Python tests, and 44 web tests passed.
+The four driver-panel tests were rerun successfully after adding the
+sensorless/hybrid display distinction. The packaged images passed
+`python run.py verify`. The dashboard now explains the selected board's
+specific reason for disabling sensorless tests.
+No physical noise, holding, movement or sensorless calibration test was run.
+
+## Quiet motors and sensorless testing — 2026-09-24.5
+
+Prepared machine identity **TIMIAC2-5f16d965fe04**, peer protocol **6**.
+The quiet switch image identifies with that base name; the optional
+sensorless image identifies as **TIMIAC2-5f16d965fe04-SG**.
+
+- Both Octopus profiles compiled successfully for STM32F446ZE_btt, including
+  compile-time checks for all six driver modes, pins, current, microsteps
+  and the correct endstop behavior for each profile.
+- Both ESP bridges, development master, release master and both LittleFS
+  images built successfully with revision 2026-09-24.5.
+- Host firmware suites passed: parser/native gate, Octopus session,
+  coordinator and bridge networking. Added coverage for all twelve
+  sensorless addresses, integer threshold bounds, exact profile identity,
+  rejection on switch firmware, M914-before-G28 sequencing and M112 on
+  interrupted sensorless homing.
+- Ten Python tests passed, including profile generation, release integrity
+  and selection/renaming of the optional SD image without touching a card.
+- All 44 web tests passed. The ten development-dashboard tests also passed
+  after adding an assertion that sensorless DIAG readings cannot illuminate
+  a microswitch lamp. They cover profile-based button locks, per-arm values,
+  invalid thresholds, selected/all commands and busy-state locks.
+- `python run.py verify` passed for the packaged files, including the
+  sensorless image and both web filesystems.
+
+The in-app browser was unavailable (no browser surfaces listed), so visual
+layout QA could not be completed. No physical board was flashed, no motors
+were moved, and sound, holding strength, actual stall sensitivity and repeatable
+home position have not been measured. The default threshold of 128 is explicitly
+uncalibrated. See [the installation and test guide](quiet-and-sensorless.md).
 
 ## TCP send-buffer handling — 2026-09-24.4
 

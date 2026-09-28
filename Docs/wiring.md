@@ -80,11 +80,12 @@ on each physical mechanism before production use.
 |---|---|
 | Board / MCU | BIGTREETECH Octopus V1.1 / STM32F446ZET6 |
 | Motor / driver | X/Y/Z/A/B/C in G-code; Marlin internally calls the last three drivers I/J/K |
-| Current / microsteps | 600 mA RMS / 32 |
-| Steps / travel | 5,760 steps/mm / 0–48 mm |
-| Maximum feed | 11.67 mm/s = 700 mm/min |
+| Reported supply / chopper timing | 24 V / 7 A, CHOPPER_DEFAULT_24V |
+| Current / microsteps | 800 mA RMS requested / 64 commanded, interpolated to 256 |
+| Steps / travel | 11,520 steps/mm / 0–48 mm |
+| Maximum feed | 8.333 mm/s = 500 mm/min |
 | Acceleration | S-curve: 25 mm/s² travel, 80 mm/s² per-axis ceiling |
-| Homing speed / direction | 675 mm/min / toward each axis minimum |
+| Homing speed / direction | 120 mm/min, concurrent physical microswitch homing / toward each axis minimum |
 | Stepper inactivity timeout | 600 seconds |
 | Home input | Per-axis input in the table below, pull-up, normally closed switch to GND |
 | Endstop inversion | false: released LOW, triggered HIGH |
@@ -98,11 +99,13 @@ Both bridges and Octopus boards execute native actuator coordinates directly.
 
 The active twelve-motor profile uses the reported actuator measurement on all
 arms: 40 mm commanded produced 50 mm from home, so steps/mm becomes
-`900 × 40 / 50 = 720` at four microsteps. At the requested 32 microsteps,
-the equivalent calibration is `720 × 32 / 4 = 5,760` steps/mm.
-The old 240 mm/min homing setting physically produced
-300 mm/min; the first calibrated increase was to 450 mm/min. The latest request
-adds another 50%, giving 675 mm/min. The generated image identifies itself
+`900 × 40 / 50 = 720` at four microsteps. At the selected 64 commanded microsteps,
+the equivalent calibration is `720 × 64 / 4 = 11,520` steps/mm.
+The driver interpolates internally to 256 microsteps. The 500 mm/min maximum
+requires 96,000 step pulses/s; homing retains its 120 mm/min feed.
+Home all uses Lumiac's independent per-motor switch stopping on both boards. Sensorless homing is removed in both modes.
+Remove any MOTOR0–5 DIAG jumpers and reconnect NC switches with power off.
+The generated image identifies itself
 with the `TIMIAC2-` machine hash shared by all ESP images.
 
 Flash the new `firmware.bin` to both Octopus boards, plus the updated master
@@ -192,6 +195,7 @@ the default UART0 socket wiring.
 1. Use the same firmware/two-motor/firmware.bin on both FAT32 microSD cards.
    Boot each Octopus and confirm FIRMWARE.CUR. Bootloader SD flashing still
    works although runtime SD support and auto0.g execution are disabled.
+   After confirming the flash, power off, remove the card, and power on again.
 2. Flash timiac_master and its filesystem; flash timiac_board1 and
    timiac_board2 onto their respective bridges. Instructions are in [README](../README.md).
 3. Connect the UART links and power all boards. Join Timiac / 12345678.

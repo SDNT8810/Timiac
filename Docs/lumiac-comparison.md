@@ -23,29 +23,35 @@ in both projects is compatible (`02010206`).
 | Junction deviation | 0.003 mm | Same |
 | Homing bump / second-pass divisor | 2 / 2 on all six axes | Same |
 | Endstop interrupts / always enabled | On / on | Same |
-| Driver mode / interpolation / hold multiplier | SpreadCycle / on / 0.5 | Same |
+| Driver mode / interpolation / hold multiplier | SpreadCycle / on / 0.5 | **StealthChop at rest, SpreadCycle above 1 mm/s** / on / 0.5 (.6 microswitch profile) |
 | Driver status monitoring / stop on driver error | On / on | Same |
 | Direction / home direction | Not inverted / minimum | Same |
-| Microsteps | 16 | **32**, as requested |
-| Calibration | 533.33 steps/mm at 16 | **5,760 steps/mm at 32** |
+| Microsteps | 16 | **64**, interpolated internally to 256 |
+| Calibration | 533.33 steps/mm at 16 | **11,520 steps/mm at 64** |
 | Maximum travel | 120 mm | 48 mm |
-| Maximum feed | 260 mm/s | 700 mm/min (11.667 mm/s) |
-| Homing feed | 400 mm/min | 675 mm/min |
+| Maximum feed | 260 mm/s | 500 mm/min (8.333 mm/s) |
+| Homing feed | 400 mm/min | 120 mm/min with microswitches only |
 
 Timiac's established calibration was 720 steps/mm at four microsteps. The
 mechanical calibration is now stored independently as 180 full steps/mm:
-`180 × 32 = 5,760`. This preserves commanded travel and physical speed when
-changing microstep resolution. It does not substitute Lumiac's different
+`180 × 64 = 11,520`. This preserves commanded travel when changing microstep
+resolution. The 500 mm/min limit reserves interrupt headroom at 64 commanded microsteps.
+It does not substitute Lumiac's different
 mechanics. A physical measurement is still needed to confirm the calibration
-on the installed actuators. At maximum feed this requires 67,200 step pulses/s
+on the installed actuators. At maximum feed this requires 96,000 step pulses/s
 on a single moving axis.
+
+Home all additionally ports the current local Lumiac concurrent homing routine,
+separately from the older pinned configuration baseline. Each motor stops at
+its own switch within one shared seek. See [the patch provenance and tests](../Marlin/patches/README.md).
 
 ## Required hardware and controller differences
 
 Lumiac explicitly enables `TMC_USE_SW_SPI` with six TMC5160 drivers: its driver
 configuration uses **SPI**. Timiac instead uses six **TMC2209 UART** drivers per
-board, each on its own socket UART pin at address zero. Timiac keeps 600 mA RMS
-and 0.11 Ω sense resistance; Lumiac's 2,500 mA / 0.075 Ω values are not suitable
+board, each on its own socket UART pin at address zero. Timiac requests 800 mA RMS
+with 0.11 Ω sense resistance;
+Lumiac's 2,500 mA / 0.075 Ω values are not suitable
 substitutes. The separate Lumiac high-power environment is not used.
 
 Lumiac uses driver slots **0, 1, 2, 3, 4, 5**, in X/Y/Z/A/B/C order.
@@ -82,7 +88,7 @@ which connectors were physically populated on the existing Lumiac assembly.
 
 Use the **UART jumper arrangement for TMC2209**, not Lumiac's SPI jumpers for
 TMC5160. Keep address zero and the physical-endstop DIAG jumpers removed.
-Microsteps are set to 32 through UART. Do not copy Lumiac's current or switch
+Microsteps are set to 64 through UART, with internal interpolation to 256. Do not copy Lumiac's current or switch
 contact polarity just because its socket positions match.
 
 All physical signals are assigned
@@ -96,7 +102,7 @@ Other deliberate adaptations:
   validation. Lumiac uses the opposite switch polarity.
 - Keep A/B/C as linear actuator coordinates in millimetres; Lumiac's file marks
   them rotational. Copying that flag would change feed calculations and units.
-- Keep the existing 12 V chopper timing pending confirmation of the motor supply;
+- Use the 24 V chopper timing for the reported 24 V / 7 A supply;
   Lumiac uses 24 V timing. This setting does not change the supply voltage.
 - Keep USART3 and USB at 115200 baud, 192-character command capacity, 600-second
   motor timeout, and homing required after boot or motor release.
@@ -118,7 +124,7 @@ Release mode rechecks drivers every five seconds while idle.
 Only a completed report can publish a new result. Offline, expired or moving
 boards show unknown/paused readings. A responsive driver with the wrong
 microstep setting shows a mismatch and blocks motion. Browser labels and bridge
-expectations are generated from the same machine definition, including **32**
+expectations are generated from the same machine definition, including **64 commanded**
 microsteps. A UART pass does not test a driver's motor output; no response can
 also mean a bad socket, UART jumper or missing supply.
 

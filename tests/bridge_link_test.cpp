@@ -29,6 +29,9 @@ void setupBridge() {
   uart.session.lastRx = hostNow; uart.session.homed = 1;
   uart.drivers.tested = uart.drivers.connected = uart.drivers.currentOk = uart.drivers.stepsOk = uart.drivers.modeOk = 63;
   uart.drivers.columns = true; uart.drivers.settings = 7;
+  for (unsigned i = 0; i < 6; ++i) {
+    uart.drivers.currentMa[i] = timiac::driverCurrent; uart.drivers.microsteps[i] = timiac::driverMicrosteps;
+  }
   uart.fault = ""; uart.halted = uart.job = false;
   uart.seenFailures = uart.seenCompletions = 0; Serial.sent.clear();
 }
@@ -53,11 +56,16 @@ int main() {
   assert(p.socket.connected() && p.outbox.pending() == pending && !systemLatched);
   drainNetwork(); validPackets();
   assert(p.socket.sent.size() == 1);
+  DynamicJsonDocument settings(4096); assert(!deserializeJson(settings, p.socket.sent.back()));
+  for (unsigned i = 0; i < 6; ++i) {
+    assert(settings["board"]["drivers"]["currentMa"][i] == timiac::driverCurrent);
+    assert(settings["board"]["drivers"]["microstepValues"][i] == timiac::driverMicrosteps);
+  }
 
   // Exercise the real M114 -> completion -> sendState path with no send space.
   setupBridge(); p.socket.writeCapacity = 0;
   operation.id = "home-X1"; operation.barrier.begin(hostNow); operation.barrier.phase = timiac::Phase::Running;
-  const char* commands[] = {"G1 X1 F180"}; assert(uart.session.stage(commands, 1, hostNow));
+  const char* commands[] = {"G1 X1 F120"}; assert(uart.session.stage(commands, 1, hostNow));
   uart.session.next(++hostNow); assert(uart.session.commit()); uart.sync();
   while (uart.session.running()) {
     const char* command = uart.session.next(++hostNow);

@@ -1,11 +1,84 @@
 # Timiac: twelve motors, three ESP modules
 
+**Current package (2026-09-29.1):** all twelve arms request **800 mA RMS**
+for running and microswitch homing, with **64 commanded microsteps** over UART
+and **internal interpolation to 256**. Calibration is **11,520 steps/mm**; travel
+remains 0-48 mm. Maximum feed is **500 mm/min** (96,000 step pulses/s); homing
+remains **120 mm/min**. The holding multiplier remains 0.5.
+Driver chopper timing now uses the 24 V preset for the reported 24 V / 7 A supply.
+
+**Home all** now uses Lumiac's concurrent six-arm routine on each Octopus:
+all six seek together and each stops at its own physical switch. The master
+prepares both bridges before starting both groups; Wi-Fi is not a guarantee
+of identical start times. Home selected retains ordinary single-axis homing.
+Pressed switches first release by 2 mm; a stuck or missing switch fails homing.
+
+The development driver table now shows the values received in Marlin's M122
+report, including numerical mismatches, rather than substituting browser
+constants. These are configured values, not measured coil current.
+Reflash **both Octopus boards, both bridges, and the chosen master mode**;
+the master command also installs its web filesystem. Reload the dashboard.
+The matching machine identity is **TIMIAC2-f5b8d948e714**.
+
+The requested current is now 800 mA, superseding the earlier 250 mA and
+1,414 mA settings. The Board 2 C2 release fault remains physically unverified;
+new homing errors name the affected axes, and switch protection stays enabled.
+
 **Generation 2 rebuild:** see [the rebuild and installation guide](Docs/rebuild.md).
 The original project is fully archived under `BackUp/`. Machine configuration
-now comes from `machine.json`; all six TMC2209 drivers use the same SpreadCycle
-mode. The new bridge checks firmware identity and every driver before motion.
+now comes from `machine.json`; all six TMC2209 drivers use quiet holding
+and SpreadCycle above 1 mm/s in the normal microswitch image.
+The new bridge checks firmware identity and every driver before motion.
 When migrating to generation 2, update **both Octopus boards, both bridges and the master** together. Verify
 the prepared package with `python run.py verify`.
+
+**Dev and release modes (2026-09-28.1):** both use **normally closed
+microswitches only**. Sensorless firmware, tuning commands, and dashboard controls
+have been removed. If you tried DIAG homing, power off, remove the MOTOR0–5
+DIAG jumpers, and reconnect the NC endstop switches before homing.
+
+The master ESP32 owns all clock poses, animation sequences, and uploaded G-code.
+The bridges relay validated commands; Octopus executes the motor steps and
+endstop checks. The Octopus SD card is used **only to install firmware**.
+After `firmware.bin` becomes `FIRMWARE.CUR`, power off, remove the card, and
+power on again. No G-code files are copied to the card or read at runtime.
+
+From the `Timiac` directory, install developer mode:
+
+```powershell
+python run.py octopus_dev --sd I:\
+python run.py esp1_dev --port COM5
+python run.py esp2_dev --port COM5
+python run.py master_dev --port COM5
+```
+
+Or install release mode:
+
+```powershell
+python run.py octopus_release --sd I:\
+python run.py esp1_release --port COM5
+python run.py esp2_release --port COM5
+python run.py master_release --port COM5
+```
+
+Repeat the Octopus flash for both boards; connect each ESP separately on COM5.
+Octopus and each bridge use the same image in both modes. The master has separate
+firmware and matching web filesystems. Unsuffixed commands remain dev aliases.
+After this matched update, switching modes only needs the master upload.
+
+**Dev:** the existing dashboard, manual controls, G-code uploads, driver/switch
+diagnostics, and test animations, with microswitch homing.
+**Release:** Home, Open, Close, Start clock, Stop, time and Wi-Fi settings.
+Home enables continuous RTC tracking once homing finishes. Start clock resumes
+tracking; Open, Close, Stop and faults pause it. Arms update at five-minute
+boundaries and return to current time after a hand gesture, with no phone or
+SD card required. No automatic homing or motion replay occurs after a reboot.
+Set a valid RTC time and Home again after power-up or Stop recovery.
+Development command/program endpoints and detailed RTC diagnostics are unavailable
+in release mode. Internal driver, endstop, Stop and connection checks remain active.
+
+`python build.py all` rebuilds all images; `python run.py verify` checks the package.
+The eight mode names also work as individual `build.py` targets (build only).
 
 **Connection stability update (2026-09-24.4):** update the master and installed
 ESP bridges for the TCP send-buffer fix. With only Octopus 1 connected, use
@@ -53,8 +126,8 @@ bootloader renamed it to **FIRMWARE.CUR**. Do not put an ESP binary on these
 cards. Runtime SD programs and autostart are disabled in this new firmware.
 
 The Octopus build starts from clean Marlin 2.1.2.7 and the explicit six-axis machine definition:
-**Octopus V1.1 / STM32F446, TMC2209 UART, MOTOR0/1/2/3/4/5, 600 mA RMS,
-32 microsteps, 5,760 steps/mm, 0–48 mm travel, 11.67 mm/s (700 mm/min)
+**Octopus V1.1 / STM32F446, TMC2209 UART, MOTOR0/1/2/3/4/5, 800 mA RMS setting,
+64 microsteps interpolated to 256, 11,520 steps/mm, 0-48 mm travel, 500 mm/min maximum
 maximum speed, 25 mm/s² S-curve acceleration** (80 mm/s² axis ceiling).
 The build adapts the pinned Lumiac six-arm configuration; see
 [the comparison and upload instructions](Docs/lumiac-comparison.md).
@@ -108,12 +181,12 @@ The two master modes have separate firmware and web filesystem images. From
 the `Timiac` directory, select the dashboard when flashing:
 
 ~~~powershell
-python run.py master --port COM5          # Development dashboard
+python run.py master_dev --port COM5      # Development dashboard
 python run.py master_release --port COM5  # User dashboard
 ~~~
 
 Both serve **http://192.168.4.1/** on the same Timiac Wi-Fi network. The user
-dashboard contains Home, Open, Close, Show time, a live RTC readout, and a
+dashboard contains Home, Open, Close, Start clock, a live RTC readout, and a
 date/time setting box. Stop uses a quick-stop for ordinary motion; interrupted
 homing requires an Octopus reset. Wait for both boards
 to report back, then Home before moving again. Control is acquired automatically,
@@ -144,18 +217,18 @@ enabled by the development master; the release dashboard has no switch panel.
   Required before moving after startup or a motor-board restart.
 - **Open:** moves all arms to **0 mm**, retaining their homed state.
 - **Close:** moves all arms to the configured maximum stroke (currently **48 mm**).
-- **Show time:** reads the DS3231 and moves to that time's pose once per press.
+- **Show time (dev) / Start clock (release):** reads the DS3231 and moves to the current pose.
   Actuator targets are **24 mm** for the hour arm, **0 mm** for the minute arm,
   and **48 mm** for all other arms (closed).
   Minutes use five-minute steps, rounded down. When hour and minute overlap,
   the fully open minute arm takes precedence. The physical mechanism is inverted
-  relative to the simulator's extension coordinates. It does not start an
-  automatic clock animation or periodic arm movement.
-- **Struggle:** runs `Simulator/gcodes/circular-struggle.gcode`, including both
+  relative to the simulator's extension coordinates. Dev moves once per press;
+  release continues following the RTC.
+- **Struggle (dev):** runs `Simulator/gcodes/circular-struggle.gcode`, including both
   circular passes and the final 10% extension. It requires homing but not an RTC.
-- **Next 5 min:** advances the arm pose to the next five-minute boundary, just
+- **Next 5 min (dev):** advances the arm pose to the next five-minute boundary, just
   like the simulator's Next 5 min control (13:58 becomes 14:00).
-- **Next hour:** adds one hour, runs `Simulator/gcodes/hour-movement.gcode`, and
+- **Next hour (dev):** adds one hour, runs `Simulator/gcodes/hour-movement.gcode`, and
   replaces its example 01:00 ending with the selected time (13:35 becomes 14:35).
 
 The next-time controls advance from the last arm time, or the RTC if no arm time
@@ -173,7 +246,7 @@ The old `A B C D E H I J K L U V` axis order becomes
 `X1 Y1 Z1 A1 B1 C1 X2 Y2 Z2 A2 B2 C2`. Simulator extension is converted to
 actuator position as `stroke × (1 − extension / 100)`: 100% becomes 0 mm,
 0% becomes 48 mm. Feeds scale by stroke/100 and are capped at the hardware limit.
-Ready-to-run examples using the current 48 mm stroke and 700 mm/min limit are
+Ready-to-run examples using the current 48 mm stroke and 500 mm/min limit are
 generated in `gcodes/circular-struggle.gcode`, `gcodes/hour-movement.gcode`, and
 `gcodes/curious-creature.gcode`.
 Edit the simulator source files and rebuild to change these animations.
@@ -182,10 +255,10 @@ Manual moves, board-qualified hardware G-code, bridge UART commands, and Octopus
 position reports all remain millimetres from the existing home endstop. They
 are already actuator coordinates and receive no additional inversion. Positive
 relative motion closes an arm; negative motion opens it. Homing direction,
-endstop wiring and physical calibration remain unchanged (now 5,760 steps/mm
-at 32 microsteps, formerly 720 at four). Homing now uses
-675 mm/min (50% above the preceding 450 mm/min setting), with a 180-second
-acknowledgement/completion budget. Marlin uses its normal serial command path;
+endstop wiring and physical calibration remain unchanged (now 11,520 steps/mm
+at 64 commanded microsteps, formerly 720 at four). Homing now uses
+120 mm/min, with a 180-second acknowledgement budget and a 300-second
+whole-operation budget. Marlin uses its normal serial command path;
 there is no custom host watchdog or remote-reset command.
 Reload the updated hardware animation files before uploading older programs.
 `gcodes/small-wave.gcode` now uses board-qualified hardware names and first closes
@@ -259,7 +332,7 @@ Gestures during other movement or a fault are ignored. Stop remains available.
 The AJ-SR04M's documented 20 cm blind zone means sensing closer than 20 cm
 cannot be relied on.
 
-Automatic gestures are enabled in both master modes by default. Configure
+Automatic gestures are enabled in dev, and while the release clock is running. Configure
 `TIMIAC_PROXIMITY_ENABLED`, `TIMIAC_SONAR_TRIG`, and `TIMIAC_SONAR_ECHO` in
 `ESP_Timiac/include/config.local.h` and rebuild to override these defaults.
 

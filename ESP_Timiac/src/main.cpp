@@ -39,6 +39,7 @@ WiFiServer listener(kPeerPort);
 #include "ntp_clock.h"
 #include "cloud_relay.h"
 #include "web_api.h"
+#include "release_clock.h"
 #endif
 }
 
@@ -76,7 +77,7 @@ void loop() {
   {
     RuntimeLock lock;
     networkTick(); operationTick();
-    dns.processNextRequest(); programTick(); uplinkTick(); ntpTick(); rtcTick(); proximityTick(); cloudTick();
+    dns.processNextRequest(); programTick(); uplinkTick(); ntpTick(); rtcTick(); proximityTick(); releaseClockTick(); cloudTick();
   }
 #else
   networkTick(); operationTick();

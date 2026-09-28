@@ -32,12 +32,24 @@ def load():
     pins = [a[k] for a in axes for k in ("step", "dir", "enable", "uart", "endstop")]
     if len(set(pins)) != len(pins):
         raise ValueError("Two active signals share an MCU pin")
-    if machine["driver_mode"] != "spreadCycle" or machine["driver"] != "TMC2209":
-        raise ValueError("This controller requires TMC2209 UART in spreadCycle")
-    if machine["microsteps"] not in (2, 8, 16, 32, 64) or machine["full_steps_per_mm"] <= 0:
+    if machine["driver_mode"] != "hybrid" or machine["driver"] != "TMC2209":
+        raise ValueError("This controller requires TMC2209 UART with quiet idle / spreadCycle motion")
+    if machine["hybrid_threshold_mm_s"] != 1:
+        raise ValueError("The quiet movement profile switches to spreadCycle above 1 mm/s")
+    if not 0 < machine["hold_multiplier"] <= 1 or machine["homing_mode"] != "microswitch":
+        raise ValueError("Invalid holding current or homing mode; microswitches are required")
+    if machine["homing_strategy"] != "concurrent-all":
+        raise ValueError("Home all must use independent concurrent switch homing")
+    for setting in ("homing_feed_mm_min",):
+        if not 0 < machine[setting] <= machine["max_feed_mm_min"]:
+            raise ValueError(f"Invalid homing feed: {setting}")
+    if machine["microsteps"] not in (1, 2, 4, 8, 16, 32, 64, 128, 256) or machine["full_steps_per_mm"] <= 0:
         raise ValueError("Invalid microsteps or mechanical calibration")
     # Scale the pulse count whenever microsteps change; never change physical travel.
     machine["steps_per_mm"] = machine["full_steps_per_mm"] * machine["microsteps"]
+    # Leave interrupt headroom on the six-axis STM32F446/S-curve build.
+    if machine["steps_per_mm"] * machine["max_feed_mm_min"] / 60 > 100000:
+        raise ValueError("Motion exceeds the configured 100 kHz step budget")
     contract = {"machine": machine, "baseline_sha256": source["sha256"]}
     identity = hashlib.sha256(json.dumps(contract, sort_keys=True).encode()).hexdigest()[:12]
     return machine, "TIMIAC2-" + identity
@@ -74,8 +86,11 @@ def definitions(machine, identity):
     advanced = {
         "DEFAULT_STEPPER_TIMEOUT_SEC": "600", "AXIS_RELATIVE_MODES": array("false"),
         "HOMING_BUMP_MM": array(2), "HOMING_BUMP_DIVISOR": array(2),
-        "STEALTHCHOP_XY": None, "STEALTHCHOP_Z": None, "STEALTHCHOP_I": None,
-        "STEALTHCHOP_J": None, "STEALTHCHOP_K": None, "HYBRID_THRESHOLD": None,
+        "STEALTHCHOP_XY": "", "STEALTHCHOP_Z": "", "STEALTHCHOP_I": "",
+        "STEALTHCHOP_J": "", "STEALTHCHOP_K": "", "HYBRID_THRESHOLD": "",
+        "HOLD_MULTIPLIER": str(machine["hold_multiplier"]),
+        "SENSORLESS_HOMING": None,
+        "SENSORLESS_BACKOFF_MM": None,
         "CHOPPER_TIMING": machine["chopper_timing"], "INTERPOLATE": "true",
         "EMERGENCY_PARSER": "", "TMC_DEBUG": "", "MONITOR_DRIVER_STATUS": "",
         "MAX_CMD_SIZE": "192", "NO_SD_AUTOSTART": "", "EVENT_GCODE_SD_ABORT": None,
@@ -96,6 +111,8 @@ def definitions(machine, identity):
         if key not in "XY":
             config[f"{key}_MAX_POS"] = str(machine["travel_mm"])
         advanced.update({
+            f"{key}_HYBRID_THRESHOLD": str(machine["hybrid_threshold_mm_s"]),
+            f"{key}_STALL_SENSITIVITY": None,
             f"{key}_CURRENT": str(machine["current_ma"]),
             f"{key}_CURRENT_HOME": f"{key}_CURRENT",
             f"{key}_MICROSTEPS": str(machine["microsteps"]), f"{key}_RSENSE": str(machine["rsense"]),
@@ -113,6 +130,14 @@ def definitions(machine, identity):
 
 
 def replace_definitions(text, values):
+    if "SPIDER_MICROSTEPS" in values:
+        # Lumiac limited its tuning choices to 64. UART TMC2209 supports all
+        # powers of two through native 256; retain the pinned source untouched.
+        old = '#if SPIDER_MICROSTEPS != 2 && SPIDER_MICROSTEPS != 8 && SPIDER_MICROSTEPS != 16 && SPIDER_MICROSTEPS != 32 && SPIDER_MICROSTEPS != 64\n  #error "SPIDER_MICROSTEPS must be 2, 8, 16, 32, or 64."'
+        new = '#if SPIDER_MICROSTEPS < 1 || SPIDER_MICROSTEPS > 256 || (SPIDER_MICROSTEPS & (SPIDER_MICROSTEPS - 1))\n  #error "SPIDER_MICROSTEPS must be a power of two from 1 through 256."'
+        if text.count(old) != 1:
+            raise ValueError("Unexpected pinned microstep validation")
+        text = text.replace(old, new)
     for key, value in values.items():
         pattern = rf"^[ \t]*(?://[ \t]*)?#define[ \t]+{re.escape(key)}\b[^\n]*"
         replacement = f"// TIMIAC: {key} disabled" if value is None else f"#define {key} {value}"
@@ -141,7 +166,9 @@ def generate():
     # The browser must use the same expected settings as the bridge parser.
     browser = {"identity": identity, "axes": "XYZABC",
                "sockets": [a["socket"] for a in machine["axes"]],
-               "currentMa": machine["current_ma"], "microsteps": machine["microsteps"]}
+               "currentMa": machine["current_ma"], "microsteps": machine["microsteps"],
+               "driverMode": "Quiet idle / SpreadCycle motion",
+               "hybridThresholdMmS": machine["hybrid_threshold_mm_s"], "holdMultiplier": machine["hold_multiplier"]}
     (ROOT / "WebApp/public/machine-generated.js").write_text(
         "// Generated by tools/machine_config.py.\nexport const machine = " + json.dumps(browser) + ";\n")
     # Kept as an inspectable build artifact; never used as another input.

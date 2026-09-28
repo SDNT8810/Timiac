@@ -1,0 +1,16 @@
+{
+  "source": "../Lumiac/Marlin/marlin-2.1.2.6/Marlin/src (local working files, read only)",
+  "snapshot_date": "2026-09-28",
+  "target": "Marlin 2.1.2.7",
+  "sha256": {
+    "gcode/calibrate/G28.cpp": "4e6318700ff69eb301b0aaa79fda12ee6d1cfcb149871f176b51e2866fd374f6",
+    "inc/SanityCheck.h": "4588fb231f8feed53189684089cc07c2b38d1f1dfa9f81157ef47a3c3418121a",
+    "module/motion.cpp": "9049ccfc5e638cf5d7cff83e078107867cce12647246903d062d7176b4b258e8",
+    "module/motion.h": "c2825678e53ffb776a9ab49191cd60a0c88f8098ec91c72a7accc90bf28508ab",
+    "module/planner.cpp": "61184ee4cc8c9e24154f4ad3ca70bb5d7cec00b25a23237c5b9238d4cca340c6",
+    "module/planner.h": "7253a0eeb27d3fcda5f55c250ecb081af7b03e70013865d5413b1b51738ea4b7",
+    "module/stepper.cpp": "ac458a39d17c17f8acd6658e4f515cff66491d85c8b5f1c8b821d9e5ec9303b7",
+    "module/stepper.h": "15eb1a053bb0fdd9e9dfe6960870a944cd78c6a44f001811e3073266e079901e",
+    "module/spider_homing.h": "adc301a12d7b5b557eb4f2f1485a0e0d17abae3fe43c6544a17421af05bd8afe"
+  }
+}

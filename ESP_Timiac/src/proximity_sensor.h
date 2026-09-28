@@ -21,7 +21,7 @@ void IRAM_ATTR sonarEchoEdge() {
   portEXIT_CRITICAL_ISR(&sonarMux);
 }
 bool proximityReady() {
-  return TIMIAC_PROXIMITY_ENABLED && bothHealthy() && !operation.barrier.active() && !program.reserved() &&
+  return TIMIAC_PROXIMITY_ENABLED && (!TIMIAC_RELEASE || releaseClockEnabled) && bothHealthy() && !operation.barrier.active() && !program.reserved() &&
     program.state != "ready" && (boards[0].homed & kHomedMask) == kHomedMask && (boards[1].homed & kHomedMask) == kHomedMask;
 }
 void configureProximity() {

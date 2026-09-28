@@ -41,11 +41,9 @@ class OctopusSession {
       if (!validNative(lines[n], axisCount, travelMm, maxFeed)) { size = 0; return false; }
       if (homingCommand(lines[n])) {
         requireDriverCheck = true;
-        // Each acknowledgement names the exact axis which has finished.
-        // A failing A can no longer hide whether B/C were ever attempted.
-        for (unsigned a = 0; a < 6; ++a) if (strchr(lines[n] + 4, axes[a])) {
-          char one[] = "G28 X"; one[4] = axes[a]; if (!add(one)) return false;
-        }
+        // Preserve the group so Octopus can stop each arm independently in
+        // one concurrent seek, just like Lumiac. Mark homed only on its ack.
+        if (!add(lines[n])) return false;
       } else {
         if (!strncmp(lines[n], "G1 ", 3) && (moveMask(lines[n]) & homed) != moveMask(lines[n])) { size = 0; return false; }
         if (!add(lines[n])) return false;
@@ -143,6 +141,7 @@ class OctopusSession {
     if (strstr(line, "Printer halted") || strstr(line, "kill() called")) { fail(line, true); return; }
     if (!strncmp(line, "echo:Bad ", 9) && strstr(line, " Endstop?")) { fail(line, true); return; }
     if (state == State::Halted) return;
+    if (!strcmp(line, "Six-arm homing cancelled.")) { fail(line); return; }
     if (state == State::Drain) {
       const char* marker = !strncmp(line, "echo:", 5) ? line + 5 : line;
       if (!strcmp(marker, drainMarker)) drainMarkerSeen = true;
@@ -157,8 +156,9 @@ class OctopusSession {
     }
     if (!waiting) return;
     lastRx = now;
-    if (!strcmp(active, "M115") && strstr(line, "FIRMWARE_NAME:"))
+    if (!strcmp(active, "M115") && strstr(line, "FIRMWARE_NAME:")) {
       identity = fieldMatches(line, "MACHINE_TYPE:", machineId) && fieldMatches(line, "AXIS_COUNT:", "6");
+    }
     if (!strcmp(active, "M122")) pendingDrivers.receive(line);
     if (!strcmp(active, "M119")) endstops.receive(line);
     if (!strcmp(active, "M114") || homingCommand(active)) readPosition(line);

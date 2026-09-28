@@ -10,13 +10,15 @@ using timiac::OctopusSession;
 using State = OctopusSession::State;
 uint32_t now = 4000;
 
-void drivers(OctopusSession& s, int bad = -1, bool stealth = false, unsigned microsteps = 32) {
+void drivers(OctopusSession& s, int bad = -1, bool stealth = false, unsigned microsteps = timiac::driverMicrosteps, unsigned current = timiac::driverCurrent) {
   s.receive("\t\tX\tY\tZ\tI\tJ\tK", now);
-  s.receive("Set current\t600\t600\t600\t600\t600\t600", now);
+  std::string currents = "Set current";
+  for (unsigned a = 0; a < 6; ++a) currents += "\t" + std::to_string(current);
+  s.receive(currents.c_str(), now);
   std::string steps = "msteps\t";
   for (unsigned a = 0; a < 6; ++a) steps += "\t" + std::to_string(microsteps);
   s.receive(steps.c_str(), now);
-  s.receive(stealth ? "stealthChop\tfalse\tfalse\ttrue\ttrue\ttrue\ttrue" : "stealthChop\tfalse\tfalse\tfalse\tfalse\tfalse\tfalse", now);
+  s.receive(stealth ? "stealthChop\ttrue\ttrue\tfalse\tfalse\tfalse\tfalse" : "stealthChop\ttrue\ttrue\ttrue\ttrue\ttrue\ttrue", now);
   for (unsigned a = 0; a < 6; ++a) {
     std::string line = "Testing "; line += timiac::DriverReport::labels()[a];
     line += int(a) == bad ? " connection... Error: All HIGH" : " connection... OK";
@@ -60,6 +62,31 @@ std::vector<std::string> execute(OctopusSession& s, const char* line) {
   assert(!s.running()); return sent;
 }
 int main() {
+  // Old low-current profiles or a thermally reduced current block new work.
+  for (unsigned current : {250U, 600U, 1414U, timiac::driverCurrent - 50}) {
+    OctopusSession mismatch;
+    mismatch.next(now); identify(mismatch); mismatch.next(now);
+    drivers(mismatch, -1, false, timiac::driverMicrosteps, current); mismatch.receive("ok", now);
+    assert(!mismatch.healthy(now) && mismatch.drivers.currentOk == 0);
+    for (unsigned axis = 0; axis < 6; ++axis) {
+      assert(mismatch.drivers.currentMa[axis] == int32_t(current));
+      assert(mismatch.drivers.microsteps[axis] == 64);
+    }
+    const char* home = "G28 X";
+    assert(!mismatch.stage(&home, 1, now));
+  }
+  // Neither native commands nor an old sensorless identity may enable motion.
+  OctopusSession switches; boot(switches);
+  for (const char* command : {"M914 X128", "M914 A128", "M23 test.gco", "M24", "M32 test.gco", "M98 Ptest.gco"}) {
+    assert(!timiac::validNative(command, 6, 48, 700));
+    assert(!switches.stage(&command, 1, now));
+  }
+  for (const char* suffix : {"-SG", "-old"}) {
+    OctopusSession old; old.next(now);
+    const std::string identity = std::string("FIRMWARE_NAME:Marlin MACHINE_TYPE:") + timiac::machineId + suffix + " AXIS_COUNT:6";
+    old.receive(identity.c_str(), now); old.receive("ok", now);
+    assert(!old.identity && !old.healthy(now) && old.fault[0]);
+  }
   OctopusSession s; boot(s); assert(s.healthy(now));
   for (unsigned a = 0; a < 6; ++a) {
     std::string command = "G28 "; command += timiac::axes[a];
@@ -68,9 +95,25 @@ int main() {
     assert(s.homed == (1U << (a + 1)) - 1);
   }
   auto sent = execute(s, "G28 X Y Z A B C");
-  assert((sent == std::vector<std::string>{"G21", "G90", "G28 X", "G28 Y", "G28 Z", "G28 A", "G28 B", "G28 C", "M400", "M114"}));
+  assert((sent == std::vector<std::string>{"G21", "G90", "G28 X Y Z A B C", "M400", "M114"}));
   assert(s.homed == 63);
-  execute(s, "G1 X1 Y2 Z3 A4 B5 C6 F350");
+  // A group does not become homed until its single acknowledgement arrives.
+  OctopusSession grouped; boot(grouped);
+  const char* group = "G28 X Y Z A B C";
+  assert(grouped.stage(&group, 1, now)); grouped.next(now);
+  drivers(grouped); grouped.receive("ok", now); grouped.next(now); assert(grouped.commit());
+  grouped.next(now); grouped.receive("ok", now); // G21
+  grouped.next(now); grouped.receive("ok", now); // G90
+  assert(std::string(grouped.next(now)) == group && grouped.homed == 0);
+  grouped.receive("Six-arm homing cancelled.", now); grouped.receive("ok", now);
+  assert(grouped.homed == 0 && !grouped.healthy(now));
+  execute(s, "G1 X1 Y2 Z3 A4 B5 C6 F120");
+  execute(s, "G1 X2 F500");
+  const char* tooFast = "G1 X3 F500.1";
+  assert(!s.stage(&tooFast, 1, now));
+  timiac::GcodeState fastParser; timiac::Step fastStep;
+  assert(!timiac::compileLine("G90 X1 2 F500", fastParser, fastStep, 6, 48, timiac::maxFeed));
+  assert(timiac::compileLine("G90 X1 3 F500.1", fastParser, fastStep, 6, 48, timiac::maxFeed));
   // Route all twelve PUBLIC addresses through the actual parser and kernel.
   for (unsigned board = 0; board < 2; ++board) {
     OctopusSession local; boot(local);
@@ -100,11 +143,13 @@ int main() {
   OctopusSession mode; mode.next(now); identify(mode); mode.next(now); drivers(mode, -1, true); mode.receive("ok", now);
   assert(!mode.healthy(now) && mode.drivers.modeOk == 3);
   const char* home = "G28 A"; assert(!mode.stage(&home, 1, now));
-  // A driver left at the previous four-microstep setting must block motion.
-  OctopusSession wrongSteps; wrongSteps.next(now); identify(wrongSteps); wrongSteps.next(now);
-  drivers(wrongSteps, -1, false, 4); wrongSteps.receive("ok", now);
-  assert(!wrongSteps.healthy(now) && wrongSteps.drivers.stepsOk == 0);
-  assert(!wrongSteps.stage(&home, 1, now));
+  // Every retired resolution must block motion with the new calibration.
+  for (unsigned microsteps : {4U, 32U, 256U}) {
+    OctopusSession wrongSteps; wrongSteps.next(now); identify(wrongSteps); wrongSteps.next(now);
+    drivers(wrongSteps, -1, false, microsteps); wrongSteps.receive("ok", now);
+    assert(!wrongSteps.healthy(now) && wrongSteps.drivers.stepsOk == 0);
+    assert(!wrongSteps.stage(&home, 1, now));
+  }
   // A truncated or reordered report cannot borrow values from the last report.
   OctopusSession partial; boot(partial); assert(partial.stage(&home, 1, now));
   partial.next(now); partial.receive("ok", now);
@@ -116,10 +161,10 @@ int main() {
   }
   // After an individual home the kernel allows only that axis' move.
   OctopusSession one; boot(one); execute(one, "G28 A");
-  execute(one, "G1 A1 F180");
-  const char* badMove = "G1 B1 F180"; assert(!one.stage(&badMove, 1, now));
+  execute(one, "G1 A1 F120");
+  const char* badMove = "G1 B1 F120"; assert(!one.stage(&badMove, 1, now));
   // Stop really reaches Marlin and drains late acknowledgements before reconnecting.
-  const char* move = "G1 A2 F180"; assert(one.stage(&move, 1, now)); one.next(now); assert(one.commit());
+  const char* move = "G1 A2 F120"; assert(one.stage(&move, 1, now)); one.next(now); assert(one.commit());
   const char* stopping = one.stop(now); assert(strstr(stopping, "M410"));
   const std::string stoppedMarker = drainMarker(stopping);
   one.receive("ok", now); assert(one.state == State::Drain && !one.healthy(now));
@@ -174,6 +219,11 @@ int main() {
   badSwitch.receive("echo:Bad A Endstop?", now);
   badSwitch.receive("Error:Printer halted. kill() called!", now); badSwitch.stop(now);
   assert(std::string(badSwitch.fault) == "echo:Bad A Endstop?" && badSwitch.halted());
+  OctopusSession groupSwitch; boot(groupSwitch);
+  const char* groupFault = "Error:Six-arm homing: endstop did not release [axes: A C]";
+  groupSwitch.receive(groupFault, now);
+  groupSwitch.receive("Error:Printer halted. kill() called!", now); groupSwitch.stop(now);
+  assert(std::string(groupSwitch.fault) == groupFault && groupSwitch.halted());
   // Homing can run past the old 60/120-second deadlines. Timeout still stops it.
   assert(s.stage(&home, 1, now)); s.next(now); drivers(s); s.receive("ok", now); s.next(now); s.commit();
   s.next(now); s.receive("ok", now); s.next(now); s.receive("ok", now); s.next(now);

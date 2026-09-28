@@ -33,7 +33,7 @@ function dashboard() {
       querySelector() { return { textContent: id }; } });
     return nodes.get(id);
   }
-  const actions = ['home', 'open', 'close', 'show-time', 'struggle', 'next-five', 'next-hour'].map(action => {
+  const actions = ['home', 'open', 'close', 'show-time'].map(action => {
     const button = element(action); button.dataset.action = action; return button;
   });
   const state = { session: 'boot', machineReady: true, machineState: 'ready', a: { homed: 63 }, b: { homed: 63 },
@@ -136,19 +136,18 @@ test('animation waits for the whole program, even when a single step has finishe
   }
 });
 
-test('preset controls require homing and remain locked between animation steps', async () => {
+test('release page exposes clock controls without development actions', async () => {
+  const html = readFileSync(new URL('../WebApp/release/index.html', import.meta.url), 'utf8');
+  assert.deepEqual([...html.matchAll(/data-action="([^"]+)"/g)].map(m => m[1]), ['home', 'open', 'close', 'show-time']);
+  assert.doesNotMatch(html, /sensorless|terminal|next-five|next-hour|struggle|data-command/);
   const { context, element, state } = dashboard(); await flush();
-  assert.equal(element('struggle').disabled, false);
-  state.a.homed = 0; vm.runInContext('render()', context);
-  for (const name of ['struggle', 'next-five', 'next-hour']) assert.equal(element(name).disabled, true);
-  state.a.homed = 63; state.clock.valid = false; vm.runInContext('render()', context);
-  assert.equal(element('struggle').disabled, false);
-  assert.equal(element('next-five').disabled, true);
-  state.clock.armMinute = 0; vm.runInContext('render()', context);
-  assert.equal(element('next-five').disabled, false);
-  state.program = { state: 'running', name: 'Struggle', completed: 3, total: 28 };
+  state.clock.running = true; vm.runInContext('render()', context);
+  assert.match(element('running-status').textContent, /Clock running/);
+  state.clock.running = false; vm.runInContext('render()', context);
+  assert.match(element('running-status').textContent, /Clock paused/);
+  state.program = { state: 'running', name: 'Curious creature', completed: 3, total: 28 };
   state.operation.state = 'done'; vm.runInContext('render()', context);
-  for (const name of ['home', 'open', 'struggle', 'next-five', 'next-hour']) assert.equal(element(name).disabled, true);
+  for (const name of ['home', 'open', 'close', 'show-time']) assert.equal(element(name).disabled, true);
   assert.equal(element('stop').disabled, false);
   assert.match(element('machine-status').textContent, /3\/28/);
 });

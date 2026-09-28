@@ -1,5 +1,7 @@
 #define TIMIAC_MASTER 1
+#ifndef TIMIAC_RELEASE
 #define TIMIAC_RELEASE 0
+#endif
 #define TIMIAC_BOARD_ID 0
 #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include "host/Arduino.h"
@@ -18,11 +20,20 @@ WiFiServer listener;
 #include "../ESP_Timiac/src/runtime.h"
 #include "../ESP_Timiac/src/uart_bridge.h"
 #include "../ESP_Timiac/src/peer_link.h"
+#include "../ESP_Timiac/src/builtin_program.h"
+bool rtcValid = true;
+struct TestRtc {
+  unsigned h = 13, m = 45;
+  unsigned hour() const { return h; }
+  unsigned minute() const { return m; }
+} rtcTime;
+#include "../ESP_Timiac/src/release_clock.h"
 
 void resetMaster() {
   hostNow = 1000; bootId = "master-boot"; stopToken = stopReason = systemFault = "";
   systemLatched = stopPending = stopRequested = networkChanging = false; stopRequired = stopRecoveryRequired = 0;
   operation = Operation(); program = Program(); receiptNext = 0;
+  releaseClockEnabled = false; armTimeMinutes = -1;
   for (auto& r : receipts) r = Receipt();
   for (unsigned b = 0; b < 2; ++b) { peers[b] = Peer(); boards[b] = RemoteBoard(); lastBoardBoot[b] = ""; }
 }
@@ -55,6 +66,50 @@ void startHome(unsigned b, bool coordinated = false) {
   else startOperation(doc["a"], doc["b"], "home", 100, timiac::commandBoards(doc["a"].size(), doc["b"].size()));
 }
 int main() {
+  // A received current must survive bridge -> master -> browser unchanged,
+  // including a mismatch. Do not replace actual reports with expectations.
+  resetMaster(); connectBoard(0);
+  for (unsigned i = 0; i < 6; ++i) {
+    boards[0].drivers.currentMa[i] = 600; boards[0].drivers.microsteps[i] = 32;
+  }
+  boards[0].drivers.currentOk = boards[0].drivers.stepsOk = 0;
+  report(0, "idle");
+  DynamicJsonDocument settings(4096); writeBoard(settings.to<JsonObject>(), 0);
+  for (unsigned i = 0; i < 6; ++i) {
+    assert(settings["drivers"]["currentMa"][i] == 600);
+    assert(settings["drivers"]["microstepValues"][i] == 32);
+  }
+  assert(!boards[0].drivers.good());
+  // Run the actual master clock loop in both build modes, without a browser.
+  resetMaster(); connectBoard(0); connectBoard(1);
+  boards[0].homed = boards[1].homed = 63;
+  releaseClockTick(); assert(!operation.barrier.active()); // Explicit start required.
+  releaseClockEnabled = true;
+  rtcValid = false; releaseClockTick(); assert(!operation.barrier.active());
+  rtcValid = true; boards[1].homed = 0; releaseClockTick(); assert(!operation.barrier.active());
+  boards[1].homed = 63;
+  program.state = "running"; releaseClockTick(); assert(!operation.barrier.active());
+  program = Program();
+  boards[1].online = false; releaseClockTick(); assert(!operation.barrier.active());
+  boards[1].online = true;
+  releaseClockTick();
+#if TIMIAC_RELEASE
+  assert(operation.barrier.active() && operation.barrier.required == 3);
+  assert(armTimeMinutes == 825 && !lease.live());
+  const String clockId = operation.id;
+  releaseClockTick(); assert(operation.id == clockId); // Never overlap a move.
+  operation = Operation();
+  rtcTime.m = 49; releaseClockTick(); assert(!operation.barrier.active());
+  rtcTime.m = 50; releaseClockTick(); assert(operation.barrier.active() && armTimeMinutes == 830);
+  operation = Operation(); armTimeMinutes = -1; // Gesture completed; restore RTC pose.
+  releaseClockTick(); assert(operation.barrier.active());
+  stopAll("Operator stop"); assert(!releaseClockEnabled);
+  assert(!timiac::clockPoseDue(1435, 1439));
+  assert(timiac::clockPoseDue(1435, 0)); // Midnight and RTC changes.
+  assert(timiac::clockPoseDue(60, 55));
+#else
+  assert(!operation.barrier.active() && armTimeMinutes == -1);
+#endif
   // The hello boot reason describes the ESP boot, not every TCP reconnect.
   resetMaster(); connectBoard(0); const String originalBoot = peers[0].boot;
   peers[0].paired = false;

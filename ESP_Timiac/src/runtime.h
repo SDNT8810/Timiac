@@ -50,6 +50,7 @@ struct Lease {
 } lease;
 timiac::GcodeState manualParser;
 int armTimeMinutes = -1;
+bool releaseClockEnabled = false;
 struct Program {
   String id, name, state = "empty", error, uploadOwner, translation;
   unsigned total = 0, uploaded = 0, completed = 0;

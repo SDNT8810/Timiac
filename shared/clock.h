@@ -3,6 +3,9 @@
 
 namespace timiac {
 enum class Preset : unsigned char { Struggle, Hour, Curious };
+inline bool clockPoseDue(int displayedMinute, unsigned rtcMinute) {
+  return displayedMinute < 0 || unsigned(displayedMinute) / 5 != rtcMinute / 5;
+}
 // Physical home is fully open. Simulator extension increases toward open.
 // Keep native coordinates measured from the existing minimum endstop.
 inline float actuatorForExtension(float percent, float travel) {

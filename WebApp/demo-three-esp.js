@@ -125,7 +125,7 @@ export function createThreeEspDemo({ delay = 20 } = {}) {
         } else return send(404, { error: 'Unknown route' });
         return send(200, snapshot());
       }
-      const assets = new Map([['/', 'index.html'], ...['index.html', 'app.js', 'hardware.js', 'clock-panel.js', 'system-panel.js', 'endstop-panel.js', 'styles.css'].map(name => ['/' + name, name])]);
+      const assets = new Map([['/', 'index.html'], ...['index.html', 'app.js', 'hardware.js', 'clock-panel.js', 'system-panel.js', 'endstop-panel.js', 'driver-panel.js', 'machine-generated.js', 'styles.css'].map(name => ['/' + name, name])]);
       const asset = assets.get(url.pathname);
       if (req.method !== 'GET' || !asset) return send(404, { error: 'Not found' });
       res.writeHead(200, { 'Content-Type': (asset.endsWith('.js') ? 'text/javascript' : asset.endsWith('.css') ? 'text/css' : 'text/html') + '; charset=utf-8' });
