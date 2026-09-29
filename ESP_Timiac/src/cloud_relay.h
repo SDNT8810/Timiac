@@ -21,6 +21,7 @@ void cloudSnapshot(JsonObject snapshot) {
   JsonObject clock = snapshot.createNestedObject("clock");
   writeRtcStatus(clock); writeNtpStatus(clock);
   clock["automatic"] = bool(TIMIAC_RELEASE); clock["running"] = releaseClockEnabled;
+  clock["startupPending"] = releaseStartupPending;
   JsonObject operationStatus = snapshot.createNestedObject("operation");
   operationStatus["id"] = operation.id; operationStatus["state"] = operation.barrier.name();
   operationStatus["error"] = operation.error; operationStatus["homing"] = operation.homing;
@@ -60,6 +61,7 @@ const char* startCloudAction(const String& type, const String& requestId, const 
   armTimeMinutes = !systemLatched && type == "show-time" ? int(targetMinute) : -1;
 #if TIMIAC_RELEASE
   releaseClockEnabled = !systemLatched && (type == "home" || type == "show-time");
+  releaseClockMinute = -1;
 #endif
   return nullptr;
 }

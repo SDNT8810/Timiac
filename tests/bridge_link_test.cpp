@@ -82,6 +82,31 @@ int main() {
   assert(done["type"] == "state" && done["phase"] == "done" && done["board"]["homed"] == 1);
   assert(uart.session.resets == 0 && Serial.sent.find("M112") == std::string::npos && Serial.sent.find("M410") == std::string::npos);
 
+  // The production peer decoder and UART adapter accept an advertised queued
+  // trajectory, preserve its order, and wait for one final planner drain only.
+  setupBridge(); uart.session.homed = 63;
+  DynamicJsonDocument trajectory(4096);
+  trajectory["type"] = "prepare"; trajectory["from"] = coordinatorBoot; trajectory["session"] = coordinatorBoot;
+  trajectory["id"] = "hour"; trajectory["hash"] = 123; trajectory["trajectory"] = true;
+  JsonArray lines = trajectory.createNestedArray("lines");
+  for (unsigned i = 0; i < 28; ++i) lines.add("G1 X1 F120");
+  String packet; serializeJson(trajectory, packet); processPeer(p, packet);
+  uart.session.next(hostNow); assert(uart.prepared());
+  trajectory.clear(); trajectory["type"] = "commit"; trajectory["id"] = "hour";
+  trajectory["from"] = coordinatorBoot; trajectory["session"] = coordinatorBoot;
+  packet = ""; serializeJson(trajectory, packet); processPeer(p, packet);
+  assert(uart.job && operation.barrier.phase == timiac::Phase::Running);
+  unsigned moves = 0, drains = 0;
+  while (uart.session.running()) {
+    if (const char* command = uart.session.next(++hostNow)) {
+      if (!strncmp(command, "G1 ", 3)) { ++moves; assert(!drains); }
+      if (!strcmp(command, "M400")) ++drains;
+      uart.send(command); uart.receive("ok");
+    }
+    uart.sync();
+  }
+  assert(moves == 28 && drains == 1 && operation.barrier.phase == timiac::Phase::Done && !systemLatched);
+
   // An actual broken connection during motion still invokes the bridge stop.
   setupBridge(); operation.id = "move"; operation.barrier.begin(hostNow); operation.barrier.phase = timiac::Phase::Running;
   p.socket.writeSucceeds = false; sendState(); networkTick();

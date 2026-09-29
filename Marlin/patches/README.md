@@ -1,4 +1,4 @@
-# Concurrent homing port
+# Timiac Marlin patches
 
 `concurrent-homing.patch` ports Lumiac's `SPIDER_CONCURRENT_HOMING` to the
 clean Marlin 2.1.2.7 sources staged by `build.py`. Origin file hashes are in
@@ -18,4 +18,15 @@ The firmware build still requires physical validation on the installation.
 
 Timiac additionally names the affected X/Y/Z/A/B/C axes in release, stuck-switch,
 and missing-switch diagnostics. This changes reporting only; the release and
-seek distances and per-motor stopping behavior are the same as the port.
+seek behavior and per-motor stopping remain as in the port; the configured
+initial release distance is now 5 mm.
+
+`six-axis-junctions.patch` fixes direction normalization in the pinned Marlin
+planner. Its XYZ-first feed distance cannot normalize a vector that also includes
+independent A/B/C motion. Selecting Marlin's full-vector normalization for more
+than three axes keeps the junction dot product in range and avoids false full
+reversals. Feed-distance conventions and per-axis acceleration/speed limits are
+unchanged. `tests/test_six_axis_junctions.py` applies this patch to pinned source
+and compiles its actual normalization code against mixed-axis regression cases.
+The current profile pairs this fix with 0.3 mm junction deviation for less braking
+between animation frames.

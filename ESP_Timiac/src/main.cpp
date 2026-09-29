@@ -34,6 +34,7 @@ WiFiServer listener(kPeerPort);
 #if TIMIAC_MASTER
 #include "rtc_clock.h"
 #include "builtin_program.h"
+#include "program_runner.h"
 #include "proximity_sensor.h"
 #include "wifi_uplink.h"
 #include "ntp_clock.h"
@@ -70,14 +71,18 @@ void setup() {
   WiFi.mode(WIFI_STA); WiFi.hostname("timiac-board" + String(TIMIAC_BOARD_ID));
   WiFi.setAutoReconnect(true); WiFi.begin(TIMIAC_WIFI_SSID, TIMIAC_WIFI_PASSWORD);
 #endif
+#if TIMIAC_MASTER && TIMIAC_RELEASE
+  logMessage("Timiac release boot; waiting for both boards, then automatic Home all and clock");
+#else
   logMessage("Timiac three-ESP controller boot; no automatic homing or replay");
+#endif
 }
 void loop() {
 #if TIMIAC_MASTER
   {
     RuntimeLock lock;
     networkTick(); operationTick();
-    dns.processNextRequest(); programTick(); uplinkTick(); ntpTick(); rtcTick(); proximityTick(); releaseClockTick(); cloudTick();
+    dns.processNextRequest(); programTick(); uplinkTick(); ntpTick(); rtcTick(); releaseClockTick(); proximityTick(); cloudTick();
   }
 #else
   networkTick(); operationTick();

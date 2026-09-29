@@ -90,7 +90,7 @@ class AxisProfileTests(unittest.TestCase):
             self.assertNotIn("#define CASE_LIGHT_ENABLE", adapted)
         self.assertEqual(settings["Configuration.h"]["DEFAULT_ACCELERATION"], "25")
         self.assertEqual(settings["Configuration.h"]["HOMING_FEEDRATE_MM_M"], "{ 120, 120, 120, 120, 120, 120 }")
-        self.assertEqual(settings["Configuration.h"]["JUNCTION_DEVIATION_MM"], "0.003")
+        self.assertEqual(settings["Configuration.h"]["JUNCTION_DEVIATION_MM"], "0.3")
         self.assertEqual(settings["Configuration.h"]["S_CURVE_ACCELERATION"], "")
         self.assertEqual(settings["Configuration_adv.h"]["ENDSTOPS_ALWAYS_ON_DEFAULT"], "")
 

@@ -1,19 +1,81 @@
-# Current installation - 2026-09-29.1
+# Current 50 mm travel package - 2026-09-29.6
+
+All twelve arms now use 50 mm maximum travel, reduced from 52 mm. Close,
+clock poses, animations and both dashboards follow the same limit.
+Install the complete matched package below, including both Octopus boards.
+
+Release now runs the Next hour dance on a forward RTC hour boundary, including
+midnight. It targets the new current time, keeps automatic tracking enabled,
+and does not repeat the dance after completion. A boundary covered by a short
+proximity animation runs after that animation finishes. Startup, manual resume
+and setting the time establish a fresh baseline; Stop/fault cancels queued work.
+
+Marlin now normalizes the full six-axis corner direction, avoiding false full
+reversals when A/B/C move alongside XYZ. Junction deviation is 0.3 mm instead of
+0.003 mm to blend successive moves with less braking. The existing 25 mm/s²
+travel acceleration, 80 mm/s² per-axis ceiling and 500 mm/min maximum remain.
+
+Both master modes now use the installed physical arm order: X1/Y1/Z1/A1/B1/C1
+mark 12/11/10/9/8/7; X2/Y2/Z2/A2/B2/C2 mark 6/5/4/3/2/1. Clock poses and
+generated animation G-code share this mapping. Maximum stroke and Close are now
+50 mm. The homing release and single-axis bump increase from 2 mm to 5 mm.
+Next hour and Struggle preload continuous trajectories into the bridges without
+full-machine stops between frames. Struggle omits its two simulator pauses.
+The master still owns every path. Release gains Next 5 min, Next hour and Struggle;
+Open is removed from both dashboards.
+
+Update both Octopus boards, both bridges and the selected master mode:
+
+```powershell
+python run.py octopus_dev --sd I:\
+python run.py esp1_dev --port COM5
+python run.py esp2_dev --port COM5
+python run.py master_dev --port COM5
+# Or choose the release master:
+python run.py master_release --port COM5
+```
+
+Connect each ESP separately. Repeat the Octopus card flash for both boards.
+Octopus and bridge `_release` aliases use the same images. Both master uploads
+include their matching web filesystem. The new corner blending requires the
+**TIMIAC2-409426dd9f18** identity on all boards and a patched Marlin planner.
+This update therefore needs Octopus flashing too. After confirming
+`FIRMWARE.CUR`, power off and remove the card; no runtime SD card is used.
+Current remains 800 mA, with 64 microsteps interpolated to 256 and 500 mm/min feed.
+Release retains automatic Home all at boot; developer mode retains manual startup.
+
+# Previous release-master update - 2026-09-29.2
+
+Release now automatically homes all twelve arms once both boards are healthy and
+idle, then shows the current RTC time. Developer startup remains manual. The
+master starts this sequence without a browser; Stop/fault cancels it without retry.
+Homing does not require a valid RTC, but the following time pose does.
+
+For the already installed **TIMIAC2-f5b8d948e714** motor package, upload only:
+
+```powershell
+python run.py master_release --port COM5
+```
+
+The command also installs the matching web filesystem. No Octopus SD-card or
+ESP bridge changes are needed. Only the release master advances to revision .2.
+
+# Motor package installation - 2026-09-29.1
 
 Use 800 mA, 64 commanded microsteps interpolated to 256, and concurrent Home all in both modes.
-Reflash all five boards as shown in [README](../README.md), including the
+When upgrading from older motor settings, reflash all five boards as shown in [README](../README.md), including the
 master web filesystem, and reload the dashboard. Old 250/600/1,414 mA or
 32- or native-256-microstep packages are incompatible. Historical incremental-upload advice
-below does not apply to this package.
+below does not apply when upgrading the motor package.
 
 # Current dev/release package
 
 See [README](../README.md) for the eight `_dev` / `_release` upload commands.
 Both modes require microswitches; sensorless firmware is retired. The master
 ESP32 owns motion programs and the Octopus card is only used for flashing.
-Revision 2026-09-29.1 sets all drivers to 800 mA RMS requested current and
+Revision 2026-09-29.6 sets all drivers to 800 mA RMS requested current and
 64 commanded microsteps interpolated to 256, with Lumiac's concurrent Home all. Update both Octopus
-boards, both bridges and master together for identity TIMIAC2-f5b8d948e714.
+boards, both bridges and master together for identity TIMIAC2-409426dd9f18.
 Older revision notes below describe their historical behavior.
 
 # Timiac generation 2 rebuild
@@ -77,11 +139,11 @@ they do not shift with the motor socket.
 
 Every axis now explicitly uses TMC2209 UART, 800 mA, 64 commanded microsteps interpolated to 256,
 StealthChop holding with SpreadCycle above 1 mm/s (since quiet update .6),
-24 V chopper timing for the reported 24 V / 7 A supply, 11,520 steps/mm, 48 mm travel,
+24 V chopper timing for the reported 24 V / 7 A supply, 11,520 steps/mm, 50 mm travel,
 120 mm/min concurrent microswitch homing and 500 mm/min maximum feed.
 Sensorless homing is unavailable in both modes.
 Lumiac's S-curve acceleration
-uses 25 mm/s² travel acceleration, an 80 mm/s² per-axis ceiling, and 0.003 mm
+uses 25 mm/s² travel acceleration, an 80 mm/s² per-axis ceiling, and 0.3 mm
 junction deviation. The calibration is stored as 180 full steps/mm and scaled
 with microsteps so changing resolution preserves physical travel.
 Endstop validation and broken-switch checks remain enabled. EEPROM overrides
@@ -115,7 +177,7 @@ move X1 through C1 while Octopus 2 is disconnected, and vice versa. Home all,
 clock actions and uploaded programs still require both bridges to finish
 preparation before either is committed. The bridge preserves `G28 X Y Z A B C` as one command. Octopus uses the
 Lumiac concurrent seek: each motor stops at its own switch. A pressed switch
-first releases 2 mm; a switch that stays pressed or never triggers fails the
+first releases 5 mm; a switch that stays pressed or never triggers fails the
 operation. Single-axis and partial-group commands retain standard Marlin homing. One UART command is outstanding at
 a time, and every job ends in M400/M114. A homing operation has 300 seconds
 from commit (180 seconds per UART acknowledgement), independently of the ESP heartbeat timer.

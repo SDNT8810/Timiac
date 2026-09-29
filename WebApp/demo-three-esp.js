@@ -21,7 +21,7 @@ export function createThreeEspDemo({ delay = 20 } = {}) {
   const ready = () => a.ready && b.ready && !fault;
   const snapshot = () => {
     if (Date.now() - renewed > 15000) control.owner = '';
-    return { mode: 'demo', session, revision: ++revision, axesPerBoard: 1, travelMm: 48, maxFeed: 369.6,
+    return { mode: 'demo', session, revision: ++revision, axesPerBoard: 1, travelMm: 50, maxFeed: 369.6,
       a, b, machineReady: ready(), fault, stopPending: false, operation, control, program, events };
   };
   function compile(lines) {

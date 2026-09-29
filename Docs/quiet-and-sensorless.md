@@ -1,10 +1,10 @@
-# Microswitch homing only — 2026-09-29.1
+# Microswitch homing only — 2026-09-29.6
 
 Sensorless homing has been retired. Both dev and release builds use the existing
 normally closed microswitches, at 120 mm/min. Home all moves six arms on each
 board together using Lumiac's routine; each stops at its own switch. Initially
-pressed switches release 2 mm before the shared approach. Home selected
-retains standard single-axis homing with its 2 mm bump.
+pressed switches release 5 mm before the shared approach (previously 2 mm).
+Home selected uses standard single-axis homing with a 5 mm bump.
 The old `--sensorless` flag and `marlin_sensorless` target are unavailable.
 Bridges reject sensorless firmware identities and M914 tuning commands.
 
@@ -25,13 +25,13 @@ The new 24 V / 7 A supply uses the 24 V chopper timing preset.
 
 ## Concurrent homing: endstop did not release
 
-This fault means a switch still reads triggered after the initial 2 mm move
+This fault means a switch still reads triggered after the initial 5 mm move
 away from home. It does not establish a board failure or a supply reset.
 The Octopus diagnostic update lists the affected public axes on the same line:
 `Error:Six-arm homing: endstop did not release [axes: A C]`.
 With a Board 2 prefix this means A2 and C2. It also logs which switches were
 initially pressed and names any interrupted release moves or missing seek hits.
-The current package also changes current and supply timing: flash both Octopus
+The current package uses 50 mm travel and 5 mm backoff: flash both Octopus
 boards, both bridges and the chosen master mode together. The master upload
 includes the matching dashboard filesystem.
 
@@ -42,5 +42,5 @@ An open or disconnected normally closed circuit also reads triggered. Check
 signal/GND, NC contacts, the matching STOP connector, and removed DIAG jumpers
 with power disconnected. If the switch indication follows the physical switch
 but the arm buzzes or does not move away, insufficient torque or a
-mechanical/driver issue is possible. No extra release travel or automatic
-retries are used to hide a stuck switch.
+mechanical/driver issue is possible. The 5 mm release is fixed; a switch that
+stays triggered still faults without automatic retries.

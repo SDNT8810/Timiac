@@ -19,6 +19,7 @@ void statusReply(AsyncWebServerRequest* request) {
   clock["armMinute"] = armTimeMinutes;
   clock["automatic"] = bool(TIMIAC_RELEASE);
   clock["running"] = releaseClockEnabled;
+  clock["startupPending"] = releaseStartupPending;
   writeProximityStatus(doc.createNestedObject("proximity"));
   writeUplinkStatus(doc.createNestedObject("wifi"));
   writeCloudStatus(doc.createNestedObject("cloud"));
@@ -103,13 +104,14 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
   if (path == "/api/action") {
     String action = doc["action"] | "";
 #if TIMIAC_RELEASE
-    if (action != "home" && action != "open" && action != "close" && action != "show-time") {
+    if (action != "home" && action != "close" && action != "show-time" && action != "next-five" &&
+        action != "next-hour" && action != "struggle") {
       errorReply(request, 404, "Development actions are unavailable in release mode"); return;
     }
 #endif
     bool animation = action == "struggle" || action == "next-hour";
     bool nextTime = action == "next-five" || action == "next-hour";
-    if (action != "home" && action != "open" && action != "close" && action != "show-time" && action != "next-five" && !animation) {
+    if (action != "home" && action != "close" && action != "show-time" && action != "next-five" && !animation) {
       errorReply(request, 400, "Unknown user action"); return;
     }
     String id = doc["id"] | "";
@@ -142,6 +144,10 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
     if (animation) {
       const char* error = startBuiltinPreset(action == "next-hour" ? timiac::Preset::Hour : timiac::Preset::Struggle, targetMinute, id, actionHash);
       if (error) { errorReply(request, 409, error); return; }
+#if TIMIAC_RELEASE
+      releaseClockEnabled = false; // Keep the selected pose until Start clock.
+      releaseClockMinute = -1;
+#endif
       lease.lastSeq = doc["seq"].as<uint32_t>();
       statusReply(request); return;
     }
@@ -221,6 +227,7 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
     armTimeMinutes = !systemLatched ? (doc["armMinute"] | -1) : -1;
 #if TIMIAC_RELEASE
     releaseClockEnabled = !systemLatched && (doc["action"] == "home" || doc["action"] == "show-time");
+    releaseClockMinute = -1; // Manual Home/Start clock establishes a fresh baseline.
 #endif
   } else if (path == "/api/program/begin") {
     unsigned total = doc["total"] | 0;
@@ -298,35 +305,4 @@ void configureHttp() {
     else request->redirect("http://192.168.4.1/");
   });
   http.begin();
-}
-void programTick() {
-  if (program.state == "uploading" && millis() - program.activity > 60000) {
-    program.state = "faulted"; program.error = "Incomplete upload expired; no movement started";
-    program.file.close(); logMessage(program.error);
-  }
-  if (program.hasStep && operation.barrier.phase == timiac::Phase::Done) {
-    program.hasStep = false; ++program.completed;
-    if (program.completed == program.total) {
-      program.state = "done"; program.file.close();
-      if (program.builtin && program.preset == timiac::Preset::Hour) armTimeMinutes = program.targetMinute;
-      recordProgramReceipt(); logMessage("Program complete");
-    }
-  }
-  if (program.state != "running" || operation.barrier.active() || program.hasStep) return;
-  if (!bothHealthy()) { stopAll("Board link lost between program steps"); return; }
-  DynamicJsonDocument doc(3072);
-  if (program.builtin) {
-    timiac::Step step;
-    if (!timiac::presetStep(program.preset, program.completed, program.targetMinute, kTravelMm, kMaxFeed, step) || !writePresetStep(step, doc.to<JsonVariant>())) {
-      stopAll("Preset validation failed"); return;
-    }
-  } else {
-    String line = program.file.readStringUntil('\n');
-    if (deserializeJson(doc, line) || !validStep(doc.as<JsonVariant>())) { stopAll("Stored program validation failed"); return; }
-  }
-  if (!homingReady(doc.as<JsonVariant>())) {
-    program.state = "faulted"; program.error = "Program requires homing before motion"; program.file.close(); armTimeMinutes = -1; recordProgramReceipt(); logMessage(program.error); return;
-  }
-  program.hasStep = true;
-  startOperation(doc["a"].as<JsonArray>(), doc["b"].as<JsonArray>(), program.id + "-" + String(program.completed), commandHash(doc["a"], doc["b"]));
 }

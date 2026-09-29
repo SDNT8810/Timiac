@@ -11,7 +11,7 @@ export function createDemoServer({ delay = 180 } = {}) {
   let operation = { id: '', state: 'idle', error: '' };
   const session = `demo-${Date.now()}-${Math.random()}`, logs = ['Demo started. No hardware is connected.'];
   const log = text => { logs.push(text); if (logs.length > 24) logs.shift(); };
-  const state = () => ({ mode: 'demo', session, travelMm: 40, maxFeed: 660, peerConnected: true, stopPending: false, a, b, operation, logs });
+  const state = () => ({ mode: 'demo', session, travelMm: 50, maxFeed: 660, peerConnected: true, stopPending: false, a, b, operation, logs });
   const stop = reason => {
     generation++; operation.state = 'failed'; operation.error = reason;
     for (const board of [a, b]) { board.ready = false; board.busy = false; board.fault = reason; board.homed.fill(false); board.positions.fill(null); }

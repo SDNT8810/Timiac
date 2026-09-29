@@ -97,6 +97,41 @@ int main() {
   auto sent = execute(s, "G28 X Y Z A B C");
   assert((sent == std::vector<std::string>{"G21", "G90", "G28 X Y Z A B C", "M400", "M114"}));
   assert(s.homed == 63);
+  // Continuous trajectories are bounded and still ack each line, but drain
+  // the planner only once at the end (no M400/M114 between animation frames).
+  const char* trajectory[timiac::maxTrajectoryCommands + 1];
+  for (auto& line : trajectory) line = "G1 X1 F120";
+  OctopusSession stream; boot(stream); stream.homed = 63;
+  assert(!stream.stage(trajectory, 7, now)); // Ordinary requests retain their limit.
+  assert(!stream.stage(trajectory, timiac::maxTrajectoryCommands + 1, now, true));
+  stream.homed = 31; assert(!stream.stage(trajectory, 1, now, true)); stream.homed = 63;
+  for (const char* invalid : {"G28 X", "M18", "G90", "M400", "G1 X53 F120"})
+    assert(!stream.stage(&invalid, 1, now, true));
+  assert(stream.stage(trajectory, timiac::maxTrajectoryCommands, now, true));
+  stream.next(++now); assert(stream.prepared() && stream.commit());
+  unsigned moves = 0, drains = 0, positions = 0;
+  while (stream.running()) if (const char* line = stream.next(++now)) {
+    assert(!stream.next(now)); // Cannot send the next command before this ack.
+    if (!strncmp(line, "G1 ", 3)) { ++moves; assert(!drains && !positions); }
+    if (!strcmp(line, "M400")) { ++drains; assert(moves == timiac::maxTrajectoryCommands); }
+    if (!strcmp(line, "M114")) { ++positions; assert(drains == 1); }
+    stream.receive("ok", now);
+  }
+  assert(moves == timiac::maxTrajectoryCommands && drains == 1 && positions == 1 && stream.completions == 1);
+  // Stop or a UART error while queued cancels every remaining trajectory line.
+  for (bool fault : {false, true}) {
+    OctopusSession cancelled; boot(cancelled); cancelled.homed = 63;
+    assert(cancelled.stage(trajectory, timiac::maxTrajectoryCommands, now, true));
+    cancelled.next(++now); assert(cancelled.commit());
+    for (unsigned n = 0; n < 3; ++n) { assert(cancelled.next(++now)); cancelled.receive("ok", now); }
+    if (fault) cancelled.receive("Error:motion failed", now);
+    const std::string marker = drainMarker(cancelled.stop(now));
+    cancelled.receive("ok", now); assert(cancelled.state == State::Drain);
+    cancelled.receive(marker.c_str(), now); cancelled.receive("ok", now);
+    now += 1001; boot(cancelled);
+    assert(!cancelled.running() && !cancelled.homed && !cancelled.completions);
+    assert(!cancelled.next(now));
+  }
   // A group does not become homed until its single acknowledgement arrives.
   OctopusSession grouped; boot(grouped);
   const char* group = "G28 X Y Z A B C";

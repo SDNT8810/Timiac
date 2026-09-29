@@ -1,4 +1,131 @@
-# Current package: 2026-09-29.1 - 800 mA, 24 V, 500 mm/min
+# Current package: 2026-09-29.6 - 50 mm maximum travel
+
+Prepared **TIMIAC2-409426dd9f18**, protocol 6, for both dashboard modes.
+All twelve axes now have a 0-50 mm range. Close sends every arm to 50 mm;
+the halfway clock position is 25 mm. Embedded animations, hardware G-code
+examples, manual controls and both dashboards use the same stroke.
+
+Validation:
+
+- `python build.py all` and `python run.py verify` passed for the complete
+  matching Octopus, bridge, master and dashboard package.
+- All C++ host suites and 46 dashboard/API tests passed. Existing checks cover
+  Close on every axis, all clock poses, animation/example agreement and range
+  rejection. The compiled Marlin contract checks all six 50 mm travel limits.
+- All 15 Python checks passed, including a targeted homing rerun after updating
+  its expected search distance from 78 to 75 mm (1.5 times the new stroke).
+- The hardware-example check initially caught the old 52 mm small-wave sample;
+  it now uses 50 mm closed and a 2.5 mm opening, and the suite passes.
+
+Logs: `.build-travel50.log`, `.test-travel50-host.log`,
+`.test-travel50-web.log`, `.test-travel50-python.log`,
+`.test-travel50-homing.log` (successful targeted rerun).
+No physical board was flashed or tested. Install the matched package on both
+Octopus boards, both ESP bridges and the chosen master with its filesystem.
+
+# Previous package: 2026-09-29.5 - automatic hour dance and smoother junctions
+
+Prepared **TIMIAC2-df18c884b3dc**, protocol 6, for both dashboard modes.
+The release clock now runs the same Hour preset as Next hour when the RTC
+crosses an hour, targeting the current time rather than advancing another hour.
+Ordinary five-minute changes still update the clock pose directly. Startup and
+explicit time changes establish a new baseline without an extra hour dance.
+
+Both modes use the patched Marlin planner: junction directions are normalized
+across all six axes, preventing A/B/C motion from creating false full-reversal
+stops. Junction deviation increases from 0.003 to 0.3 mm for less corner braking.
+Acceleration, speed, current, stroke and homing settings remain unchanged:
+25 mm/s² requested acceleration, 500 mm/min maximum, 800 mA RMS, 52 mm travel,
+and 5 mm initial home release.
+
+Validation:
+
+- `python build.py all` passed for Octopus, both bridges, both masters and both
+  dashboard filesystems. The release master was rebuilt after final review.
+- `python run.py verify` passed all package hashes, identities and layouts.
+- All C++ host suites passed. Release coordinator regressions cover all 24
+  hour boundaries, midnight, Start clock at :59, a boundary delayed by another
+  animation, both board completions, no repeated dance, normal five-minute
+  updates, and Stop cancelling automatic work.
+- 15 Python tests passed, including a regression that applies the patch to
+  the pinned Marlin source and executes its actual junction normalization code.
+  Mixed XYZ/ABC directions no longer cause false reversals; true reversals
+  still require braking.
+- All 46 dashboard/API tests passed.
+
+Logs: `.build-hourly-smooth.log`, `.build-hourly-smooth-release-final.log`,
+`.test-hourly-smooth-host.log`, `.test-hourly-smooth-python.log`,
+`.test-hourly-smooth-web.log`.
+No physical board was flashed or tested. Mechanical smoothness and exact
+inter-board timing remain to be checked on the clock. Flash both Octopus boards,
+both ESP bridges and the chosen master with its filesystem for this changed
+machine identity. The Octopus SD cards are only needed for firmware installation.
+
+# Previous package: 2026-09-29.4 - 52 mm travel and continuous animations
+
+Prepared **TIMIAC2-8dfd00f59e59**, protocol 6, for both dashboard modes.
+Close and every axis limit are 52 mm. Initial concurrent-home release and
+single-axis homing bump are 5 mm (previously 2 mm). Current remains 800 mA RMS,
+64 commanded microsteps interpolated to 256, with a 500 mm/min motion ceiling.
+
+Clock and animation mapping follows the installed X1=12 through C2=1 order.
+Next hour and Struggle prepare one complete path per bridge and finish with one
+M400/M114 pair, removing the former completion barrier between every frame.
+Struggle's two simulator pauses are omitted. The release dashboard adds Next
+5 min, Next hour and Struggle; both local dashboards remove Open. Release
+startup still homes all arms together before displaying valid RTC time.
+
+Validation:
+
+- `python build.py all` passed: Octopus, both bridges, both masters and both
+  dashboard filesystems. Both masters were also rebuilt after final review.
+- `python run.py verify` passed package hashes, matching identities and layouts.
+- All C++ host suites passed, including both coordinator modes, all 1,440
+  clock poses, queued animations, bridge capability checks, Stop and no replay.
+- The actual concurrent Marlin homing routine passed release, interrupted
+  release, missing/stuck switch and cancellation tests. The independent motor
+  latch passed all 720 switch orders. Compile-time checks verify all six
+  52 mm limits and all six 5 mm single-axis bumps in the built Marlin source.
+- 14 Python tests and 46 dashboard/API tests passed.
+- No connected in-app browser was available for visual layout inspection.
+
+Logs: `.build-smooth52.log`, `.build-smooth52-master-final.log`,
+`.build-smooth52-release-final.log`, `.test-smooth52-host.log`,
+`.test-smooth52-python.log`, `.test-smooth52-web.log`.
+No physical board was flashed or tested. Exact inter-board timing and mechanical
+smoothness remain to be checked on the clock. Flash both Octopus boards, both
+ESP bridges and the chosen master with its filesystem for this changed machine
+identity. The Octopus SD cards are only needed for that firmware installation.
+
+# Previous release master: 2026-09-29.2 - automatic startup
+
+Release now starts Home all as soon as both motor boards are healthy and idle,
+then displays the current valid RTC time after both homes complete. Startup
+requires no browser or control lease. Stop/failure cancels it without replay;
+developer mode still starts manually. Homing can run before the RTC becomes valid.
+
+Validation:
+
+- `python build.py master_release` passed, including the release web filesystem.
+- `python run.py verify` passed all package hashes, identities and flash layouts.
+- All C++ host suites and 45 web tests passed.
+- Production coordinator tests cover delayed/missing boards, driver readiness,
+  busy boards, a master-only restart, grouped six-arm preparation on both boards,
+  both completion acknowledgements and all homing bits, invalid RTC, current time
+  sampled after homing, Stop before connection, homing failure/recovery, manual
+  takeover, no automatic rehoming on reconnect, and manual developer startup.
+- Dashboard tests cover waiting for boards, automatic homing, invalid RTC and
+  running status, without sending browser commands to start the system.
+- Only `esp_master_release.bin` and `master_release_littlefs.bin` changed in the
+  prepared package. Octopus, both bridges, developer images, machine identity
+  **TIMIAC2-f5b8d948e714**, and protocol 6 are unchanged.
+
+Logs: `.build-release-startup.log`, `.test-release-startup-host.log`,
+`.test-release-startup-web.log`. No physical board was flashed or tested.
+For the already installed matching motor package, upload only
+`python run.py master_release --port COM5`. No Octopus SD-card update is required.
+
+# Motor package: 2026-09-29.1 - 800 mA, 24 V, 500 mm/min
 
 Prepared and verified **TIMIAC2-f5b8d948e714** (protocol 6) in both modes.
 All twelve TMC2209 axes request **800 mA RMS** for running and homing.

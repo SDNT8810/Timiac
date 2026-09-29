@@ -101,22 +101,22 @@
     <p class="note">Saved to the DS3231. Daylight-saving changes are manual.</p></form>
 </div>
 <div class="toolbar clock-actions">
-  <button data-clock-action="home" data-control>Home all</button><button data-clock-action="open" data-control>Open · 0 mm</button><button data-clock-action="close" data-control>Close · 48 mm</button>
+  <button data-clock-action="home" data-control>Home all</button><button data-clock-action="close" data-control>Close · 50 mm</button>
   <button data-clock-action="show-time" data-control>Show time</button><button data-clock-action="struggle" data-control>Struggle</button><button data-clock-action="next-five" data-control>Next 5 min</button><button data-clock-action="next-hour" data-control>Next hour</button>
-</div><p class="note">Take control to use the buttons. Home/open = 0 mm; closed = 48 mm. The minute arm opens fully, the hour arm halfway. Hand gestures are active when homed and idle.</p>
+</div><p class="note">Take control to use the buttons. Home = 0 mm; closed = 50 mm. The minute arm opens fully, the hour arm halfway. Hand gestures are active when homed and idle.</p>
 </section>
 <div class="workspace">
 <section class="manual-panel panel">
 <div class="section-heading"><span>01 / MANUAL</span><span>SELECT AN AXIS</span></div>
 <div class="arm-picker" id="arm-picker"><button data-axis="X1" class="selected">X1</button><button data-axis="Y1">Y1</button><button data-axis="Z1">Z1</button><button data-axis="A1">A1</button><button data-axis="B1">B1</button><button data-axis="C1">C1</button><button data-axis="X2">X2</button><button data-axis="Y2">Y2</button><button data-axis="Z2">Z2</button><button data-axis="A2">A2</button><button data-axis="B2">B2</button><button data-axis="C2">C2</button></div>
 <div class="manual-title"><div><h2 id="selected-title">X1</h2><p id="selected-route">Octopus 1 · local X</p></div><span class="position" id="reported">— <small>mm</small></span></div>
-<label class="field">Target position (mm)<input id="target" type="number" min="0" max="48" step="0.1" value="1"></label>
+<label class="field">Target position (mm)<input id="target" type="number" min="0" max="50" step="0.1" value="1"></label>
 <label class="field">Speed (mm/min)<input id="feed" type="number" min="1" max="500" step="0.1" value="120"></label>
 <div class="toolbar"><button id="move" class="primary" data-control>Move selected axis</button><button id="home" data-control>Home selected</button></div>
 <div class="toolbar"><button id="home-all" data-control>Home all 12 axes</button><button id="release" data-control>Release motors</button></div>
 <p id="manual-status" class="note" role="status"></p>
 <p class="note">Home selected and Move selected axis use only that axis's board. The other board can be disconnected. Home all, Release motors, clock actions and programs require both boards.</p>
-<p class="note">Verify every home sensor and motor direction individually before homing. Targets are actuator millimetres from home: 0 = fully open, 48 = closed.</p>
+<p class="note">Verify every home sensor and motor direction individually before homing. Targets are actuator millimetres from home: 0 = fully open, 50 = closed.</p>
 </section>
 <section class="program-panel panel">
 <div class="section-heading"><span>02 / PROGRAM</span><label class="file-button">Open .gcode<input id="file" type="file" accept=".gcode,.gco,.g,.txt" hidden></label></div>

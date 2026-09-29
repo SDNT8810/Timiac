@@ -7,7 +7,7 @@ export function armAddress(arm) {
   if (!Number.isInteger(arm) || arm < 1 || arm > 12) throw new Error('Select arm 1–12');
   return { board: arm <= 6 ? 'a' : 'b', axis: AXES[(arm - 1) % 6] };
 }
-export function moveArm(arm, position, feed, travel = 48, maxFeed = 700) {
+export function moveArm(arm, position, feed, travel = 50, maxFeed = 700) {
   if (!Number.isFinite(position) || position < 0 || position > travel) throw new Error(`Position must be 0–${travel} mm`);
   if (!Number.isFinite(feed) || feed <= 0 || feed > maxFeed) throw new Error(`Feed must be above 0 and at most ${maxFeed} mm/min`);
   const { board, axis } = armAddress(arm);
@@ -35,7 +35,7 @@ export function nativeCommand(raw, target) {
 }
 
 // Simulator arm names are never transmitted directly to Marlin.
-export function compileProgram(source, dialect, travel = 48, maxFeed = 700) {
+export function compileProgram(source, dialect, travel = 50, maxFeed = 700) {
   if (source.length > 262144) throw new Error('Program exceeds 256 KB');
   if (!Number.isFinite(travel) || travel <= 0 || !Number.isFinite(maxFeed) || maxFeed <= 0)
     throw new Error('Invalid machine limits');
@@ -95,7 +95,8 @@ export function compileProgram(source, dialect, travel = 48, maxFeed = 700) {
         const target = absolute ? value : positions[index] + value;
         if (target < 0 || target > 100) throw new Error(`Arm ${key} is outside simulator range 0–100`);
         positions[index] = target;
-        const address = armAddress(index + 1);
+        // Simulator arms advance clockwise; physical board order is 12,11,...,1.
+        const address = armAddress((12 - index) % 12 + 1);
         words[address.board].push(`${address.axis}${number((100 - target) * scale)}`);
       }
       for (const board of ['a', 'b']) if (words[board].length) {

@@ -33,11 +33,11 @@ function dashboard() {
       querySelector() { return { textContent: id }; } });
     return nodes.get(id);
   }
-  const actions = ['home', 'open', 'close', 'show-time'].map(action => {
+  const actions = ['home', 'close', 'show-time', 'next-five', 'next-hour', 'struggle'].map(action => {
     const button = element(action); button.dataset.action = action; return button;
   });
   const state = { session: 'boot', machineReady: true, machineState: 'ready', a: { homed: 63 }, b: { homed: 63 },
-    operation: { state: 'idle' }, control: {}, travelMm: 48,
+    operation: { state: 'idle' }, control: {}, travelMm: 50,
     clock: { present: true, valid: true, localTime: '2026-09-21T13:45:12', error: '' } };
   const calls = [];
   class Controller {
@@ -85,7 +85,7 @@ test('180-second homing budget gives the browser ten seconds of completion margi
 });
 test('ordinary moves retain the shorter completion deadline', async () => {
   const move = slowOperation(300000, 4);
-  await assert.rejects(move.client.action('open'), /Completion timeout/);
+  await assert.rejects(move.client.action('close'), /Completion timeout/);
   assert.equal(move.requests(), 3);
 });
 test('dashboard shows RTC time and disables motion for missing home, RTC, connection, or competing owner', async () => {
@@ -93,9 +93,9 @@ test('dashboard shows RTC time and disables motion for missing home, RTC, connec
   assert.equal(element('clock').textContent, '13:45:12');
   assert.equal(element('show-time').disabled, false);
   state.a.homed = 0; vm.runInContext('render()', context);
-  assert.equal(element('open').disabled, true); assert.equal(element('home').disabled, false);
+  assert.equal(element('close').disabled, true); assert.equal(element('home').disabled, false);
   state.a.homed = 63; state.clock.valid = false; vm.runInContext('render()', context);
-  assert.equal(element('show-time').disabled, true); assert.equal(element('open').disabled, false);
+  assert.equal(element('show-time').disabled, true); assert.equal(element('close').disabled, false);
   state.control.owner = 'other'; vm.runInContext('render()', context);
   assert.equal(element('home').disabled, true); assert.equal(element('save-time').disabled, true);
   assert.equal(element('stop').disabled, false);
@@ -104,18 +104,40 @@ test('dashboard shows RTC time and disables motion for missing home, RTC, connec
 });
 test('dashboard claims automatically and saves explicit local time to RTC endpoint', async () => {
   const { element, calls } = dashboard(); await flush();
-  await element('open').listeners.click();
-  assert.deepEqual(calls, ['claim', 'open']);
+  await element('close').listeners.click();
+  assert.deepEqual(calls, ['claim', 'close']);
   element('local-time').value = '2026-09-21T09:30';
   element('time-form').listeners.submit({ preventDefault() {} }); await flush();
   assert.equal(calls.at(-1).path, '/api/time');
   assert.equal(calls.at(-1).data.localTime, '2026-09-21T09:30:00');
 });
+
+test('release dashboard reports automatic startup, homing, and waiting for valid time', async () => {
+  const { context, element, state, calls } = dashboard(); await flush();
+  state.clock.startupPending = true; state.machineReady = false;
+  state.a.homed = state.b.homed = 0;
+  vm.runInContext('render()', context);
+  assert.match(element('running-status').textContent, /Starting automatically/);
+  assert.equal(element('home').disabled, true);
+  assert.equal(element('stop').disabled, false);
+  state.clock.startupPending = false; state.clock.running = true;
+  state.operation = { state: 'running', homing: true };
+  vm.runInContext('render()', context);
+  assert.match(element('running-status').textContent, /Homing all arms/);
+  assert.equal(element('show-time').disabled, true);
+  state.operation.state = 'done'; state.machineReady = true;
+  state.a.homed = state.b.homed = 63; state.clock.valid = false;
+  vm.runInContext('render()', context);
+  assert.match(element('running-status').textContent, /waiting for a valid time/);
+  state.clock.valid = true; vm.runInContext('render()', context);
+  assert.match(element('running-status').textContent, /Clock running/);
+  assert.deepEqual(calls, []); // Browser observes; startup belongs to the master.
+});
 test('Stop cancels an action waiting for control', async () => {
   const { element, calls } = dashboard(); await flush();
-  const pending = element('open').listeners.click();
+  const pending = element('close').listeners.click();
   await element('stop').listeners.click(); await pending;
-  assert.ok(calls.includes('stop')); assert.ok(!calls.includes('open'));
+  assert.ok(calls.includes('stop')); assert.ok(!calls.includes('close'));
 });
 
 test('animation waits for the whole program, even when a single step has finished', async () => {
@@ -138,8 +160,8 @@ test('animation waits for the whole program, even when a single step has finishe
 
 test('release page exposes clock controls without development actions', async () => {
   const html = readFileSync(new URL('../WebApp/release/index.html', import.meta.url), 'utf8');
-  assert.deepEqual([...html.matchAll(/data-action="([^"]+)"/g)].map(m => m[1]), ['home', 'open', 'close', 'show-time']);
-  assert.doesNotMatch(html, /sensorless|terminal|next-five|next-hour|struggle|data-command/);
+  assert.deepEqual([...html.matchAll(/data-action="([^"]+)"/g)].map(m => m[1]), ['home', 'close', 'show-time', 'next-five', 'next-hour', 'struggle']);
+  assert.doesNotMatch(html, /sensorless|terminal|data-command/);
   const { context, element, state } = dashboard(); await flush();
   state.clock.running = true; vm.runInContext('render()', context);
   assert.match(element('running-status').textContent, /Clock running/);
@@ -147,7 +169,7 @@ test('release page exposes clock controls without development actions', async ()
   assert.match(element('running-status').textContent, /Clock paused/);
   state.program = { state: 'running', name: 'Curious creature', completed: 3, total: 28 };
   state.operation.state = 'done'; vm.runInContext('render()', context);
-  for (const name of ['home', 'open', 'close', 'show-time']) assert.equal(element(name).disabled, true);
+  for (const name of ['home', 'close', 'show-time', 'next-five', 'next-hour', 'struggle']) assert.equal(element(name).disabled, true);
   assert.equal(element('stop').disabled, false);
   assert.match(element('machine-status').textContent, /3\/28/);
 });

@@ -7,6 +7,22 @@ bool writePresetStep(const timiac::Step& step, JsonVariant doc) {
   }
   return validStep(doc);
 }
+bool writePresetTrajectory(timiac::Preset preset, unsigned targetMinute, JsonVariant doc) {
+  float positions[12];
+  for (unsigned b = 0; b < 2; ++b) for (unsigned a = 0; a < 6; ++a) {
+    const float value = boards[b].positions[a];
+    if (!boards[b].known[a] || !isfinite(value) || value < 0 || value > kTravelMm) return false;
+    positions[b * 6 + a] = value;
+  }
+  JsonArray a = doc.createNestedArray("a"), b = doc.createNestedArray("b");
+  for (unsigned i = 0; i < timiac::presetCount(preset); ++i) {
+    timiac::Step frame;
+    if (!timiac::presetTrajectoryFrame(preset, i, targetMinute, kTravelMm, kMaxFeed, positions, frame)) return false;
+    for (unsigned board = 0; board < 2; ++board) for (unsigned n = 0; n < frame.count[board]; ++n)
+      if (!(board ? b : a).add(String(frame.lines[board][n]))) return false;
+  }
+  return a.size() && b.size() && validLines(a, true) && validLines(b, true);
+}
 const char* startBuiltinPreset(timiac::Preset preset, unsigned targetMinute, const String& id, uint32_t hash) {
   if (operation.barrier.active() || program.reserved()) return "A command or program owns the machine";
   if (!bothHealthy()) return "Both Octopus boards must be healthy and synchronized";
@@ -14,8 +30,14 @@ const char* startBuiltinPreset(timiac::Preset preset, unsigned targetMinute, con
     return "Home all moving axes first";
   unsigned total = timiac::presetCount(preset);
   if (!total) return "Unknown preset";
-  DynamicJsonDocument check(3072);
-  for (unsigned i = 0; i < total; ++i) {
+  const bool trajectory = preset == timiac::Preset::Hour || preset == timiac::Preset::Struggle;
+  if (trajectory && (!boards[0].trajectorySupported || !boards[1].trajectorySupported))
+    return "Update both ESP bridges for continuous Next hour and Struggle";
+  DynamicJsonDocument check(trajectory ? 8192 : 3072);
+  if (trajectory) {
+    if (!writePresetTrajectory(preset, targetMinute, check.to<JsonVariant>())) return "Continuous animation requires valid homed positions";
+    total = 1; // The complete animation is one prepared operation, not one per frame.
+  } else for (unsigned i = 0; i < total; ++i) {
     timiac::Step step; check.clear();
     if (!timiac::presetStep(preset, i, targetMinute, kTravelMm, kMaxFeed, step) || !writePresetStep(step, check.to<JsonVariant>()))
       return "Preset failed command validation";

@@ -78,7 +78,7 @@
 +      planner.set_machine_position_mm(target);
 +      const uint8_t pressed = spider_pressed_endstops();
 +      if (pressed) {
-+        spider_report_axes("Six-arm homing: releasing 2 mm", pressed);
++        spider_report_axes("Six-arm homing: releasing 5 mm", pressed);
 +        LOOP_NUM_AXES(a) if (TEST(pressed, a)) target[a] = SPIDER_HOME_RELEASE_MM;
 +        PlannerHints release_hints;
 +        release_hints.millimeters = SPIDER_HOME_RELEASE_MM;

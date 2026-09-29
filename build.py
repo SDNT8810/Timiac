@@ -40,9 +40,11 @@ def prepare_marlin():
     # The patch is stored here; a rebuild never depends on ../Lumiac.
     subprocess.run(["git", "apply", str(ROOT / "Marlin/patches/concurrent-homing.patch")],
                    cwd=staged, check=True)
+    subprocess.run(["git", "apply", str(ROOT / "Marlin/patches/six-axis-junctions.patch")],
+                   cwd=staged, check=True)
     config = staged / "Marlin/Configuration.h"
     with config.open("a", encoding="utf-8") as stream:
-        stream.write("\n#define SPIDER_CONCURRENT_HOMING\n#define SPIDER_HOME_RELEASE_MM 2.0f\n")
+        stream.write("\n#define SPIDER_CONCURRENT_HOMING\n#define SPIDER_HOME_RELEASE_MM 5.0f\n")
     # Apply explicit signals at the END of the board header, BEFORE pins_postprocess.
     # No late patch to MarlinConfig and no implicit I/J/K extruder socket allocation.
     board = staged / "Marlin/src/pins/stm32f4/pins_BTT_OCTOPUS_V1_1.h"

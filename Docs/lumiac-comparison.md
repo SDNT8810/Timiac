@@ -20,15 +20,15 @@ in both projects is compatible (`02010206`).
 | Acceleration curve | S-curve | Same |
 | Travel acceleration | 25 mm/s² | Same |
 | Per-axis acceleration ceiling | 80 mm/s² | Same |
-| Junction deviation | 0.003 mm | Same |
-| Homing bump / second-pass divisor | 2 / 2 on all six axes | Same |
+| Junction deviation | 0.003 mm | 0.3 mm, with normalized six-axis corner directions |
+| Homing bump / second-pass divisor | 2 / 2 on all six axes | 5 / 2 on all six axes |
 | Endstop interrupts / always enabled | On / on | Same |
 | Driver mode / interpolation / hold multiplier | SpreadCycle / on / 0.5 | **StealthChop at rest, SpreadCycle above 1 mm/s** / on / 0.5 (.6 microswitch profile) |
 | Driver status monitoring / stop on driver error | On / on | Same |
 | Direction / home direction | Not inverted / minimum | Same |
 | Microsteps | 16 | **64**, interpolated internally to 256 |
 | Calibration | 533.33 steps/mm at 16 | **11,520 steps/mm at 64** |
-| Maximum travel | 120 mm | 48 mm |
+| Maximum travel | 120 mm | 50 mm |
 | Maximum feed | 260 mm/s | 500 mm/min (8.333 mm/s) |
 | Homing feed | 400 mm/min | 120 mm/min with microswitches only |
 

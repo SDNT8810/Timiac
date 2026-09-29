@@ -12,7 +12,7 @@ Phone(s) -- Wi-Fi --> Master ESP32 (192.168.4.1)
 ~~~
 
 Only the master creates the access point and HTTP server. Both bridges are
-stations. Protocol v5 checks the generated machine identity and identifies board 1/2 explicitly with a shared pairing key,
+stations. Protocol v6 checks the generated machine identity and identifies board 1/2 explicitly with a shared pairing key,
 boot identity, and master session. Connection order and IP address do not
 determine axis routing. Duplicate board IDs are refused. The pairing key
 separates bridge traffic from ordinary clients; it is not transport encryption.
@@ -70,10 +70,63 @@ for the upload, validates/translates it, and stores local command arrays in
 upload expires after 60 seconds and cannot run. Programs are not restored
 or started after master reboot.
 
+The release master separately starts a fresh Home all sequence once per boot,
+as soon as both boards are healthy and idle. It uses the existing two-board
+prepare/commit barrier and one `G28 X Y Z A B C` per board. Once both homes finish
+and all twelve homing bits are set, it reads the current valid RTC time and starts
+the clock pose. No browser, control lease, SD card, or RTC validity is required to
+start homing. Stop/failure cancels startup permanently for that boot; a manual
+command accepted first also replaces the pending startup. Reconnects do not rearm
+it. Developer mode has no automatic startup motion. This startup behavior lives
+on the master; the separate 50 mm stroke and 5 mm homing backoff require the
+matching Octopus image as well.
+
+While release clock tracking is enabled, `releaseClockMinute` remembers the last
+automatic target separately from the arm pose, so a proximity animation cannot
+erase an hour boundary. A forward change into the next RTC hour starts the same
+Hour preset as the button, targeting the current minute and keeping clock tracking
+enabled. Midnight wraps normally. The boundary is claimed when the preset starts;
+completion cannot trigger it again. Busy work delays it until idle, while Stop,
+manual resume and explicit RTC changes reset the baseline. Large/backward time
+jumps update the pose without replaying missed dances.
+
 All uploaded lines must validate before the program becomes Ready. During
 playback each move is checked against fresh homing state. Releasing motors
 clears trusted position; homing is required again. Manual commands cannot
 interleave with program execution.
+
+## Clock mapping and queued animations
+
+Physical arm order is counterclockwise: X1/Y1/Z1/A1/B1/C1 correspond to
+12/11/10/9/8/7, and X2/Y2/Z2/A2/B2/C2 to 6/5/4/3/2/1. Simulator frames retain
+clockwise A/B/C/D/E/H/I/J/K/L/U/V order and are mapped when producing hardware
+commands. Board-qualified manual G-code still addresses the named physical motor.
+
+Next hour and Struggle prepare complete bounded trajectories on both bridges and
+commit once. Each bridge validates and queues at most 32 motion/dwell lines, sends each
+after its UART acknowledgement, and uses M400/M114 only at the end. This lets
+Marlin blend consecutive moves instead of emptying its planner after every frame.
+The master derives matching nominal frame durations from current positions using
+Marlin's XYZ-first linear feed metric and axis speed limits. Only a board with
+no movement in a frame dwells; the other keeps moving. Acceleration and network
+timing mean this is not an exact inter-board timing guarantee.
+Struggle's two simulator dwell frames are omitted from its embedded path and
+generated hardware example. Manual Next controls and Struggle pause release
+RTC tracking until Start clock or Home resumes it.
+
+Marlin's junction direction is normalized across all six axes even when the
+feed-distance convention uses XYZ alone. Previously mixed XYZ/ABC moves could
+produce dot products outside [-1, 1], causing false full-reversal braking.
+The planner now uses 0.3 mm junction deviation, with the same S-curve acceleration
+and per-axis speed/acceleration ceilings. This increases permitted corner speed;
+it does not add a dwell or bypass real reversal braking. Only an idle board waits
+while the other moves. Exact physical smoothness still needs installation testing.
+
+Trajectory support is advertised separately from protocol 6 and machine identity.
+Both animations reject bridges without that capability. Existing Stop, disconnect, fault, stale
+command and homing checks apply throughout the queue, with no replay on recovery.
+Ordinary requests retain the six-command limit and other programs retain their
+per-step completion barriers.
 
 ## Command participants
 

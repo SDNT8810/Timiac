@@ -8,6 +8,11 @@
 #include "machine_generated.h"
 
 namespace timiac {
+constexpr unsigned maxTrajectoryCommands = 32;
+constexpr unsigned trajectoryVersion = 1;
+inline bool trajectoryCommand(const char* line) {
+  return !strncmp(line, "G1 ", 3) || !strncmp(line, "G4 ", 3);
+}
 // Dashboard/program letters and native Octopus G-code letters are identical.
 // The master selects the board using the 1/2 suffix; bridges keep XYZABC intact.
 struct GcodeState {
@@ -40,7 +45,7 @@ inline bool readNumber(const char*& p, float& value) {
 // These are actuator coordinates: home/open = 0, closed = travel. Already
 // inverted animation files must pass through unchanged to both Octopus boards.
 inline const char* compileLine(const char* input, GcodeState& state, Step& result,
-                               unsigned axisCount = 1, float travel = 48, float maxFeed = 369.6f) {
+                               unsigned axisCount = 1, float travel = travelMm, float maxFeed = 369.6f) {
   result = Step();
   if (!axisCount || axisCount > 6 || strlen(input) > 240) return "Line/configuration too long or invalid";
   char cleaned[241]; unsigned n = 0; bool comment = false;

@@ -68,7 +68,7 @@ struct WiFiServer {
 };
 constexpr unsigned WL_CONNECTED = 3;
 static struct Wifi { unsigned status() const { return WL_CONNECTED; } void reconnect() {} } WiFi;
-struct File { void close() {} };
+struct File { void close() {} String readStringUntil(char) { return ""; } };
 static struct SerialPort {
   std::string sent;
   bool hasOverrun() const { return false; }

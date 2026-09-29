@@ -46,7 +46,7 @@ static_assert(AXIS4_NAME == 'A' && AXIS5_NAME == 'B' && AXIS6_NAME == 'C', "A/B/
 static_assert(AXIS_DRIVER_TYPE(X, TMC2209) && AXIS_DRIVER_TYPE(Y, TMC2209) && AXIS_DRIVER_TYPE(Z, TMC2209) && AXIS_DRIVER_TYPE(I, TMC2209) && AXIS_DRIVER_TYPE(J, TMC2209) && AXIS_DRIVER_TYPE(K, TMC2209), "All six drivers must be UART TMC2209");
 constexpr float steps[] = DEFAULT_AXIS_STEPS_PER_UNIT;
 static_assert(steps[0] == 11520 && steps[1] == 11520 && steps[2] == 11520 && steps[3] == 11520 && steps[4] == 11520 && steps[5] == 11520, "Preserve Timiac's calibration at 64 microsteps");
-static_assert(DEFAULT_ACCELERATION == 25 && DEFAULT_TRAVEL_ACCELERATION == 25 && JUNCTION_DEVIATION_MM == 0.003, "Lumiac acceleration profile");
+static_assert(DEFAULT_ACCELERATION == 25 && DEFAULT_TRAVEL_ACCELERATION == 25 && JUNCTION_DEVIATION_MM == 0.3, "Continuous corner blending with unchanged acceleration");
 
 // Lumiac layout: MOTOR2_1 / MOTOR2_2 are parallel outputs from one Z driver.
 static_assert(Z_STEP_PIN == PF11 && Z_DIR_PIN == PG3 && Z_ENABLE_PIN == PG5, "Z must use MOTOR2 motion pins");
@@ -77,6 +77,9 @@ static_assert(steps[0] * maxFeeds[0] <= 100000 && steps[0] * maxFeeds[0] <= MAX_
 #if DISABLED(SPIDER_CONCURRENT_HOMING)
   #error "Home all must use independent concurrent homing"
 #endif
-static_assert(SPIDER_HOME_RELEASE_MM == 2, "Release initially pressed switches before homing");
+static_assert(SPIDER_HOME_RELEASE_MM == 5, "Release initially pressed switches before homing");
+constexpr float homeBump[] = HOMING_BUMP_MM;
+static_assert(homeBump[0] == 5 && homeBump[1] == 5 && homeBump[2] == 5 && homeBump[3] == 5 && homeBump[4] == 5 && homeBump[5] == 5, "5 mm single-axis homing backoff");
+static_assert(X_MAX_POS == 50 && Y_MAX_POS == 50 && Z_MAX_POS == 50 && I_MAX_POS == 50 && J_MAX_POS == 50 && K_MAX_POS == 50, "50 mm travel on every arm");
 
 static_assert(INTERPOLATE, "Interpolate commanded 64 microsteps internally to 256");

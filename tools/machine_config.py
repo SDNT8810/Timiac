@@ -85,7 +85,7 @@ def definitions(machine, identity):
     }
     advanced = {
         "DEFAULT_STEPPER_TIMEOUT_SEC": "600", "AXIS_RELATIVE_MODES": array("false"),
-        "HOMING_BUMP_MM": array(2), "HOMING_BUMP_DIVISOR": array(2),
+        "HOMING_BUMP_MM": array(5), "HOMING_BUMP_DIVISOR": array(2),
         "STEALTHCHOP_XY": "", "STEALTHCHOP_Z": "", "STEALTHCHOP_I": "",
         "STEALTHCHOP_J": "", "STEALTHCHOP_K": "", "HYBRID_THRESHOLD": "",
         "HOLD_MULTIPLIER": str(machine["hold_multiplier"]),

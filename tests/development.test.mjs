@@ -30,7 +30,7 @@ async function dashboard() {
   const element = id => { assert.ok(ids.has(id), `Missing HTML element: ${id}`); return ids.get(id); };
   const actions = Object.fromEntries(nodes.filter(n => n.dataset.clockAction).map(n => [n.dataset.clockAction, n]));
   const board = () => ({ online: true, ready: true, manualReady: true, homed: 63, positions: [0, 0, 0, 0, 0, 0] });
-  const state = { mode: 'hardware', machineReady: true, control: {}, axesPerBoard: 6, travelMm: 48, maxFeed: 700,
+  const state = { mode: 'hardware', machineReady: true, control: {}, axesPerBoard: 6, travelMm: 50, maxFeed: 700,
     a: board(), b: board(), operation: { state: 'idle' }, program: { state: 'idle', total: 0, completed: 0 },
     clock: { present: true, valid: true, localTime: '2026-09-22T13:45:12' },
     proximity: { enabled: true, armed: true, distanceCm: 73.2 } };
@@ -140,14 +140,13 @@ test('development clock controls use the same actions and require ownership, hom
   const { context, element, actions, state, calls } = await dashboard();
   assert.equal(element('clock').textContent, '13:45:12');
   assert.equal(element('sensor-distance').textContent, '73.2 cm');
-  assert.equal(actions.open.disabled, true);
   await element('claim').onclick();
-  for (const name of ['home', 'open', 'close', 'show-time', 'struggle', 'next-five', 'next-hour']) {
+  for (const name of ['home', 'close', 'show-time', 'struggle', 'next-five', 'next-hour']) {
     assert.equal(actions[name].disabled, false, name);
     await actions[name].onclick(); assert.equal(calls.at(-1), name);
   }
   state.a.homed = 0; vm.runInContext('render(api.status)', context);
-  assert.equal(actions.home.disabled, false); assert.equal(actions.open.disabled, true);
+  assert.equal(actions.home.disabled, false);
   state.a.homed = 63; state.clock.valid = false; vm.runInContext('render(api.status)', context);
   assert.equal(actions['show-time'].disabled, true); assert.equal(actions.struggle.disabled, false);
   assert.equal(actions['next-five'].disabled, true);
@@ -175,7 +174,7 @@ test('development sensor stays live while moving and clears stale data on discon
   vm.runInContext('render(api.status)', context);
   assert.equal(element('sensor-distance').textContent, '34.5 cm');
   assert.equal(element('sensor-status').textContent, 'Near');
-  assert.equal(actions.open.disabled, true); assert.equal(element('stop').disabled, false);
+  assert.equal(element('stop').disabled, false);
   state.proximity.distanceCm = null; vm.runInContext('render(api.status)', context);
   assert.equal(element('sensor-status').textContent, 'No valid echo');
   disconnect(); await vm.runInContext('poll()', context);

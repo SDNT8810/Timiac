@@ -11,7 +11,7 @@
 #define _MIN(a, b) ((a) < (b) ? (a) : (b))
 #define _MAX(a, b) ((a) > (b) ? (a) : (b))
 #define ABS(a) std::fabs(a)
-#define SPIDER_HOME_RELEASE_MM 2.0f
+#define SPIDER_HOME_RELEASE_MM 5.0f
 #define GET_TEXT_F(a) "Homing failed"
 std::vector<std::string> messages;
 std::string partialMessage;
@@ -43,7 +43,7 @@ void set_axis_never_homed(AxisEnum a) { homed &= ~(1U << a); }
 void set_axis_is_at_home(AxisEnum a) { homed |= 1U << a; current_position[a] = 0; }
 void sync_plan_position() {}
 float homing_feedrate(AxisEnum) { return 2; }
-float max_length(AxisEnum) { return 48; }
+float max_length(AxisEnum) { return 50; }
 struct Endstops {
   uint8_t pressed = 0;
   uint8_t state() { return pressed; }
@@ -84,14 +84,14 @@ int main() {
   reset(); home_spider_group();
   assert(!killed && homed == 63 && planner.moves.size() == 1 && !stepper.active);
   const auto move = planner.moves[0];
-  assert(move.concurrent && move.feed == 2 && move.length == 72);
-  for (unsigned a = 0; a < 6; ++a) assert(move.target[a] == -72);
+  assert(move.concurrent && move.feed == 2 && move.length == 75);
+  for (unsigned a = 0; a < 6; ++a) assert(move.target[a] == -75);
   // Initially pressed switches alone move away before the shared seek.
   reset(); endstops.pressed = 0x25; home_spider_group();
   assert(!killed && homed == 63 && planner.moves.size() == 2);
-  for (unsigned a = 0; a < 6; ++a) assert(planner.moves[0].target[a] == (TEST(0x25, a) ? 2 : 0));
+  for (unsigned a = 0; a < 6; ++a) assert(planner.moves[0].target[a] == (TEST(0x25, a) ? 5 : 0));
   assert(!planner.moves[0].concurrent && planner.moves[1].concurrent);
-  assert(messages[1] == "Six-arm homing: releasing 2 mm [axes: X Z C]");
+  assert(messages[1] == "Six-arm homing: releasing 5 mm [axes: X Z C]");
   for (uint8_t mask = 0; mask < 63; ++mask) {
     reset(); seekHits = mask; home_spider_group();
     assert(killed && homed == 0 && !stepper.active);

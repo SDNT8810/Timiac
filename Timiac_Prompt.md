@@ -150,3 +150,22 @@ G90 X1 1 Y1 1 Z1 1 A1 1 B1 1 C1 1 X2 1 Y2 1 Z2 1 A2 1 B2 1 C2 1 F180
 G90 X1 30 Y1 30 Z1 30 A1 30 B1 30 C1 30 X2 30 Y2 30 Z2 30 A2 30 B2 30 C2 30 F300
 
 
+
+
+
+
+proceed
+
+also the strugle please 
+it must run smoothly , not batch of movements !
+
+please check the retrive of homing , how much is it ?
+if its 2 mm , make it 5 , if its 5 , make it 7
+
+lets have "Next 5 min" , "Next hour", and "Struggle" keys in release dashboard too
+
+we dont need "Open" key anymore , its same as home , 
+Close must send all arms to 52
+
+also make the max strok 52 instead of 48
+

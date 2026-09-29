@@ -26,6 +26,7 @@ struct RemoteBoard {
   String diagnostic, software;
   uint32_t uptime = 0;
   bool driverReportAvailable = false;
+  bool trajectorySupported = false;
   uint32_t driverReportAt = 0;
   bool online = false, busy = false, latched = false, resetRequired = false;
   uint8_t homed = 0;
@@ -50,7 +51,9 @@ struct Lease {
 } lease;
 timiac::GcodeState manualParser;
 int armTimeMinutes = -1;
+int releaseClockMinute = -1; // Last automatic target; survives a proximity animation.
 bool releaseClockEnabled = false;
+bool releaseStartupPending = TIMIAC_MASTER && TIMIAC_RELEASE;
 struct Program {
   String id, name, state = "empty", error, uploadOwner, translation;
   unsigned total = 0, uploaded = 0, completed = 0;
@@ -81,7 +84,7 @@ bool bothOnline();
 bool bothHealthy();
 bool boardsHealthy(uint8_t mask);
 void finishLocal();
-void startOperation(JsonArray a, JsonArray b, const String& id, uint32_t hash, uint8_t mask = 3);
+void startOperation(JsonArray a, JsonArray b, const String& id, uint32_t hash, uint8_t mask = 3, bool trajectory = false);
 void recordReceipt() {
   for (auto& r : receipts) if (r.id == operation.id) {
     r.state = operation.barrier.name(); r.error = operation.error; return;
@@ -100,10 +103,11 @@ uint32_t commandHash(JsonVariant a, JsonVariant b) {
   String text; serializeJson(a, text); text += '|'; serializeJson(b, text);
   return hashText(text);
 }
-bool validLines(JsonVariant value) {
-  if (!value.is<JsonArray>() || value.size() > kMaxCommands) return false;
+bool validLines(JsonVariant value, bool trajectory = false) {
+  if (!value.is<JsonArray>() || value.size() > (trajectory ? timiac::maxTrajectoryCommands : kMaxCommands)) return false;
   for (JsonVariant entry : value.as<JsonArray>())
-    if (!entry.is<const char*>() || !timiac::validNative(entry.as<const char*>(), kAxisCount, kTravelMm, kMaxFeed)) return false;
+    if (!entry.is<const char*>() || !timiac::validNative(entry.as<const char*>(), kAxisCount, kTravelMm, kMaxFeed) ||
+        (trajectory && !timiac::trajectoryCommand(entry.as<const char*>()))) return false;
   return true;
 }
 bool validStep(JsonVariant step) {

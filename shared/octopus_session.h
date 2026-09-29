@@ -33,12 +33,14 @@ class OctopusSession {
   bool halted() const { return state == State::Halted; }
   bool busy() const { return running() || state == State::Prepare || state == State::Prepared || state == State::Drain; }
   void clearPosition() { homed = 0; for (auto& value : known) value = false; }
-  bool stage(const char* const* lines, unsigned count, uint32_t now) {
-    if (state != State::Ready || !healthy(now) || count > 6) return false;
+  bool stage(const char* const* lines, unsigned count, uint32_t now, bool trajectory = false) {
+    if (state != State::Ready || !healthy(now) || count > (trajectory ? maxTrajectoryCommands : 6U)) return false;
+    if (trajectory && (!count || homed != (1U << axisCount) - 1)) return false;
     size = cursor = 0; requireDriverCheck = false;
     add("G21"); add("G90");
     for (unsigned n = 0; n < count; ++n) {
       if (!validNative(lines[n], axisCount, travelMm, maxFeed)) { size = 0; return false; }
+      if (trajectory && !trajectoryCommand(lines[n])) { size = 0; return false; }
       if (homingCommand(lines[n])) {
         requireDriverCheck = true;
         // Preserve the group so Octopus can stop each arm independently in

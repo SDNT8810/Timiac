@@ -122,6 +122,8 @@ void sendState() {
   sendPeer(peers[0], doc); lastStateTx = millis();
 }
 void stopAll(const String& reason) {
+  releaseClockMinute = -1;
+  releaseStartupPending = false;
   releaseClockEnabled = false;
   if (systemLatched) return;
   // A never-connected, unused board cannot hold recovery hostage. A lost
@@ -165,16 +167,23 @@ void recoverStop() {
   }
 }
 void finishLocal() { operation.barrier.done(3); recordReceipt(); sendState(); }
-void startOperation(JsonArray a, JsonArray b, const String& id, uint32_t hash, uint8_t mask) {
+void startOperation(JsonArray a, JsonArray b, const String& id, uint32_t hash, uint8_t mask, bool trajectory) {
+  // An accepted manual action also takes over from a pending release startup.
+  releaseStartupPending = false;
   operation = Operation(); operation.id = id; operation.hash = hash;
   operation.homing = hasHoming(a) || hasHoming(b);
   operation.barrier.begin(millis(), mask); recordReceipt();
+  if (trajectory && (!boards[0].trajectorySupported || !boards[1].trajectorySupported ||
+      !validLines(a, true) || !validLines(b, true))) {
+    stopAll("Continuous motion requires updated ESP bridges and valid trajectory commands"); return;
+  }
   for (unsigned i = 0; i < 2; ++i) {
     if (!operation.barrier.includes(i)) continue;
     Peer* p = boardPeer(i);
-    DynamicJsonDocument doc(2304);
+    DynamicJsonDocument doc(trajectory ? 4096 : 2304);
     doc["type"] = "prepare"; doc["id"] = id; doc["hash"] = hash; doc["lines"] = i == 0 ? a : b;
     doc["homing"] = operation.homing;
+    if (trajectory) doc["trajectory"] = true;
     if (!p || !sendPeer(*p, doc)) { stopAll("Could not prepare required board bridge"); return; }
   }
 }
@@ -207,6 +216,7 @@ void processPeer(Peer& p, const String& line) {
           workRequiresBoard(p.board)) stopAll("A required board bridge restarted; work stopped");
       lastBoardBoot[p.board] = from;
       boards[p.board].software = doc["software"] | "unknown";
+      boards[p.board].trajectorySupported = doc["trajectoryVersion"] == timiac::trajectoryVersion;
       boards[p.board].online = false;
       boards[p.board].stopAck = "";
       boards[p.board].driverReportAvailable = false;
@@ -295,19 +305,20 @@ void processPeer(Peer& p, const String& line) {
     sendState();
   } else if (!TIMIAC_MASTER && type == "prepare") {
     String id = doc["id"] | "";
+    const bool trajectory = doc["trajectory"] | false;
     if (id == operation.id) {
       if (doc["hash"] != operation.hash) stopAll("Conflicting duplicate preparation");
       sendState(); return;
     }
     bool stale = false; for (auto& r : receipts) if (r.id == id) stale = true;
-    if (stale || id.isEmpty() || id.length() > 96 || !validLines(doc["lines"]) || !uart.healthy() ||
+    if (stale || id.isEmpty() || id.length() > 96 || !validLines(doc["lines"], trajectory) || !uart.healthy() ||
         systemLatched || operation.barrier.active()) {
       stopAll("Preparation rejected: unavailable board, unhomed axis, stale or invalid command"); return;
     }
     operation = Operation(); operation.id = id; operation.hash = doc["hash"] | 0U;
     // The idle peer also waits through the other board's homing operation.
     operation.homing = (doc["homing"] | false) || hasHoming(doc["lines"].as<JsonArray>());
-    operation.barrier.begin(millis()); uart.stage(doc["lines"].as<JsonArray>()); recordReceipt(); sendState();
+    operation.barrier.begin(millis()); uart.stage(doc["lines"].as<JsonArray>(), trajectory); recordReceipt(); sendState();
   } else if (!TIMIAC_MASTER && type == "commit") {
     if (doc["id"] != operation.id) { stopAll("Commit does not match prepared command"); return; }
     if (operation.barrier.phase == timiac::Phase::Running || operation.barrier.phase == timiac::Phase::Done) { sendState(); return; }
@@ -364,6 +375,7 @@ void networkTick() {
         hello["type"] = "hello"; hello["key"] = TIMIAC_PEER_KEY; hello["version"] = timiac::protocolVersion;
         hello["machine"] = timiac::machineId;
         hello["software"] = kSoftwareRevision; hello["resetReason"] = bridgeResetReason;
+        hello["trajectoryVersion"] = timiac::trajectoryVersion;
         hello["board"] = TIMIAC_BOARD_ID; hello["axes"] = kAxisCount; sendPeer(p, hello);
       }
     }

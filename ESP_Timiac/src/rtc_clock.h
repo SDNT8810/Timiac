@@ -102,6 +102,7 @@ bool setRtcDate(const DateTime& date) {
   rtcTick(true);
   if (!rtcPresent || !rtcInitialized) return false;
   rtc.adjust(date);
+  releaseClockMinute = -1; // Setting/synchronizing time is not an hourly tick.
   rtcTick(true);
   return rtcValid && rtcTime.unixtime() >= date.unixtime() && rtcTime.unixtime() - date.unixtime() <= 1;
 }

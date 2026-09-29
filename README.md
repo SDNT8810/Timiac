@@ -1,9 +1,61 @@
 # Timiac: twelve motors, three ESP modules
 
-**Current package (2026-09-29.1):** all twelve arms request **800 mA RMS**
+**50 mm travel (2026-09-29.6):** all twelve arms now have a 0-50 mm
+position range. Close sends every arm to 50 mm in both dev and release modes.
+Clock poses and generated animations use the same 50 mm stroke.
+
+**Automatic hour dance and corner blending (2026-09-29.5):** release now runs
+the Next hour dance once when the RTC crosses an hour, including midnight,
+then continues following the clock. At 01:59 → 02:00 it dances to 02:00.
+Ordinary five-minute updates still move directly to their pose. Startup and
+manual time changes establish the current pose without an extra hour dance.
+
+Marlin now normalizes corner directions across all six moving axes and uses
+0.3 mm junction deviation instead of 0.003 mm, reducing corner braking during
+Next hour and Struggle. Acceleration and maximum speed stay unchanged; genuine
+direction reversals still slow down. Reflash the matched package below.
+
+Both master
+modes use the installed counterclockwise wiring: X1 is 12, Y1 is 11, through C2
+at 1. Next 5 min and Next hour advance clockwise to the correct physical arms.
+The maximum actuator stroke is **50 mm**. Next hour and Struggle each queue one
+continuous path per bridge; Struggle omits its former simulator pauses.
+
+Install developer mode (connect each ESP separately):
+
+```powershell
+python run.py octopus_dev --sd I:\
+python run.py esp1_dev --port COM5
+python run.py esp2_dev --port COM5
+python run.py master_dev --port COM5
+```
+
+Install release mode:
+
+```powershell
+python run.py octopus_release --sd I:\
+python run.py esp1_release --port COM5
+python run.py esp2_release --port COM5
+python run.py master_release --port COM5
+```
+
+Repeat the Octopus card flash for both motor boards. The Octopus and bridge
+images are the same in both modes; each master command includes its matching
+web filesystem. The SD card is only needed to flash an Octopus and can be
+removed after `FIRMWARE.CUR` is written. The matching identity is
+**TIMIAC2-409426dd9f18**.
+
+**Release startup:** at power-up, the master
+waits for both motor boards to be healthy and idle, homes all twelve arms together,
+then displays the current RTC time and continues tracking it. No browser is needed.
+Developer mode still starts manually. Stop or a homing fault cancels automatic
+startup; reconnecting a board does not retry it. If the RTC is invalid, homing
+still runs and the clock pose waits for valid time.
+
+**Motor settings:** all twelve arms request **800 mA RMS**
 for running and microswitch homing, with **64 commanded microsteps** over UART
 and **internal interpolation to 256**. Calibration is **11,520 steps/mm**; travel
-remains 0-48 mm. Maximum feed is **500 mm/min** (96,000 step pulses/s); homing
+is 0-50 mm. Maximum feed is **500 mm/min** (96,000 step pulses/s); homing
 remains **120 mm/min**. The holding multiplier remains 0.5.
 Driver chopper timing now uses the 24 V preset for the reported 24 V / 7 A supply.
 
@@ -11,14 +63,14 @@ Driver chopper timing now uses the 24 V preset for the reported 24 V / 7 A suppl
 all six seek together and each stops at its own physical switch. The master
 prepares both bridges before starting both groups; Wi-Fi is not a guarantee
 of identical start times. Home selected retains ordinary single-axis homing.
-Pressed switches first release by 2 mm; a stuck or missing switch fails homing.
+Pressed switches first release by 5 mm; a stuck or missing switch fails homing.
 
 The development driver table now shows the values received in Marlin's M122
 report, including numerical mismatches, rather than substituting browser
 constants. These are configured values, not measured coil current.
-Reflash **both Octopus boards, both bridges, and the chosen master mode**;
+When upgrading from older motor settings, reflash **both Octopus boards, both bridges, and the chosen master mode**;
 the master command also installs its web filesystem. Reload the dashboard.
-The matching machine identity is **TIMIAC2-f5b8d948e714**.
+The matching machine identity is **TIMIAC2-409426dd9f18**.
 
 The requested current is now 800 mA, superseding the earlier 250 mA and
 1,414 mA settings. The Board 2 C2 release fault remains physically unverified;
@@ -68,12 +120,16 @@ After this matched update, switching modes only needs the master upload.
 
 **Dev:** the existing dashboard, manual controls, G-code uploads, driver/switch
 diagnostics, and test animations, with microswitch homing.
-**Release:** Home, Open, Close, Start clock, Stop, time and Wi-Fi settings.
-Home enables continuous RTC tracking once homing finishes. Start clock resumes
-tracking; Open, Close, Stop and faults pause it. Arms update at five-minute
+**Release:** Home, Close, Start clock, Next 5 min, Next hour, Struggle, Stop,
+time and Wi-Fi settings.
+Release starts with automatic Home all, then continuous RTC tracking. Manual
+Home also enables tracking once homing finishes. Start clock resumes
+tracking; Close, Next 5 min, Next hour, Struggle, Stop and faults pause it. Arms update at five-minute
 boundaries and return to current time after a hand gesture, with no phone or
-SD card required. No automatic homing or motion replay occurs after a reboot.
-Set a valid RTC time and Home again after power-up or Stop recovery.
+SD card required. Every release-master boot starts a fresh homing sequence;
+interrupted commands and programs are never replayed. After Stop or fault recovery,
+Home again if needed, or Start clock when all arms remain homed. Developer mode
+requires manual Home after power-up. The RTC must be valid to display time.
 Development command/program endpoints and detailed RTC diagnostics are unavailable
 in release mode. Internal driver, endstop, Stop and connection checks remain active.
 
@@ -127,7 +183,7 @@ cards. Runtime SD programs and autostart are disabled in this new firmware.
 
 The Octopus build starts from clean Marlin 2.1.2.7 and the explicit six-axis machine definition:
 **Octopus V1.1 / STM32F446, TMC2209 UART, MOTOR0/1/2/3/4/5, 800 mA RMS setting,
-64 microsteps interpolated to 256, 11,520 steps/mm, 0-48 mm travel, 500 mm/min maximum
+64 microsteps interpolated to 256, 11,520 steps/mm, 0-50 mm travel, 500 mm/min maximum
 maximum speed, 25 mm/s² S-curve acceleration** (80 mm/s² axis ceiling).
 The build adapts the pinned Lumiac six-arm configuration; see
 [the comparison and upload instructions](Docs/lumiac-comparison.md).
@@ -186,7 +242,7 @@ python run.py master_release --port COM5  # User dashboard
 ~~~
 
 Both serve **http://192.168.4.1/** on the same Timiac Wi-Fi network. The user
-dashboard contains Home, Open, Close, Start clock, a live RTC readout, and a
+dashboard contains Home, Close, Start clock, Next 5 min, Next hour, Struggle, a live RTC readout, and a
 date/time setting box. Stop uses a quick-stop for ordinary motion; interrupted
 homing requires an Octopus reset. Wait for both boards
 to report back, then Home before moving again. Control is acquired automatically,
@@ -214,21 +270,21 @@ Octopus firmware already supports these reports. Automatic switch polling is
 enabled by the development master; the release dashboard has no switch panel.
 
 - **Home:** homes all twelve axes to **0 mm**, which is physically fully open.
-  Required before moving after startup or a motor-board restart.
-- **Open:** moves all arms to **0 mm**, retaining their homed state.
-- **Close:** moves all arms to the configured maximum stroke (currently **48 mm**).
+  Release runs this automatically at master startup; dev requires the button.
+  Required again after a motor-board restart or loss of homing state.
+- **Close:** moves all arms to the configured maximum stroke (**50 mm**).
 - **Show time (dev) / Start clock (release):** reads the DS3231 and moves to the current pose.
-  Actuator targets are **24 mm** for the hour arm, **0 mm** for the minute arm,
-  and **48 mm** for all other arms (closed).
+  Actuator targets are **25 mm** for the hour arm, **0 mm** for the minute arm,
+  and **50 mm** for all other arms (closed).
   Minutes use five-minute steps, rounded down. When hour and minute overlap,
   the fully open minute arm takes precedence. The physical mechanism is inverted
   relative to the simulator's extension coordinates. Dev moves once per press;
   release continues following the RTC.
-- **Struggle (dev):** runs `Simulator/gcodes/circular-struggle.gcode`, including both
+- **Struggle:** runs `Simulator/gcodes/circular-struggle.gcode`, including both
   circular passes and the final 10% extension. It requires homing but not an RTC.
-- **Next 5 min (dev):** advances the arm pose to the next five-minute boundary, just
+- **Next 5 min:** advances the arm pose to the next five-minute boundary, just
   like the simulator's Next 5 min control (13:58 becomes 14:00).
-- **Next hour (dev):** adds one hour, runs `Simulator/gcodes/hour-movement.gcode`, and
+- **Next hour:** adds one hour, runs `Simulator/gcodes/hour-movement.gcode`, and
   replaces its example 01:00 ending with the selected time (13:35 becomes 14:35).
 
 The next-time controls advance from the last arm time, or the RTC if no arm time
@@ -236,17 +292,23 @@ is selected. Repeated presses continue advancing; midnight wraps normally.
 They **do not change the DS3231**. The large clock continues showing RTC time;
 the smaller Arms label shows the selected pose. Show time returns to the RTC pose.
 
-Animations run on the master and continue if the phone disconnects. Each step
-waits for both boards; Stop or a board fault cancels the remaining sequence.
+Animations run on the master and continue if the phone disconnects. Next hour
+and Struggle are one prepared trajectory per board, with only one final M400/M114 completion
+check. The master calculates the whole path; bridges queue and relay it. Nominal
+frame durations match across boards; a stationary board waits while the other
+moves. There are no full-machine dwell frames. Marlin still controls acceleration
+and blending, so exact timing and physical smoothness need hardware verification.
+The old Struggle G4 pauses are omitted; other animations and uploaded programs retain their step barriers.
+Stop or a board fault cancels the remaining sequence.
 The dashboard shows progress and disables other movement controls until completion.
 Home all axes before starting either animation.
 
 The animation source files are converted automatically when building the master.
 The old `A B C D E H I J K L U V` axis order becomes
-`X1 Y1 Z1 A1 B1 C1 X2 Y2 Z2 A2 B2 C2`. Simulator extension is converted to
+`X1 C2 B2 A2 Z2 Y2 X2 C1 B1 A1 Z1 Y1`. Simulator extension is converted to
 actuator position as `stroke × (1 − extension / 100)`: 100% becomes 0 mm,
-0% becomes 48 mm. Feeds scale by stroke/100 and are capped at the hardware limit.
-Ready-to-run examples using the current 48 mm stroke and 500 mm/min limit are
+0% becomes 50 mm. Feeds scale by stroke/100 and are capped at the hardware limit.
+Ready-to-run examples using the current 50 mm stroke and 500 mm/min limit are
 generated in `gcodes/circular-struggle.gcode`, `gcodes/hour-movement.gcode`, and
 `gcodes/curious-creature.gcode`.
 Edit the simulator source files and rebuild to change these animations.
@@ -265,8 +327,17 @@ Reload the updated hardware animation files before uploading older programs.
 all arms; the 1 mm smoke test remains a small actuator move from home and back.
 
 The clockwise arm order, starting at **12 o'clock**, is
-**X1, Y1, Z1, A1, B1, C1, X2, Y2, Z2, A2, B2, C2**. At 03:30, A1 is halfway
-open and X2 fully open. Mount/wire the arms in this order.
+**X1, C2, B2, A2, Z2, Y2, X2, C1, B1, A1, Z1, Y1**. At 03:30, A2 is halfway
+open and X2 fully open. The installed board order is:
+
+| Board 1 arm | Clock position | Board 2 arm | Clock position |
+|---|---|---|---|
+| X1 | 12 | X2 | 6 |
+| Y1 | 11 | Y2 | 5 |
+| Z1 | 10 | Z2 | 4 |
+| A1 | 9 | A2 | 3 |
+| B1 | 8 | B2 | 2 |
+| C1 | 7 | C2 | 1 |
 
 Connect the DS3231 to the **master ESP32**, using 3.3 V-compatible I2C levels:
 
@@ -285,8 +356,9 @@ Enter the local date/time, or press **Use phone time** to fill the form, then
 **Save time**. The master writes the DS3231 and reads it back before confirming.
 The dashboard's time comes from the RTC, independently of the phone. Missing
 hardware or lost RTC power is reported; Show time stays disabled until the RTC
-has valid time. Home/Open/Close still work without an RTC. Booting or flashing
-does not overwrite the RTC, and no movement starts on boot.
+has valid time. Home/Close still work without an RTC. Booting or flashing
+does not overwrite the RTC. Release homes on boot and displays time once the RTC
+is valid; developer mode starts without movement.
 
 When the saved router/hotspot has internet access, the master synchronizes the
 DS3231 from NTP after it joins and then every 12 hours while idle. The default
@@ -311,7 +383,7 @@ switching dashboard modes.
 
 In both master modes, an approaching hand at **20-49 cm** starts
 `Simulator/gcodes/curious-creature.gcode`, with the same twelve-axis mapping,
-48 mm stroke scaling and hardware feed limits as the other animations.
+50 mm stroke scaling and hardware feed limits as the other animations.
 The converted manual example is `gcodes/curious-creature.gcode`.
 
 Both dashboards show **Hand distance** in centimetres below the clock,
@@ -381,7 +453,8 @@ image, flash the shared `firmware.bin` to both boards too.
 6. After Stop or a recoverable communication fault, wait for the participating boards to
    report back, then Home. Interrupted motion is never replayed.
 
-No homing or movement starts on boot. A physical power cutoff is still
+Developer mode starts without movement; release automatically homes all arms and
+displays the current time once both boards are ready. A physical power cutoff is still
 needed; software shutdown can release motor torque.
 
 ## Board status and faults

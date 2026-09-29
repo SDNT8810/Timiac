@@ -11,23 +11,35 @@ test('all twelve arms route to exactly one board and axis', () => {
   for (const arm of [0, 13, 1.5, NaN]) assert.throws(() => armAddress(arm));
 });
 test('manual moves reject travel, feed and non-finite values', () => {
-  for (const value of [-1, 49, NaN, Infinity]) assert.throws(() => moveArm(1, value, 180));
+  for (const value of [-1, 50.001, 52, NaN, Infinity]) assert.throws(() => moveArm(1, value, 180));
   for (const value of [0, -1, 701, NaN]) assert.throws(() => moveArm(1, 3, value));
 });
 test('simulator remaps all twelve arms while reserving F for feed rate', () => {
   const [step] = compileProgram('G1 A10 B20 C30 D40 E50 H60 I70 J80 K90 L100 U0 V5 F600', 'simulator');
-  assert.deepEqual(step.a, ['G21', 'G90', 'G1 X43.2 Y38.4 Z33.6 A28.8 B24 C19.2 F288']);
-  assert.deepEqual(step.b, ['G21', 'G90', 'G1 X14.4 Y9.6 Z4.8 A0 B48 C45.6 F288']);
-  assert.equal(compileProgram('G1 H25 F300', 'simulator')[0].a.at(-1), 'G1 C36 F144');
-  assert.equal(compileProgram('G1 A10 H20 F600', 'simulator')[0].a.at(-1), 'G1 X43.2 C38.4 F288');
+  assert.deepEqual(step.a, ['G21', 'G90', 'G1 X45 C10 B5 A0 Z50 Y47.5 F300']);
+  assert.deepEqual(step.b, ['G21', 'G90', 'G1 C40 B35 A30 Z25 Y20 X15 F300']);
+  assert.equal(compileProgram('G1 H25 F300', 'simulator')[0].b.at(-1), 'G1 Y37.5 F150');
+  const split = compileProgram('G1 A10 H20 F600', 'simulator')[0];
+  assert.equal(split.a.at(-1), 'G1 X45 F300');
+  assert.equal(split.b.at(-1), 'G1 Y40 F300');
+});
+
+test('clockwise simulator arms match the physical 12-to-1 wiring', () => {
+  const expected = ['X1', 'C2', 'B2', 'A2', 'Z2', 'Y2', 'X2', 'C1', 'B1', 'A1', 'Z1', 'Y1'];
+  for (const [i, letter] of [...'ABCDEHIJKLUV'].entries()) {
+    const [step] = compileProgram(`G1 ${letter}100 F600`, 'simulator');
+    const [axis, board] = expected[i];
+    assert.deepEqual(step[board === '1' ? 'a' : 'b'], ['G21', 'G90', `G1 ${axis}0 F300`]);
+    assert.deepEqual(step[board === '1' ? 'b' : 'a'], []);
+  }
 });
 test('relative coordinates need a known origin and remain in range', () => {
   assert.throws(() => compileProgram('G91\nG1 A2', 'simulator'), /needs G28/);
   const steps = compileProgram('G28\nG91\nG1 A-5 I-5 F600\nG1 A2 I2', 'simulator');
-  assert.equal(steps[2].a.at(-1), 'G1 X1.44 F288');
-  assert.equal(steps[2].b.at(-1), 'G1 X1.44 F288');
+  assert.equal(steps[2].a.at(-1), 'G1 X1.5 F300');
+  assert.equal(steps[2].b.at(-1), 'G1 X1.5 F300');
   assert.throws(() => compileProgram('G28\nG91\nG1 A1', 'simulator'), /outside/);
-  assert.equal(compileProgram('G1 A20\nG91\nG1 A10', 'simulator')[1].a.at(-1), 'G1 X33.6 F288');
+  assert.equal(compileProgram('G1 A20\nG91\nG1 A10', 'simulator')[1].a.at(-1), 'G1 X35 F300');
 });
 test('unsupported and malformed simulator commands fail before any transmission', () => {
   for (const source of ['G1 A101', 'G1 A10 !', 'G1 A1 A2', 'G28 A', 'G4 P-2', 'G4 S121', 'G4 P1 S2', 'M24', 'G90 A2', 'G1 H1 F1 F300'])
@@ -48,7 +60,7 @@ test('every existing simulator study compiles without out-of-range hardware outp
     for (const step of steps) for (const board of ['a', 'b']) for (const line of step[board]) {
       assert.ok(line.length <= 160, filename);
       if (line.startsWith('G1 ')) {
-        for (const [, , value] of line.matchAll(/([XYZABC])([\d.]+)/g)) assert.ok(Number(value) <= 48);
+        for (const [, , value] of line.matchAll(/([XYZABC])([\d.]+)/g)) assert.ok(Number(value) <= 50);
       }
     }
   }

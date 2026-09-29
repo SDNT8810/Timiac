@@ -23,7 +23,9 @@ test('three-ESP API: exclusive control, X1/X2 routing, diagnostics, and rejected
   await client.execute('G90 X2 2 F180');
   assert.equal(client.status.a.positions[0], 10); assert.equal(client.status.b.positions[0], 2);
   await assert.rejects(client.execute('G90 Y1 2 F180'), /not installed/);
-  await assert.rejects(client.execute('G90 X1 49 F180'), /travel/);
+  await client.execute('G90 X1 50 F180');
+  assert.equal(client.status.a.positions[0], 50);
+  await assert.rejects(client.execute('G90 X1 53 F180'), /travel/);
   await client.execute('M119');
   assert.ok(client.events.some(event => event.text.includes('x_min')));
   await observer.stop();

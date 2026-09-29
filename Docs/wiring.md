@@ -82,7 +82,7 @@ on each physical mechanism before production use.
 | Motor / driver | X/Y/Z/A/B/C in G-code; Marlin internally calls the last three drivers I/J/K |
 | Reported supply / chopper timing | 24 V / 7 A, CHOPPER_DEFAULT_24V |
 | Current / microsteps | 800 mA RMS requested / 64 commanded, interpolated to 256 |
-| Steps / travel | 11,520 steps/mm / 0–48 mm |
+| Steps / travel | 11,520 steps/mm / 0–50 mm |
 | Maximum feed | 8.333 mm/s = 500 mm/min |
 | Acceleration | S-curve: 25 mm/s² travel, 80 mm/s² per-axis ceiling |
 | Homing speed / direction | 120 mm/min, concurrent physical microswitch homing / toward each axis minimum |
@@ -93,7 +93,7 @@ on each physical mechanism before production use.
 | Runtime SD / EEPROM settings | disabled |
 
 The home endstop is at the **fully open** arm position: actuator **0 mm**.
-Moving toward **48 mm closes** the arm. Keep the working motor directions and
+Moving toward **50 mm closes** the arm. Keep the working motor directions and
 minimum-endstop wiring; the master reverses visual clock/animation targets.
 Both bridges and Octopus boards execute native actuator coordinates directly.
 
@@ -140,7 +140,7 @@ change from `open` to `TRIGGERED`. If it does not change, check the connector,
 signal/GND wiring, switch contact and DIAG jumper before attempting motion.
 
 `echo:Bad A Endstop?` specifically means Marlin still reads the A home input
-as triggered after the 2 mm homing backoff. The message confirms it recognized
+as triggered after the 5 mm homing backoff. The message confirms it recognized
 axis A. This can happen if the switch is held, another arm's switch is connected
 to the A input, the circuit is open, the driver/motor does not back off, or the
 mechanism has not released the switch. The message alone does not distinguish
@@ -155,11 +155,11 @@ The corrected bridge preserves this cause and shows **Reset required**;
 Stop acknowledgements and later UART timeouts cannot erase it. Homing and
 switch wiring still need physical verification after the fault is corrected.
 
-Marlin's initial homing search is 1.5 times the configured 48 mm travel
-(72 mm commanded). Do not wait for that search to finish if the motor moves
+Marlin's initial homing search is 1.5 times the configured 50 mm travel
+(75 mm commanded). Do not wait for that search to finish if the motor moves
 away from its sensor. `VALIDATE_HOMING_ENDSTOPS` stops on a missed switch;
 `DETECT_BROKEN_ENDSTOP` now also stops if a switch remains triggered after
-the 2 mm backoff. Neither check can establish that the physical direction
+the 5 mm backoff. Neither check can establish that the physical direction
 or wiring is correct.
 
 ## Three ESP-12S modules

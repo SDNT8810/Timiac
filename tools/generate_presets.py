@@ -5,7 +5,8 @@ import json
 
 ROOT = Path(__file__).resolve().parents[1]
 SIM_AXES = "ABCDEHIJKLUV"
-HW_AXES = [f"{axis}{board}" for board in (1, 2) for axis in "XYZABC"]
+# Simulator A..V runs clockwise from 12; physical XYZABC / XYZABC is reversed.
+HW_AXES = ["X1", "C2", "B2", "A2", "Z2", "Y2", "X2", "C1", "B1", "A1", "Z1", "Y1"]
 PRESETS = {"struggle": "circular-struggle", "hour": "hour-movement", "curious": "curious-creature"}
 
 
@@ -58,8 +59,12 @@ def generate():
               "struct PresetFrame { float positions[12]; float feed; unsigned dwell; };"]
     for name, filename in PRESETS.items():
         data = frames((ROOT / f"Simulator/gcodes/{filename}.gcode").read_text(encoding="utf-8-sig"))
+        if name == "struggle":
+            # Preserve the travelling wave without the simulator's two rests.
+            data = [frame for frame in data if not frame[2]]
         header.append(f"constexpr PresetFrame {name}Frames[] = {{")
         example = [f"; Generated from Simulator/gcodes/{filename}.gcode", f"; Hardware: {travel:g} mm stroke, maximum {max_feed:g} mm/min. Home all axes first.",
+                   "; Clockwise from 12: " + " ".join(HW_AXES),
                    f"; Inverted mechanism: 0 mm = fully open/home, {travel:g} mm = closed.", "G90"]
         for positions, feed, dwell in data:
             header.append("  {{" + ", ".join(f"{v:g}" for v in positions) + f"}}, {feed:g}, {dwell}" + "},")

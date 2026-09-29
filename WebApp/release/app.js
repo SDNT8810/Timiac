@@ -10,7 +10,8 @@ function render(state = controller.status) {
   const otherOwner = state?.control?.owner && !controller.ownsControl();
   const programBusy = ['uploading', 'running', 'paused'].includes(state?.program?.state);
   const moving = programBusy || ['preparing', 'running'].includes(state?.operation?.state);
-  const blocked = busy || stopping || !connected || otherOwner || !state?.machineReady || moving || state?.stopPending;
+  const startupPending = state?.clock?.startupPending;
+  const blocked = busy || stopping || !connected || otherOwner || !state?.machineReady || moving || state?.stopPending || startupPending;
   const homed = state?.a?.homed === 63 && state?.b?.homed === 63;
   document.querySelectorAll('[data-action]').forEach(button => {
     const needsRtc = clockActionNeedsRtc(button.dataset.action, state);
@@ -19,7 +20,10 @@ function render(state = controller.status) {
   $('save-time').disabled = Boolean(busy || !connected || otherOwner || !state?.clock?.present);
   for (const id of ['wifi-save', 'wifi-forget']) $(id).disabled = Boolean(busy || !connected || otherOwner);
   $('connection').textContent = connected ? 'Connected to Timiac' : 'Disconnected';
-  $('running-status').textContent = !connected ? 'Waiting for clock status…' : !homed ? 'Home the arms to start the clock.' :
+  $('running-status').textContent = !connected ? 'Waiting for clock status…' :
+    startupPending ? 'Starting automatically: waiting for both motor boards, then homing all arms.' :
+    moving && state.operation?.homing ? 'Homing all arms. The clock will start when homing finishes.' :
+    !homed ? 'Home the arms to start the clock.' :
     !state.clock?.running ? 'Clock paused. Press Start clock to follow the time.' : !state.clock.valid ? 'Clock waiting for a valid time.' :
     'Clock running. Arms follow the time every five minutes, even with this page closed.';
   $('machine-status').textContent = !connected ? 'Connection lost. Waiting for Timiac…' : state.fault || (otherOwner ? 'Another device has control. Please wait.' : moving ? 'Arms are moving…' : !state.machineReady ? 'Waiting for both motor boards…' : !homed ? 'Ready to home. Home all arms before moving.' : 'All 12 arms are ready.');
@@ -28,7 +32,7 @@ function render(state = controller.status) {
     $('machine-status').textContent = 'All 12 arms ready. Move hand away to arm the sensor.';
   }
   renderSystemStatus(state, connected, $);
-  $('travel').textContent = `All arms to ${state?.travelMm ?? 48} mm`;
+  $('travel').textContent = `All arms to ${state?.travelMm ?? 50} mm`;
   const time = renderClockReadouts(state, connected, $);
   if (time && !initializedInput) { $('local-time').value = time; initializedInput = true; }
 }

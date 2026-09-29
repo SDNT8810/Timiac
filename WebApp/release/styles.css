@@ -125,13 +125,15 @@ form small { grid-column: 1 / -1; font-size: 10px; color: #64705e; }
   .form-actions button { padding: 8px 10px; }
 }
 
-/* Four main controls plus a compact row of three animation controls. */
+/* Three main controls followed by a row of three animation controls. */
 .controls { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-.controls button { grid-column: span 3; }
+.controls button { grid-column: span 2; }
 .controls .preset { grid-column: span 2; grid-template-columns: minmax(0, 1fr); text-align: center; gap: 4px; padding: 10px 6px; }
 .controls .preset strong { font-size: clamp(13px, 1.6vw, 20px); }
 @media (max-width: 700px) and (orientation: portrait) {
   main { grid-template-rows: auto minmax(90px, 1fr) minmax(172px, 1.2fr) auto auto auto; }
+  .controls button { grid-template-columns: minmax(0, 1fr); text-align: center; }
+  .controls .symbol { display: none; }
   .controls .preset strong { font-size: 13px; }
   .controls .preset small { display: none; }
 }
