@@ -20,6 +20,7 @@
 #include <RTClib.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+SET_LOOP_TASK_STACK_SIZE(kMasterLoopStackBytes);
 #endif
 
 namespace {
@@ -38,6 +39,7 @@ WiFiServer listener(kPeerPort);
 #include "proximity_sensor.h"
 #include "wifi_uplink.h"
 #include "ntp_clock.h"
+#include "motion_speed.h"
 #include "cloud_relay.h"
 #include "web_api.h"
 #include "release_clock.h"
@@ -56,6 +58,7 @@ void setup() {
   WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
   WiFi.softAP(TIMIAC_WIFI_SSID, TIMIAC_WIFI_PASSWORD, 6, false, 8);
   configureUplink();
+  configureMotionSpeed();
   dns.start(53, "*", IPAddress(192,168,4,1));
   configureClock();
   rtcTick(true);

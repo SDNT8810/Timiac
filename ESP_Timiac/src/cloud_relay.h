@@ -59,10 +59,7 @@ const char* startCloudAction(const String& type, const String& requestId, const 
   startOperation(command["a"].as<JsonArray>(), command["b"].as<JsonArray>(),
                  "cloud-" + requestId.substring(0, 72), hashText("cloud:" + type + ":" + requestId));
   armTimeMinutes = !systemLatched && type == "show-time" ? int(targetMinute) : -1;
-#if TIMIAC_RELEASE
-  releaseClockEnabled = !systemLatched && (type == "home" || type == "show-time");
-  releaseClockMinute = -1;
-#endif
+  trackManualClockAction(type.c_str());
   return nullptr;
 }
 void receiveCloudAction(JsonVariant action) {

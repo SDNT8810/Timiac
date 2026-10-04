@@ -88,6 +88,12 @@ test('ordinary moves retain the shorter completion deadline', async () => {
   await assert.rejects(move.client.action('close'), /Completion timeout/);
   assert.equal(move.requests(), 3);
 });
+
+test('20 percent motion can wait beyond the old browser cap', async () => {
+  const move = slowOperation(1500000, 6);
+  await move.client.action('close');
+  assert.equal(move.requests(), 6);
+});
 test('dashboard shows RTC time and disables motion for missing home, RTC, connection, or competing owner', async () => {
   const { context, element, state } = dashboard(); await flush();
   assert.equal(element('clock').textContent, '13:45:12');
@@ -138,6 +144,28 @@ test('Stop cancels an action waiting for control', async () => {
   const pending = element('close').listeners.click();
   await element('stop').listeners.click(); await pending;
   assert.ok(calls.includes('stop')); assert.ok(!calls.includes('close'));
+});
+
+test('manual Home promises to stay parked and speed slider saves through the control lease', async () => {
+  const { context, element, state, calls } = dashboard(); await flush();
+  state.clock.running = false; state.operation = { state: 'running', homing: true };
+  vm.runInContext('render()', context);
+  assert.match(element('running-status').textContent, /stay home/);
+  assert.equal(element('motion-speed').disabled, true);
+  state.operation.state = 'done'; vm.runInContext('render()', context);
+  assert.equal(element('motion-speed').value, '50');
+  assert.equal(element('motion-speed').disabled, false);
+  element('motion-speed').value = '20'; element('motion-speed').listeners.input();
+  vm.runInContext('render()', context); // Status polling must not move the thumb while dragging.
+  assert.equal(element('motion-speed').value, '20');
+  assert.equal(element('speed-value').textContent, '20%');
+  await element('motion-speed').listeners.change();
+  assert.equal(calls[0], 'claim');
+  assert.equal(calls[1].path, '/api/speed'); assert.equal(calls[1].data.percent, 20);
+  state.speedPercent = 100; vm.runInContext('render()', context);
+  assert.equal(element('motion-speed').value, '100');
+  state.control.owner = 'other'; vm.runInContext('render()', context);
+  assert.equal(element('motion-speed').disabled, true);
 });
 
 test('animation waits for the whole program, even when a single step has finished', async () => {

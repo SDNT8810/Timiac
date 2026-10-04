@@ -23,9 +23,10 @@ class OctopusSession {
   bool homingInFlight = false;
   bool driverReportAvailable = false;
   uint32_t sent = 0, lastRx = 0, lastPoll = 0;
+  unsigned speedPercent = 100;
   uint32_t driverReportAge(uint32_t now) const { return uint32_t(now - driverAt); }
   bool online(uint32_t now) const {
-    return identity && state != State::Halted && uint32_t(now - lastRx) < (running() ? 180000U : 15000U);
+    return identity && state != State::Halted && uint32_t(now - lastRx) < (running() ? acknowledgementTimeout(active, speedPercent) : 15000U);
   }
   bool healthy(uint32_t now) const { return online(now) && drivers.good() && !fault[0]; }
   bool running() const { return state == State::Run; }
@@ -33,15 +34,30 @@ class OctopusSession {
   bool halted() const { return state == State::Halted; }
   bool busy() const { return running() || state == State::Prepare || state == State::Prepared || state == State::Drain; }
   void clearPosition() { homed = 0; for (auto& value : known) value = false; }
-  bool stage(const char* const* lines, unsigned count, uint32_t now, bool trajectory = false) {
+  bool stage(const char* const* lines, unsigned count, uint32_t now, bool trajectory = false, unsigned percent = 100) {
+    if (!validSpeedPercent(percent)) return false;
     if (state != State::Ready || !healthy(now) || count > (trajectory ? maxTrajectoryCommands : 6U)) return false;
     if (trajectory && (!count || homed != (1U << axisCount) - 1)) return false;
     size = cursor = 0; requireDriverCheck = false;
+    speedPercent = percent;
     add("G21"); add("G90");
+    char speed[16]; snprintf(speed, sizeof(speed), "M220 S%u", speedPercent); add(speed);
+    // Clock poses can leave one whole Octopus motionless for over ten minutes.
+    // Marlin's printer idle timeout then disables its motors and invalidates
+    // homing; diagnostics/no-op G1s do not refresh that timer. Hold the pose
+    // until an explicit release, including after manual Home. S0 changes
+    // only the idle timeout: bare M18/M84 still releases motors normally.
+    add("M84 S0");
     for (unsigned n = 0; n < count; ++n) {
       if (!validNative(lines[n], axisCount, travelMm, maxFeed)) { size = 0; return false; }
       if (trajectory && !trajectoryCommand(lines[n])) { size = 0; return false; }
-      if (homingCommand(lines[n])) {
+      if (!strncmp(lines[n], "G4 P", 4)) {
+        // A stationary board uses dwell to match its partner's trajectory
+        // frame. M220 only scales moves, so scale waits explicitly as well.
+        char dwell[24];
+        snprintf(dwell, sizeof(dwell), "G4 P%.0f", ceilf(strtof(lines[n] + 4, nullptr) * 100.0f / speedPercent));
+        if (!add(dwell)) return false;
+      } else if (homingCommand(lines[n])) {
         requireDriverCheck = true;
         // Preserve the group so Octopus can stop each arm independently in
         // one concurrent seek, just like Lumiac. Mark homed only on its ack.
@@ -99,7 +115,7 @@ class OctopusSession {
       return nullptr;
     }
     if (waiting) {
-      const uint32_t limit = running() ? acknowledgementTimeout(active) : 10000;
+      const uint32_t limit = running() ? acknowledgementTimeout(active, speedPercent) : 10000;
       if (uint32_t(now - sent) >= limit) {
         char message[180];
         snprintf(message, sizeof(message), "%s acknowledgement timed out; checking Octopus link", active);

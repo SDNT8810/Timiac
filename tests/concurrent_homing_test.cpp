@@ -42,7 +42,18 @@ void kill(const char*) { killed = true; }
 void set_axis_never_homed(AxisEnum a) { homed &= ~(1U << a); }
 void set_axis_is_at_home(AxisEnum a) { homed |= 1U << a; current_position[a] = 0; }
 void sync_plan_position() {}
-float homing_feedrate(AxisEnum) { return 2; }
+#define FORCE_INLINE inline
+#define TERN0(condition, value) value
+#define DISABLED(option) 1
+#define NUM_AXIS_CODE(a,b,c,d,e,f,g,h,i) a; b; c; d; e; f
+#define HOMING_FEEDRATE_MM_M {120,120,120,120,120,120}
+#define MMM_TO_MMS(v) ((v) / 60.0f)
+#define constrain(v, lo, hi) _MIN(_MAX(v, lo), hi)
+struct xyz_feedrate_t { float x, y, z, i, j, k; };
+uint8_t timiac_homing_percent = 100;
+int16_t feedrate_percentage = 100;
+#include "homing_feedrate.inc"
+#include "restorer.inc"
 float max_length(AxisEnum) { return 50; }
 struct Endstops {
   uint8_t pressed = 0;
@@ -75,12 +86,28 @@ struct Planner {
   }
 } planner;
 #include "concurrent_homing_routine.inc"
+void homeAtSpeed(unsigned percent) {
+  feedrate_percentage = percent;
+#include "homing_speed_capture.inc"
+  feedrate_percentage = 100; // G28's remember_feedrate_scaling_off.
+  home_spider_group();
+}
 void reset() {
   planner = Planner(); stepper = Stepper(); endstops = Endstops();
   killed = stuck = releaseInterrupted = false; cancelAt = 0; seekHits = 63;
   homed = 63; messages.clear(); partialMessage.clear();
 }
 int main() {
+  for (unsigned percent : {20U, 50U, 100U}) {
+    for (bool cancelled : {false, true}) {
+      reset(); endstops.pressed = 0x25; cancelAt = cancelled ? 2 : 0;
+      homeAtSpeed(percent);
+      assert(planner.moves.size() == 2);
+      for (const auto& move : planner.moves) assert(std::fabs(move.feed - 2 * percent / 100.0f) < 0.00001f);
+      assert(timiac_homing_percent == 100); // No scaling leaks out of G28.
+      assert(homed == (cancelled ? 0U : 63U));
+    }
+  }
   reset(); home_spider_group();
   assert(!killed && homed == 63 && planner.moves.size() == 1 && !stepper.active);
   const auto move = planner.moves[0];

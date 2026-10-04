@@ -23,6 +23,12 @@ struct GcodeState {
 struct Step {
   char lines[2][3][128] = {};
   unsigned count[2] = {};
+  void clear() {
+    // Reset in place. `step = Step()` creates another 776-byte stack object
+    // on ESP32; nested animation builders can exhaust the Arduino loop stack.
+    memset(lines, 0, sizeof(lines));
+    count[0] = count[1] = 0;
+  }
   void add(unsigned board, const char* line) {
     if (count[board] < 3) snprintf(lines[board][count[board]++], 128, "%s", line);
   }
@@ -46,7 +52,7 @@ inline bool readNumber(const char*& p, float& value) {
 // inverted animation files must pass through unchanged to both Octopus boards.
 inline const char* compileLine(const char* input, GcodeState& state, Step& result,
                                unsigned axisCount = 1, float travel = travelMm, float maxFeed = 369.6f) {
-  result = Step();
+  result.clear();
   if (!axisCount || axisCount > 6 || strlen(input) > 240) return "Line/configuration too long or invalid";
   char cleaned[241]; unsigned n = 0; bool comment = false;
   for (const char* s = input; *s; ++s) {

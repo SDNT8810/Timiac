@@ -18,6 +18,14 @@
 #include "../shared/presets.h"
 WiFiServer listener;
 #include "../ESP_Timiac/src/runtime.h"
+struct Preferences {
+  unsigned saved = timiac::defaultSpeedPercent;
+  bool writable = true;
+  bool begin(const char*, bool) { return true; }
+  unsigned getUInt(const char*, unsigned) { return saved; }
+  size_t putUInt(const char*, unsigned value) { if (!writable) return 0; saved = value; return sizeof(value); }
+};
+#include "../ESP_Timiac/src/motion_speed.h"
 #include "../ESP_Timiac/src/uart_bridge.h"
 #include "../ESP_Timiac/src/peer_link.h"
 #include "../ESP_Timiac/src/builtin_program.h"
@@ -36,6 +44,7 @@ void resetMaster() {
   operation = Operation(); program = Program(); receiptNext = 0;
   releaseClockEnabled = false; armTimeMinutes = releaseClockMinute = -1;
   releaseStartupPending = TIMIAC_MASTER && TIMIAC_RELEASE;
+  motionSpeedPercent = timiac::defaultSpeedPercent;
   rtcValid = true; rtcTime.h = 13; rtcTime.m = 45;
   for (auto& r : receipts) r = Receipt();
   for (unsigned b = 0; b < 2; ++b) { peers[b] = Peer(); boards[b] = RemoteBoard(); lastBoardBoot[b] = ""; }
@@ -68,7 +77,152 @@ void startHome(unsigned b, bool coordinated = false) {
   if (coordinated) startOperation(doc["a"], doc["b"], "home", 100);
   else startOperation(doc["a"], doc["b"], "home", 100, timiac::commandBoards(doc["a"].size(), doc["b"].size()));
 }
+#if TIMIAC_RELEASE
+// Run the production scheduler, trajectory builder and UART queue against two
+// simulated motor boards. Marlin's inactivity timer is refreshed by actual
+// planner motion, not M122/M114 or a G1 with unchanged coordinates.
+unsigned clockSoak(bool honorHoldSetup, bool parkHome = false) {
+  resetMaster(); connectBoard(0); connectBoard(1);
+  releaseStartupPending = false; releaseClockEnabled = true;
+  struct Motor {
+    timiac::OctopusSession uart;
+    float position[6] = {};
+    uint32_t lastMove = 1000, idleTimeout = 600000;
+    bool trusted = true;
+  } motors[2];
+  for (unsigned b = 0; b < 2; ++b) {
+    boards[b].homed = 63; boards[b].trajectorySupported = true;
+    for (unsigned a = 0; a < 6; ++a) {
+      boards[b].known[a] = true;
+      motors[b].position[a] = boards[b].positions[a] = kTravelMm;
+    }
+    motors[b].uart.identity = true;
+    motors[b].uart.state = timiac::OctopusSession::State::Ready;
+    motors[b].uart.homed = 63; motors[b].uart.drivers = boards[b].drivers;
+  }
+  unsigned hourly = 0, poses = 0;
+  for (unsigned minute = 0; minute <= 1440; ++minute) {
+    hostNow = 1000 + minute * 60000U;
+    rtcTime.h = minute / 60 % 24; rtcTime.m = minute % 60;
+    for (unsigned b = 0; b < 2; ++b) {
+      peers[b].rx = boards[b].stateAt = hostNow;
+      peers[b].socket.writeCapacity = 65536;
+      if (motors[b].idleTimeout && hostNow - motors[b].lastMove >= motors[b].idleTimeout)
+        motors[b].trusted = false;
+    }
+    if (parkHome && minute == 1) {
+      DynamicJsonDocument home(2048); timiac::Step step;
+      timiac::userAction("home", 0, 0, kTravelMm, kMaxFeed, step);
+      assert(writePresetStep(step, home.to<JsonVariant>()));
+      startOperation(home["a"], home["b"], "park-home", 42);
+      trackManualClockAction("home");
+    }
+    releaseClockTick();
+    if (program.state == "running") { ++hourly; programTick(); }
+    if (operation.barrier.active()) {
+      ++poses;
+      for (unsigned b = 0; b < 2; ++b) {
+        auto& motor = motors[b];
+        while (peers[b].outbox.pending()) assert(flushPeer(peers[b]));
+        DynamicJsonDocument packet(4096);
+        assert(!deserializeJson(packet, peers[b].socket.sent.back()));
+        const char* lines[timiac::maxTrajectoryCommands]; unsigned count = 0;
+        for (JsonVariant line : packet["lines"].as<JsonArray>()) lines[count++] = line.as<const char*>();
+        motor.uart.lastRx = hostNow;
+        assert(motor.uart.stage(lines, count, hostNow, packet["trajectory"] | false, packet["speedPercent"] | 100U));
+        const char* check = motor.uart.next(hostNow);
+        if (check) { // Home preparation requests the already simulated driver report.
+          assert(!strcmp(check, "M122"));
+          motor.uart.waiting = false; motor.uart.next(hostNow);
+        }
+        assert(motor.uart.prepared()); report(b, "preparing", true);
+      }
+      operationTick(); assert(operation.barrier.phase == timiac::Phase::Running);
+      for (unsigned b = 0; b < 2; ++b) {
+        auto& motor = motors[b]; assert(motor.uart.commit());
+        while (motor.uart.running()) if (const char* line = motor.uart.next(hostNow)) {
+          if (!strcmp(line, "M84 S0") && honorHoldSetup) motor.idleTimeout = 0;
+          if (timiac::homingCommand(line)) {
+            motor.trusted = true; motor.lastMove = hostNow;
+            for (float& p : motor.position) p = 0;
+          }
+          if (!strncmp(line, "G1 ", 3)) {
+            if (!motor.trusted) return minute; // Marlin: Home XYZABC First.
+            for (unsigned a = 0; a < 6; ++a) if (const char* word = strchr(line, kAxes[a])) {
+              float target = strtof(word + 1, nullptr);
+              if (fabsf(target - motor.position[a]) > .0001f) motor.lastMove = hostNow;
+              motor.position[a] = target;
+            }
+          }
+          motor.uart.receive("ok", hostNow);
+        }
+        for (unsigned a = 0; a < 6; ++a) boards[b].positions[a] = motor.position[a];
+        report(b, "done");
+      }
+      programTick();
+    }
+    assert(!systemLatched && !operation.barrier.active() && !program.reserved());
+    assert(releaseClockEnabled == !(parkHome && minute >= 1));
+    for (auto& peer : peers) { peer.socket.sent.clear(); peer.socket.wire.clear(); }
+  }
+  assert(parkHome ? poses == 2 && hourly == 0 : hourly == 24 && poses == 289);
+  for (const auto& motor : motors) assert(motor.trusted);
+  return 0;
+}
+#endif
 int main() {
+#if TIMIAC_RELEASE
+  assert(clockSoak(false) == 15); // Reproduce the old idle-board shutdown.
+  assert(clockSoak(true) == 0);   // An entire day, no browser lease/manual wake-up.
+  assert(clockSoak(true, true) == 0); // Manual Home holds for the full day too.
+#endif
+  resetMaster(); configureMotionSpeed(); assert(motionSpeedPercent == 50);
+  DynamicJsonDocument speedSetting(256);
+  for (const char* invalid : {"{}", "{\"percent\":19}", "{\"percent\":101}", "{\"percent\":-1}", "{\"percent\":20.5}", "{\"percent\":\"50\"}", "{\"percent\":true}"}) {
+    deserializeJson(speedSetting, invalid);
+    assert(saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 50);
+  }
+  speedSetting.clear(); speedSetting["percent"] = 20;
+  operation.barrier.begin(hostNow);
+  assert(saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 50);
+  operation = Operation(); program.state = "paused";
+  assert(saveMotionSpeed(speedSetting.as<JsonVariant>())); program = Program();
+  motionPreferences.writable = false;
+  assert(saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 50);
+  motionPreferences.writable = true;
+  assert(!saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 20);
+  motionSpeedPercent = 50; configureMotionSpeed(); assert(motionSpeedPercent == 20);
+  // Every entry point captures the same speed for both bridges. Changing a
+  // later setting cannot alter an already prepared operation or its timeout.
+  for (unsigned speed : {20U, 50U, 100U}) {
+    resetMaster(); connectBoard(0); connectBoard(1); motionSpeedPercent = speed;
+    startHome(0, true);
+    for (unsigned b = 0; b < 2; ++b) {
+      DynamicJsonDocument packet(4096);
+      assert(!deserializeJson(packet, peers[b].socket.sent.back()));
+      assert(packet["speedPercent"] == speed);
+    }
+    motionSpeedPercent = 100;
+    assert(operation.speedPercent == speed);
+    assert(timiac::operationTimeout(true, operation.speedPercent) == 30000000U / speed);
+  }
+#if TIMIAC_RELEASE
+  // Manual Home takes over from running automatic tracking and holds across
+  // five-minute/hour boundaries. Start clock explicitly resumes tracking.
+  resetMaster(); connectBoard(0); connectBoard(1);
+  releaseClockEnabled = true; releaseClockMinute = 13 * 60 + 59;
+  startHome(0, true); trackManualClockAction("home");
+  report(0, "preparing", true); report(1, "preparing", true); operationTick();
+  boards[0].homed = boards[1].homed = 63;
+  report(0, "done"); report(1, "done");
+  for (unsigned minute : {0U, 5U, 10U, 55U}) {
+    rtcTime.h = 14; rtcTime.m = minute; releaseClockTick();
+    assert(operation.id == "home" && !operation.barrier.active() && !program.reserved());
+    assert(!releaseClockEnabled && !releaseStartupPending);
+  }
+  trackManualClockAction("show-time"); releaseClockTick();
+  assert(releaseClockEnabled && operation.barrier.active() && !operation.homing);
+#endif
   // A received current must survive bridge -> master -> browser unchanged,
   // including a mismatch. Do not replace actual reports with expectations.
   resetMaster(); connectBoard(0);
@@ -206,6 +360,12 @@ int main() {
     }
     rtcTime.h = (hour + 23) % 24; rtcTime.m = 59;
     armTimeMinutes = rtcTime.h * 60 + 55;
+    // Start from the actual :55 clock pose, including an open minute arm and
+    // a half-open hour arm, rather than the unrelated all-closed pose.
+    timiac::Step previousPose;
+    assert(timiac::userAction("show-time", rtcTime.h, 55, kTravelMm, kMaxFeed, previousPose));
+    for (unsigned b = 0; b < 2; ++b) for (unsigned a = 0; a < 6; ++a)
+      boards[b].positions[a] = strtof(strchr(previousPose.lines[b][1], kAxes[a]) + 1, nullptr);
     releaseClockMinute = hour % 2 ? armTimeMinutes : -1; // Also cover manual Start clock at :59.
     releaseClockTick(); assert(!program.reserved() && !operation.barrier.active());
     assert(releaseClockMinute >= 0);

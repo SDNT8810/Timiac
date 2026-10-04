@@ -27,7 +27,7 @@ inline bool validClockDate(unsigned year, unsigned month, unsigned day, unsigned
 // Simulator frames remain clockwise from 12; this is also their index per arm.
 inline unsigned clockHourForArm(unsigned arm) { return (12 - arm) % 12; }
 inline bool userAction(const char* action, unsigned hour, unsigned minute, float travel, float feed, Step& step) {
-  step = Step();
+  step.clear();
   if (!strcmp(action, "home")) { step.both("G28 X Y Z A B C"); return true; }
   const bool open = !strcmp(action, "open"), close = !strcmp(action, "close"), clock = !strcmp(action, "show-time");
   if ((!open && !close && !clock) || (clock && (hour > 23 || minute > 59))) return false;

@@ -1,4 +1,83 @@
-# Current 50 mm travel package - 2026-09-29.6
+# Idle motor shutdown fix - 2026-10-04.1
+
+The clock can leave one whole Octopus at identical coordinates for over ten
+minutes. Marlin's 600-second idle timer disables that board's motors and clears
+its trusted position. Repeating the same G1 and polling M122/M114 do not keep
+the planner active. A simulated clock starting at 12:00 reproduces rejection at
+12:15: board 1 last moves at 12:05. A subsequent command then reaches the
+HOME_AFTER_DEACTIVATE protection and the coordinator cancels automatic tracking.
+
+Each bridge now queues `M84 S0` before homing or movement. This disables automatic
+idle shutdown without moving motors or changing holding current. Explicit
+M18/M84 release, Stop, driver checks and communication timeouts still apply.
+Manual Home stays held indefinitely, including with the dashboard closed.
+
+For the currently installed **TIMIAC2-1416cea7c0a8** / protocol 7 package, only
+the two bridges need flashing (connect each module separately):
+
+```powershell
+python run.py verify
+python run.py esp1_release --port COM5
+python run.py esp2_release --port COM5
+```
+
+Use the adapter's actual port. Power-cycle after both uploads so normal release
+startup homes and starts the clock. No Octopus SD-card update is needed. The
+masters were rebuilt for a consistent revision, but the fix executes in the
+bridges and works with the existing .8 master. Hardware was not flashed here.
+
+# Home hold and global speed - 2026-09-29.8
+
+Manual Home now leaves the release clock paused at home, including across minute
+and hour boundaries and proximity triggers. Start clock resumes tracking.
+The power-on automatic Home-then-clock sequence is unchanged.
+
+The release speed slider ranges from 20% to 100%, with a 50% initial default.
+It is saved in master NVS and shared by all motion sources. 100% keeps the
+previous per-movement speeds; 50% halves them. The slider is available while
+idle, and changing it does not resume a parked clock. Both bridges capture the
+same setting before committing a synchronized move. Homing release, seek and
+single-axis bump speeds also scale; movement deadlines scale inversely.
+
+Install the full matched **TIMIAC2-1416cea7c0a8** / protocol 7 package:
+
+```powershell
+python run.py verify
+python run.py octopus_release --sd I:\
+python run.py esp1_release --port COM5
+python run.py esp2_release --port COM5
+python run.py master_release --port COM5
+```
+
+Repeat the Octopus card flash for both boards, and connect each ESP separately.
+Use the actual card drive and adapter port. The master command includes the web
+filesystem. Development aliases use the same Octopus and bridge images;
+`master_dev` installs the development dashboard. No hardware was flashed during
+this update. The previous master-only instructions below are historical.
+
+# Hour-change reset fix - 2026-09-29.7
+
+The automatic hour dance could overflow the ESP32's 8 KB Arduino loop stack
+while generating the final clock pose. The manual Next hour request runs on the
+HTTP task's larger stack, explaining why it could work while the automatic path
+reset the master. Resetting command buffers in place and isolating single-frame
+scratch storage removes this excessive stack use. Master export now checks the
+actual linked animation frames and requires at least 2 KB of additional margin.
+
+If the matching 50 mm motor package **TIMIAC2-409426dd9f18** is installed, upload
+only the release master:
+
+```powershell
+python run.py master_release --port COM5
+```
+
+The same buffer fix is in `master_dev`. Both master uploads include their web
+filesystem. Octopus and bridge images, machine identity, 50 mm travel, 800 mA,
+500 mm/min, and 5 mm homing release are unchanged. No SD-card update is needed
+for this fix. The full installation instructions below apply when upgrading
+from an older motor package.
+
+# 50 mm motor package - 2026-09-29.6
 
 All twelve arms now use 50 mm maximum travel, reduced from 52 mm. Close,
 clock poses, animations and both dashboards follow the same limit.

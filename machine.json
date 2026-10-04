@@ -1,6 +1,7 @@
 {
   "generation": 2,
-  "protocol": 6,
+  "protocol": 7,
+  "motion_speed_override": "M220-including-homing",
   "marlin_environment": "STM32F446ZE_btt",
   "marlin_configuration_base": "lumiac-b250656",
   "motherboard": "BOARD_BTT_OCTOPUS_V1_1",

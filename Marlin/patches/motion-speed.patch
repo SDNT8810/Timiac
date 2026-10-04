@@ -1,0 +1,41 @@
+--- a/Marlin/src/module/motion.h
++++ b/Marlin/src/module/motion.h
+@@ -73,6 +73,7 @@
+  * Feed rates are often configured with mm/m
+  * but the planner and stepper like mm/s units.
+  */
++extern uint8_t timiac_homing_percent;
+ constexpr xyz_feedrate_t homing_feedrate_mm_m = HOMING_FEEDRATE_MM_M;
+ FORCE_INLINE feedRate_t homing_feedrate(const AxisEnum a) {
+   float v = TERN0(HAS_Z_AXIS, homing_feedrate_mm_m.z);
+@@ -89,7 +90,7 @@
+       else if (a == W_AXIS) v = homing_feedrate_mm_m.w
+     );
+   #endif
+-  return MMM_TO_MMS(v);
++  return MMM_TO_MMS(v) * (timiac_homing_percent * 0.01f);
+ }
+ 
+ feedRate_t get_homing_bump_feedrate(const AxisEnum axis);
+--- a/Marlin/src/module/motion.cpp
++++ b/Marlin/src/module/motion.cpp
+@@ -133,6 +133,7 @@
+ #endif
+ feedRate_t feedrate_mm_s = MMM_TO_MMS(DEFAULT_FEEDRATE_MM_M);
+ int16_t feedrate_percentage = 100;
++uint8_t timiac_homing_percent = 100;
+ 
+ // Cartesian conversion result goes here:
+ xyz_pos_t cartes;
+--- a/Marlin/src/gcode/calibrate/G28.cpp
++++ b/Marlin/src/gcode/calibrate/G28.cpp
+@@ -351,6 +351,9 @@
+ 
+   TERN_(HAS_DUPLICATION_MODE, set_duplication_enabled(false));
+ 
++  // Capture the operation speed before G28 resets the normal feed multiplier.
++  // REMEMBER restores it on every return, including failed/cancelled homing.
++  REMEMBER(timiac_home_speed, timiac_homing_percent, uint8_t(constrain(feedrate_percentage, 20, 100)));
+   remember_feedrate_scaling_off();
+ 
+   endstops.enable(true); // Enable endstops for next homing move

@@ -1,4 +1,67 @@
-# Current package: 2026-09-29.6 - 50 mm maximum travel
+# Idle clock regression: 2026-10-04.1
+
+The coordinator/UART regression simulates Marlin's 600-second inactivity policy.
+With the bridge hold setup suppressed, a 12:00 start fails at 12:15 when one
+board's unchanged pose leaves its planner idle. With `M84 S0`, the production
+release scheduler, trajectory builder and UART queues complete a simulated
+24-hour cycle, including 24 hourly dances and midnight, with no browser lease
+or manual wake-up. A separate day-long run parks at Home and remains held.
+UART tests also preserve explicit M18/M84 release and its rehoming requirement.
+
+This is simulated motion, not a physical 24-hour endurance test. The installed
+clock was not reachable at 192.168.4.1, so no live fault log was captured and no
+hardware was flashed. Machine identity stays **TIMIAC2-1416cea7c0a8** / protocol 7;
+the existing Octopus image remains compatible. Update both bridges for this fix.
+
+# Home hold and speed control: 2026-09-29.8
+
+Package **TIMIAC2-1416cea7c0a8**, protocol 7. All five firmware targets and both
+web filesystems build; host firmware tests, 15 Python tests and 48 dashboard
+and control tests pass. Master export checks the compiled stack budget.
+
+Tests cover manual Home holding across minute/hour boundaries, explicit clock
+resume, saved speed settings, invalid JSON values, busy/paused machines, storage
+failure, equal captured speed on both bridges, M220/G4 sequence at 20/50/100%,
+and extended finite completion deadlines. The actual patched Marlin feed
+calculation, scoped G28 speed capture, and concurrent homing routine run with
+simulated switches at all three speeds, including cancellation and restoration.
+
+No hardware was flashed and no physical motor test was performed. The in-app
+browser was unavailable; dashboard behavior has automated DOM checks but no
+visual review. Install both Octopus boards, both bridges and the selected master.
+
+# Previous master fix: 2026-09-29.7 - hour-change stack overflow
+
+The user clarified that both bridges appeared offline when the hour arrived.
+The screenshot then showed release startup pending, consistent with a master
+restart. Inspection of the .6 release ELF found 8,240 bytes of nested stack
+frames on the automatic dance's final pose conversion, exceeding its 8,192-byte
+loop stack before additional overhead. The manual button runs on the 16 KB
+AsyncTCP stack. No hardware reset log was available to confirm the reset reason.
+
+Command buffers now clear in place instead of creating large temporary Steps.
+Single-frame scratch is isolated from full-trajectory callers. Both master
+exports check their actual linked stack frames with a 2 KB overhead reserve.
+
+Validation:
+
+- The guard rejects the old release disassembly. The new release automatic-hour
+  path accounts for 5,168 bytes, leaving 3,024 bytes for other overhead; queued
+  animation execution accounts for 4,016 bytes in both master modes.
+- Both master firmware builds and export-time stack checks passed.
+- All C++ host suites passed; both coordinator modes were rerun successfully
+  after the final scratch-buffer change. Hour-boundary tests cover all 24 hours
+  from actual :55 clock poses, midnight, delayed work, and Stop/no replay.
+- `python run.py verify` passed the complete matched package.
+- Octopus and both ESP bridge images retain their pre-fix hashes. The machine
+  identity remains **TIMIAC2-409426dd9f18**; no motor settings changed.
+
+Logs: `.build-hour-reset-release.log`, `.build-hour-reset-master.log`,
+`.test-hour-reset-host.log`, `.test-hour-reset-coordinator.log`.
+No physical device was flashed or tested. Install only the chosen master and
+its web filesystem when the matching 50 mm motor package is already installed.
+
+# Previous package: 2026-09-29.6 - 50 mm maximum travel
 
 Prepared **TIMIAC2-409426dd9f18**, protocol 6, for both dashboard modes.
 All twelve axes now have a 0-50 mm range. Close sends every arm to 50 mm;

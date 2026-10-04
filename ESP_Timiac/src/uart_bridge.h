@@ -60,11 +60,11 @@ struct UartBridge {
     seenFailures = session.failures;
     logMessage("Stop: " + reason);
   }
-  void stage(JsonArray lines, bool trajectory = false) {
+  void stage(JsonArray lines, bool trajectory = false, unsigned speedPercent = 100) {
     const char* commands[timiac::maxTrajectoryCommands]; unsigned count = 0;
     if (lines.size() > timiac::maxTrajectoryCommands) { session.fail("Too many trajectory commands"); sync(); return; }
     for (JsonVariant value : lines) commands[count++] = value.as<const char*>();
-    if (!session.stage(commands, count, millis(), trajectory)) {
+    if (!session.stage(commands, count, millis(), trajectory, speedPercent)) {
       session.fail("Preparation refused: driver, firmware, axis or position not ready"); sync();
     }
   }

@@ -1,5 +1,42 @@
 # Timiac: twelve motors, three ESP modules
 
+**15-minute clock stop fix (2026-10-04.1):** the bridges now disable Marlin's
+automatic motor idle shutdown with `M84 S0` before each operation. A clock pose
+can leave an entire Octopus motionless for more than its old 10-minute limit;
+unchanged G1 targets and diagnostic traffic do not reset that timer. This could
+invalidate homing and stop tracking at the next five-minute update. Manual Home
+also retains its holding torque until an explicit motor release.
+
+For the installed **TIMIAC2-1416cea7c0a8** speed-control package, flash **both
+ESP bridges** with `python run.py esp1_release --port COM5` and
+`python run.py esp2_release --port COM5`, connecting each module separately.
+Then power-cycle the clock for its normal automatic Home-and-start sequence.
+The Octopus image, master behavior and machine identity are unchanged; no SD-card
+update is needed. Both master images are also rebuilt with the new revision.
+
+**Home hold and speed control (2026-09-29.8):** manual Home in the release
+dashboard now parks the arms until another movement command. Start clock
+resumes automatic time tracking. Power-on startup still homes and starts the
+clock automatically.
+
+The release dashboard has a **20–100% movement speed slider**, initially 50%.
+100% is the previous speed for each movement (up to 500 mm/min travel and
+120 mm/min homing). The saved setting applies to both boards, including dances,
+five-minute/hour changes, automatic clock movements, and all homing phases.
+Change speed while idle; it applies to the next movement and survives reboot.
+
+**Reflash both Octopus boards, both ESP bridges and the selected master** using
+the installation commands below. The matched package is
+**TIMIAC2-1416cea7c0a8**, protocol 7. This update includes a Marlin homing-speed
+patch; earlier master-only upload instructions apply only to earlier revisions.
+
+**Hour-change reset fix (2026-09-29.7):** the automatic dance no longer creates
+nested temporary command buffers that exceed the ESP32 loop stack. Both master
+builds reset buffers in place and pass a compiled stack-budget check. For an
+installed matching **TIMIAC2-409426dd9f18** / 50 mm package, upload only
+`python run.py master_release --port COM5` (or `master_dev` for development).
+The Octopus and bridge images are unchanged; no SD-card update is needed.
+
 **50 mm travel (2026-09-29.6):** all twelve arms now have a 0-50 mm
 position range. Close sends every arm to 50 mm in both dev and release modes.
 Clock poses and generated animations use the same 50 mm stroke.
@@ -43,7 +80,7 @@ Repeat the Octopus card flash for both motor boards. The Octopus and bridge
 images are the same in both modes; each master command includes its matching
 web filesystem. The SD card is only needed to flash an Octopus and can be
 removed after `FIRMWARE.CUR` is written. The matching identity is
-**TIMIAC2-409426dd9f18**.
+**TIMIAC2-1416cea7c0a8**.
 
 **Release startup:** at power-up, the master
 waits for both motor boards to be healthy and idle, homes all twelve arms together,
@@ -56,7 +93,7 @@ still runs and the clock pose waits for valid time.
 for running and microswitch homing, with **64 commanded microsteps** over UART
 and **internal interpolation to 256**. Calibration is **11,520 steps/mm**; travel
 is 0-50 mm. Maximum feed is **500 mm/min** (96,000 step pulses/s); homing
-remains **120 mm/min**. The holding multiplier remains 0.5.
+is **120 mm/min at 100%** (60 at the default 50%). The holding multiplier remains 0.5.
 Driver chopper timing now uses the 24 V preset for the reported 24 V / 7 A supply.
 
 **Home all** now uses Lumiac's concurrent six-arm routine on each Octopus:
@@ -70,7 +107,7 @@ report, including numerical mismatches, rather than substituting browser
 constants. These are configured values, not measured coil current.
 When upgrading from older motor settings, reflash **both Octopus boards, both bridges, and the chosen master mode**;
 the master command also installs its web filesystem. Reload the dashboard.
-The matching machine identity is **TIMIAC2-409426dd9f18**.
+The matching machine identity is **TIMIAC2-1416cea7c0a8**.
 
 The requested current is now 800 mA, superseding the earlier 250 mA and
 1,414 mA settings. The Board 2 C2 release fault remains physically unverified;
@@ -471,8 +508,8 @@ alone cannot cancel the following homing bump moves.
 The bridge clears trusted positions, reconnects, and requires Home before the
 next movement. A board showing `Printer halted. kill() called!` requires
 its reset button or a power cycle after the fault is checked.
-Homing commands and the overall Home operation have a 180-second limit;
-ordinary operations retain their existing limits.
+At 100%, homing and ordinary commands allow 180-second acknowledgements and
+300-second operations. Both limits scale inversely with the speed setting.
 
 ## Router or phone hotspot connection
 

@@ -171,6 +171,7 @@ void startOperation(JsonArray a, JsonArray b, const String& id, uint32_t hash, u
   // An accepted manual action also takes over from a pending release startup.
   releaseStartupPending = false;
   operation = Operation(); operation.id = id; operation.hash = hash;
+  operation.speedPercent = motionSpeedPercent;
   operation.homing = hasHoming(a) || hasHoming(b);
   operation.barrier.begin(millis(), mask); recordReceipt();
   if (trajectory && (!boards[0].trajectorySupported || !boards[1].trajectorySupported ||
@@ -183,6 +184,7 @@ void startOperation(JsonArray a, JsonArray b, const String& id, uint32_t hash, u
     DynamicJsonDocument doc(trajectory ? 4096 : 2304);
     doc["type"] = "prepare"; doc["id"] = id; doc["hash"] = hash; doc["lines"] = i == 0 ? a : b;
     doc["homing"] = operation.homing;
+    doc["speedPercent"] = operation.speedPercent;
     if (trajectory) doc["trajectory"] = true;
     if (!p || !sendPeer(*p, doc)) { stopAll("Could not prepare required board bridge"); return; }
   }
@@ -306,19 +308,21 @@ void processPeer(Peer& p, const String& line) {
   } else if (!TIMIAC_MASTER && type == "prepare") {
     String id = doc["id"] | "";
     const bool trajectory = doc["trajectory"] | false;
+    const unsigned speedPercent = doc["speedPercent"] | 0U;
     if (id == operation.id) {
-      if (doc["hash"] != operation.hash) stopAll("Conflicting duplicate preparation");
+      if (doc["hash"] != operation.hash || speedPercent != operation.speedPercent) stopAll("Conflicting duplicate preparation");
       sendState(); return;
     }
     bool stale = false; for (auto& r : receipts) if (r.id == id) stale = true;
-    if (stale || id.isEmpty() || id.length() > 96 || !validLines(doc["lines"], trajectory) || !uart.healthy() ||
+    if (stale || id.isEmpty() || id.length() > 96 || !doc["speedPercent"].is<unsigned>() || !timiac::validSpeedPercent(speedPercent) || !validLines(doc["lines"], trajectory) || !uart.healthy() ||
         systemLatched || operation.barrier.active()) {
       stopAll("Preparation rejected: unavailable board, unhomed axis, stale or invalid command"); return;
     }
     operation = Operation(); operation.id = id; operation.hash = doc["hash"] | 0U;
+    operation.speedPercent = speedPercent;
     // The idle peer also waits through the other board's homing operation.
     operation.homing = (doc["homing"] | false) || hasHoming(doc["lines"].as<JsonArray>());
-    operation.barrier.begin(millis()); uart.stage(doc["lines"].as<JsonArray>(), trajectory); recordReceipt(); sendState();
+    operation.barrier.begin(millis()); uart.stage(doc["lines"].as<JsonArray>(), trajectory, speedPercent); recordReceipt(); sendState();
   } else if (!TIMIAC_MASTER && type == "commit") {
     if (doc["id"] != operation.id) { stopAll("Commit does not match prepared command"); return; }
     if (operation.barrier.phase == timiac::Phase::Running || operation.barrier.phase == timiac::Phase::Done) { sendState(); return; }
@@ -428,6 +432,6 @@ void operationTick() {
       }
       recordReceipt();
     } else if (millis() - operation.barrier.since > kPrepareTimeout) stopAll("Required-board preparation timed out");
-  } else if (millis() - operation.barrier.since > timiac::operationTimeout(operation.homing))
+  } else if (millis() - operation.barrier.since > timiac::operationTimeout(operation.homing, operation.speedPercent))
     stopAll(operation.homing ? "Homing completion timed out (180 seconds)" : "Motion completion timed out");
 }

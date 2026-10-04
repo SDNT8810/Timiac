@@ -130,6 +130,13 @@ form small { grid-column: 1 / -1; font-size: 10px; color: #64705e; }
 .controls button { grid-column: span 2; }
 .controls .preset { grid-column: span 2; grid-template-columns: minmax(0, 1fr); text-align: center; gap: 4px; padding: 10px 6px; }
 .controls .preset strong { font-size: clamp(13px, 1.6vw, 20px); }
+.speed-control { grid-column: 1 / -1; align-self: end; padding: 10px 12px; border: 1px solid #b6c0b1; border-radius: 12px; }
+.speed-control label { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.speed-control output { font-weight: 700; font-variant-numeric: tabular-nums; }
+.speed-control input { padding: 0; margin: 0; border: 0; background: transparent; accent-color: #668249; cursor: pointer; }
+.speed-control input:disabled { opacity: .45; cursor: not-allowed; }
+.speed-range { display: flex; justify-content: space-between; font-size: 10px; margin-top: -6px; color: #64705e; }
+.speed-control small { display: block; margin-top: 6px; color: #64705e; }
 @media (max-width: 700px) and (orientation: portrait) {
   main { grid-template-rows: auto minmax(90px, 1fr) minmax(172px, 1.2fr) auto auto auto; }
   .controls button { grid-template-columns: minmax(0, 1fr); text-align: center; }

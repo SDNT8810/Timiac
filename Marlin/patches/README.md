@@ -1,5 +1,12 @@
 # Timiac Marlin patches
 
+`motion-speed.patch` makes the operation's `M220 S20` through `S100` override
+apply to G28 too. G28 captures the percentage before disabling normal feed
+scaling, applies it through `homing_feedrate()` to concurrent release/seek and
+single-axis homing/bump, and restores the temporary homing scale on every exit.
+100% preserves the existing 120 mm/min homing profile. This requires the
+protocol 7 machine package; the bridges send M220 before every operation.
+
 `concurrent-homing.patch` ports Lumiac's `SPIDER_CONCURRENT_HOMING` to the
 clean Marlin 2.1.2.7 sources staged by `build.py`. Origin file hashes are in
 `lumiac-homing-source.json`; Lumiac was read but not edited. No sibling

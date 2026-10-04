@@ -1,7 +1,8 @@
 {
-  "identity": "TIMIAC2-409426dd9f18",
+  "identity": "TIMIAC2-1416cea7c0a8",
   "generation": 2,
-  "protocol": 6,
+  "protocol": 7,
+  "motion_speed_override": "M220-including-homing",
   "marlin_environment": "STM32F446ZE_btt",
   "marlin_configuration_base": "lumiac-b250656",
   "motherboard": "BOARD_BTT_OCTOPUS_V1_1",

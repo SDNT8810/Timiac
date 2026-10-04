@@ -1,5 +1,16 @@
 # Three-ESP architecture
 
+Protocol 7 captures the master speed setting in every prepared operation on
+both bridges. The initial 50% setting can be adjusted from 20 to 100% and is
+saved in NVS. Changes require a control lease and an idle machine. Bridges
+inject M220 before every job and scale G4 waits to preserve nominal timing
+between moving and stationary boards. The Marlin patch applies M220 to all
+homing phases and restores its temporary homing multiplier on return.
+
+Manual release Home disables automatic tracking and proximity animations.
+Start clock explicitly resumes tracking. Power-on startup still homes and
+starts the clock without a browser. Changing speed does not resume a parked clock.
+
 ~~~text
 Phone(s) -- Wi-Fi --> Master ESP32 (192.168.4.1)
                          |                |
@@ -90,6 +101,19 @@ completion cannot trigger it again. Busy work delays it until idle, while Stop,
 manual resume and explicit RTC changes reset the baseline. Large/backward time
 jumps update the pose without replaying missed dances.
 
+The automatic hour launch executes in the ESP32 Arduino loop task, whose stack
+is explicitly 8,192 bytes. Manual API actions execute in AsyncTCP's 16 KB task.
+Before revision .7, nested `step = Step()` temporaries made the automatic final
+pose conversion account for 8,240 bytes of linked stack frames, before other
+library descendants and task overhead. This explains a reset risk specific to
+the automatic launch despite passing host tests. `Step::clear()` now resets
+storage in place, and a non-inlined helper allocates single-frame scratch only
+when needed. The corresponding release call chain accounts for 5,168 bytes.
+`export_master.py` checks the actual Xtensa ELF with `check_master_stack.py`
+and reserves at least another 2 KB for overhead; the report is saved as
+`master_stack.json` beside the ELF. This is a regression budget, not a complete
+runtime stack measurement or a guarantee about every library path.
+
 All uploaded lines must validate before the program becomes Ready. During
 playback each move is checked against fresh homing state. Releasing motors
 clears trusted position; homing is required again. Manual commands cannot
@@ -122,7 +146,7 @@ and per-axis speed/acceleration ceilings. This increases permitted corner speed;
 it does not add a dwell or bypass real reversal braking. Only an idle board waits
 while the other moves. Exact physical smoothness still needs installation testing.
 
-Trajectory support is advertised separately from protocol 6 and machine identity.
+Trajectory support is advertised separately from protocol 7 and machine identity.
 Both animations reject bridges without that capability. Existing Stop, disconnect, fault, stale
 command and homing checks apply throughout the queue, with no replay on recovery.
 Ordinary requests retain the six-command limit and other programs retain their
@@ -173,10 +197,13 @@ additional timing/trigger design and hardware measurements.
   Octopus restart counter. An M115 identification reply is not a restart event.
 - Peer/state timeout: 15 seconds; prepare timeout: 15 seconds.
 - The bridge treats Marlin's normal `ok` and `M114` replies as health traffic.
-- Homing (G28) acknowledgement and whole homing operation: 180 seconds.
-  Ordinary commands retain 3-minute acknowledgements and 5-minute operations.
+- At 100%, all commands allow 3-minute acknowledgements and 5-minute operations.
+  Limits scale inversely with speed: 6/10 minutes at 50%, 15/25 minutes at 20%.
   The browser waits 10 seconds beyond the reported operation budget.
-- Marlin stepper inactivity timeout: 10 minutes (previously 120 seconds).
+- Marlin's compiled stepper inactivity timeout is 10 minutes. Since
+  2026-10-04.1 the bridges queue M84 S0 before each operation to disable automatic
+  idle shutdown: clock/Home poses must retain their trusted position indefinitely.
+  Explicit M18/M84 motor release and Stop remain available.
 - Bridge failures, command errors, missing acknowledgements, reboots during
   work, and link loss during active/paused programs latch a system stop.
   Master repeats the stop token until every participating or connected bridge

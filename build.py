@@ -42,6 +42,8 @@ def prepare_marlin():
                    cwd=staged, check=True)
     subprocess.run(["git", "apply", str(ROOT / "Marlin/patches/six-axis-junctions.patch")],
                    cwd=staged, check=True)
+    subprocess.run(["git", "apply", str(ROOT / "Marlin/patches/motion-speed.patch")],
+                   cwd=staged, check=True)
     config = staged / "Marlin/Configuration.h"
     with config.open("a", encoding="utf-8") as stream:
         stream.write("\n#define SPIDER_CONCURRENT_HOMING\n#define SPIDER_HOME_RELEASE_MM 5.0f\n")

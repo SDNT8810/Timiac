@@ -19,8 +19,7 @@ void programTick() {
   if (trajectory) {
     if (!writePresetTrajectory(program.preset, program.targetMinute, doc.to<JsonVariant>())) { stopAll("Continuous animation validation failed"); return; }
   } else if (program.builtin) {
-    timiac::Step step;
-    if (!timiac::presetStep(program.preset, program.completed, program.targetMinute, kTravelMm, kMaxFeed, step) || !writePresetStep(step, doc.to<JsonVariant>())) {
+    if (!writePresetFrame(program.preset, program.completed, program.targetMinute, doc.to<JsonVariant>())) {
       stopAll("Preset validation failed"); return;
     }
   } else {

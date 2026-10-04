@@ -20,12 +20,18 @@
       <div class="board-status"><div id="board-a"><span>ESP1 / Octopus 1</span><strong id="board-status-a">Waiting</strong><small id="board-detail-a">Connecting…</small></div><div id="board-b"><span>ESP2 / Octopus 2</span><strong id="board-status-b">Waiting</strong><small id="board-detail-b">Connecting…</small></div></div>
     </section>
     <section class="controls" aria-label="Clock actions">
-      <button data-action="home" disabled><span class="symbol" aria-hidden="true">⌂</span><strong>Home</strong><small>Home arms &amp; start clock</small></button>
+      <button data-action="home" disabled><span class="symbol" aria-hidden="true">⌂</span><strong>Home</strong><small>Home arms &amp; stay there</small></button>
       <button data-action="close" disabled><span class="symbol" aria-hidden="true">↙</span><strong>Close</strong><small id="travel">All arms to 50 mm</small></button>
       <button data-action="show-time" class="accent" disabled title="Follow the current time automatically, even with this page closed."><span class="symbol" aria-hidden="true">◷</span><strong>Start clock</strong><small>Follow the current time</small></button>
       <button data-action="next-five" class="preset" disabled><strong>Next 5 min</strong><small>Advance the clock pose</small></button>
       <button data-action="next-hour" class="preset" disabled><strong>Next hour</strong><small>Smooth circular movement</small></button>
       <button data-action="struggle" class="preset" disabled><strong>Struggle</strong><small>Smooth travelling wave</small></button>
+      <div class="speed-control">
+        <label for="motion-speed">Movement speed <output id="speed-value" for="motion-speed">50%</output></label>
+        <input id="motion-speed" type="range" min="20" max="100" step="1" value="50" disabled aria-describedby="speed-help">
+        <div class="speed-range"><span>20%</span><span>100%</span></div>
+        <small id="speed-help">All movements, dances and homing. Saved for the next movement.</small>
+      </div>
     </section>
     <div class="machine"><p id="machine-status" role="status">Connecting to Timiac…</p><button id="stop" class="stop">Stop</button></div>
     <p id="message" role="status" aria-live="polite"></p>

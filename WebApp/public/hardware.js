@@ -51,7 +51,7 @@ export class HardwareController {
     const started = Date.now();
     let state = await this.post(path, { ...payload, id, seq: this.sequence });
     const operationBudget = state.operation?.id === id && Number.isFinite(state.operation.timeoutMs)
-      ? Math.max(10000, Math.min(670000, state.operation.timeoutMs + 10000)) : 310000;
+      ? Math.max(10000, Math.min(1510000, state.operation.timeoutMs + 10000)) : 310000;
     for (;;) {
       onStatus(state);
       if (state.session !== session) throw new Error('Master restarted; command will not be replayed');

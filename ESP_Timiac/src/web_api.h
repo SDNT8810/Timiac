@@ -13,6 +13,7 @@ void statusReply(AsyncWebServerRequest* request) {
   doc["dashboard"] = TIMIAC_RELEASE ? "release" : "development";
   doc["firmware"] = timiac::machineId; doc["protocol"] = timiac::protocolVersion;
   doc["software"] = kSoftwareRevision;
+  doc["speedPercent"] = motionSpeedPercent;
   JsonObject clock = doc.createNestedObject("clock");
   writeRtcStatus(clock);
   writeNtpStatus(clock);
@@ -30,7 +31,7 @@ void statusReply(AsyncWebServerRequest* request) {
   writeBoard(doc.createNestedObject("a"), 0); writeBoard(doc.createNestedObject("b"), 1);
   JsonObject op = doc.createNestedObject("operation");
   op["id"] = operation.id; op["state"] = operation.barrier.name(); op["error"] = operation.error;
-  op["homing"] = operation.homing; op["timeoutMs"] = timiac::operationTimeout(operation.homing);
+  op["homing"] = operation.homing; op["timeoutMs"] = timiac::operationTimeout(operation.homing, operation.speedPercent);
   op["boardMask"] = operation.barrier.required;
   if (request->hasParam("operation")) {
     String id = request->getParam("operation")->value();
@@ -87,6 +88,11 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
   }
   bool writer = path != "/api/claim";
   if (!authorized(request, doc, writer)) return;
+  if (path == "/api/speed") {
+    const char* error = saveMotionSpeed(doc);
+    if (error) { errorReply(request, 409, error); return; }
+    statusReply(request); return;
+  }
   if (path == "/api/wifi") {
     const char* error = saveUplink(doc);
     if (error) { errorReply(request, 400, error); return; }
@@ -225,10 +231,7 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
     lease.lastSeq = doc["seq"].as<uint32_t>(); manualParser = nextParser;
     startOperation(doc["a"].as<JsonArray>(), doc["b"].as<JsonArray>(), id, hash, mask);
     armTimeMinutes = !systemLatched ? (doc["armMinute"] | -1) : -1;
-#if TIMIAC_RELEASE
-    releaseClockEnabled = !systemLatched && (doc["action"] == "home" || doc["action"] == "show-time");
-    releaseClockMinute = -1; // Manual Home/Start clock establishes a fresh baseline.
-#endif
+    trackManualClockAction(doc["action"] | "");
   } else if (path == "/api/program/begin") {
     unsigned total = doc["total"] | 0;
     if (!total || total > 4096) { errorReply(request, 400, "Program must contain 1–4096 steps"); return; }
@@ -289,7 +292,7 @@ void configureHttp() {
     response->addHeader("Cache-Control", "no-store"); request->send(response);
   });
 #endif
-  for (const char* path : {"/api/claim", "/api/lease", "/api/release", "/api/command", "/api/action", "/api/time", "/api/wifi", "/api/stop",
+  for (const char* path : {"/api/claim", "/api/lease", "/api/release", "/api/command", "/api/action", "/api/time", "/api/wifi", "/api/speed", "/api/stop",
        "/api/program/begin", "/api/program/append", "/api/program/start", "/api/program/pause", "/api/program/resume"}) {
     auto* handler = new AsyncCallbackJsonWebHandler(path, [](AsyncWebServerRequest* request, JsonVariant& json) { handleApi(request, json); }, 4096);
     handler->setMethod(HTTP_POST); handler->setMaxContentLength(2300); http.addHandler(handler);

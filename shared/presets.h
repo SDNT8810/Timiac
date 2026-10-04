@@ -18,7 +18,7 @@ inline bool presetStep(Preset preset, unsigned index, unsigned target, float tra
   if (index >= presetCount(preset) || target >= 1440) return false;
   if (preset == Preset::Hour && index + 1 == presetCount(preset))
     return userAction("show-time", target / 60, target % 60, travel, maxFeed, step);
-  step = Step();
+  step.clear();
   const auto& frame = preset == Preset::Hour ? hourFrames[index] : preset == Preset::Curious ? curiousFrames[index] : struggleFrames[index];
   if (frame.dwell) {
     char line[24]; snprintf(line, sizeof(line), "G4 P%u", frame.dwell); step.both(line); return true;
@@ -78,7 +78,7 @@ inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target
     distance[b] = sqrtf(primary > 0 ? primary : secondary);
     if (distance[b] > span) span = distance[b];
   }
-  step = Step();
+  step.clear();
   if (span < .0001f) return true; // Already at this pose on both boards.
   const unsigned durationMs = unsigned(ceilf(span / feed * 60000));
   if (!durationMs || durationMs > 120000) return false;

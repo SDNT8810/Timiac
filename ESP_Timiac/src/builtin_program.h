@@ -7,6 +7,12 @@ bool writePresetStep(const timiac::Step& step, JsonVariant doc) {
   }
   return validStep(doc);
 }
+// Keep the single-frame scratch buffer out of callers that also build full
+// trajectories. They need this storage only in the non-trajectory branch.
+__attribute__((noinline)) bool writePresetFrame(timiac::Preset preset, unsigned index, unsigned targetMinute, JsonVariant doc) {
+  timiac::Step step;
+  return timiac::presetStep(preset, index, targetMinute, kTravelMm, kMaxFeed, step) && writePresetStep(step, doc);
+}
 bool writePresetTrajectory(timiac::Preset preset, unsigned targetMinute, JsonVariant doc) {
   float positions[12];
   for (unsigned b = 0; b < 2; ++b) for (unsigned a = 0; a < 6; ++a) {
@@ -38,8 +44,8 @@ const char* startBuiltinPreset(timiac::Preset preset, unsigned targetMinute, con
     if (!writePresetTrajectory(preset, targetMinute, check.to<JsonVariant>())) return "Continuous animation requires valid homed positions";
     total = 1; // The complete animation is one prepared operation, not one per frame.
   } else for (unsigned i = 0; i < total; ++i) {
-    timiac::Step step; check.clear();
-    if (!timiac::presetStep(preset, i, targetMinute, kTravelMm, kMaxFeed, step) || !writePresetStep(step, check.to<JsonVariant>()))
+    check.clear();
+    if (!writePresetFrame(preset, i, targetMinute, check.to<JsonVariant>()))
       return "Preset failed command validation";
   }
   recordProgramReceipt();

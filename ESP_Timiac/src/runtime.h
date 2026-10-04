@@ -39,6 +39,7 @@ struct Operation {
   String id, error;
   uint32_t hash = 0;
   bool homing = false;
+  unsigned speedPercent = 100;
   timiac::Barrier barrier;
 } operation;
 struct Receipt { String id, state, error; uint32_t hash = 0; };
@@ -50,10 +51,17 @@ struct Lease {
   bool live() const { return !owner.isEmpty() && !timiac::expired(millis(), renewed, kLeaseMs); }
 } lease;
 timiac::GcodeState manualParser;
+unsigned motionSpeedPercent = timiac::defaultSpeedPercent;
 int armTimeMinutes = -1;
 int releaseClockMinute = -1; // Last automatic target; survives a proximity animation.
 bool releaseClockEnabled = false;
 bool releaseStartupPending = TIMIAC_MASTER && TIMIAC_RELEASE;
+void trackManualClockAction(const char* action) {
+#if TIMIAC_RELEASE
+  releaseClockEnabled = !systemLatched && !strcmp(action, "show-time");
+  releaseClockMinute = -1;
+#endif
+}
 struct Program {
   String id, name, state = "empty", error, uploadOwner, translation;
   unsigned total = 0, uploaded = 0, completed = 0;

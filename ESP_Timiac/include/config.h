@@ -67,7 +67,9 @@
 #endif
 constexpr unsigned long kBaud = 115200;
 // Application revision is separate from the hardware identity shared with Marlin.
-constexpr char kSoftwareRevision[] = "2026-09-29.6";
+constexpr char kSoftwareRevision[] = "2026-10-04.1";
+// Checked against the compiled animation call chains before exporting a master.
+constexpr unsigned kMasterLoopStackBytes = 8192;
 // Wi-Fi/serial telemetry can be delayed while every axis is homing. These are
 // link-loss limits, separate from the 180-second G28 completion limit.
 constexpr unsigned long kPeerTimeout = 15000;

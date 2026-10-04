@@ -91,12 +91,53 @@ int main() {
   for (unsigned a = 0; a < 6; ++a) {
     std::string command = "G28 "; command += timiac::axes[a];
     auto sent = execute(s, command.c_str());
-    assert((sent == std::vector<std::string>{"G21", "G90", command, "M400", "M114"}));
+    assert((sent == std::vector<std::string>{"G21", "G90", "M220 S100", "M84 S0", command, "M400", "M114"}));
     assert(s.homed == (1U << (a + 1)) - 1);
   }
   auto sent = execute(s, "G28 X Y Z A B C");
-  assert((sent == std::vector<std::string>{"G21", "G90", "G28 X Y Z A B C", "M400", "M114"}));
+  assert((sent == std::vector<std::string>{"G21", "G90", "M220 S100", "M84 S0", "G28 X Y Z A B C", "M400", "M114"}));
   assert(s.homed == 63);
+  // The S0 setup keeps a homed pose trusted; explicit motor release still
+  // clears all positions and requires a new Home before the next movement.
+  for (const char* release : {"M18", "M84"}) {
+    OctopusSession held; boot(held); held.homed = 63;
+    for (bool& known : held.known) known = true;
+    execute(held, "M114"); assert(held.homed == 63);
+    execute(held, release); assert(!held.homed);
+    for (bool known : held.known) assert(!known);
+    const char* move = "G1 X1 F120"; assert(!held.stage(&move, 1, now));
+  }
+  for (unsigned percent : {20U, 50U, 100U}) {
+    OctopusSession dance; boot(dance); dance.homed = 63;
+    const char* frames[] = {"G1 X1 F500", "G4 P1000", "G1 X2 F250"};
+    assert(dance.stage(frames, 3, now, true, percent));
+    dance.next(++now); assert(dance.commit());
+    std::vector<std::string> actual;
+    while (dance.running()) if (const char* line = dance.next(++now)) {
+      actual.push_back(line); dance.receive("ok", now);
+    }
+    const std::vector<std::string> expected = {"G21", "G90", "M220 S" + std::to_string(percent), "M84 S0",
+      frames[0], "G4 P" + std::to_string(100000U / percent), frames[2], "M400", "M114"};
+    assert(actual == expected);
+  }
+  for (unsigned percent : {20U, 50U, 100U}) {
+    OctopusSession slow; boot(slow);
+    const char* homeAll = "G28 X Y Z A B C";
+    assert(!slow.stage(&homeAll, 1, now, false, 0));
+    assert(!slow.stage(&homeAll, 1, now, false, 19));
+    assert(!slow.stage(&homeAll, 1, now, false, 101));
+    assert(slow.stage(&homeAll, 1, now, false, percent));
+    slow.next(now); drivers(slow); slow.receive("ok", now); slow.next(now); assert(slow.commit());
+    for (const auto& expected : {std::string("G21"), std::string("G90"), "M220 S" + std::to_string(percent), std::string("M84 S0")}) {
+      assert(std::string(slow.next(now)) == expected); slow.receive("ok", now);
+    }
+    assert(std::string(slow.next(now)) == homeAll);
+    const uint32_t limit = timiac::acknowledgementTimeout(homeAll, percent);
+    assert(limit == 18000000U / percent);
+    assert(!slow.next(now + limit - 1) && slow.running() && slow.online(now + limit - 1));
+    assert(!slow.next(now + limit) && !slow.running());
+    assert(std::string(slow.stop(now + limit)) == "M112");
+  }
   // Continuous trajectories are bounded and still ack each line, but drain
   // the planner only once at the end (no M400/M114 between animation frames).
   const char* trajectory[timiac::maxTrajectoryCommands + 1];
@@ -139,6 +180,8 @@ int main() {
   drivers(grouped); grouped.receive("ok", now); grouped.next(now); assert(grouped.commit());
   grouped.next(now); grouped.receive("ok", now); // G21
   grouped.next(now); grouped.receive("ok", now); // G90
+  grouped.next(now); grouped.receive("ok", now); // M220
+  grouped.next(now); grouped.receive("ok", now); // M84 S0
   assert(std::string(grouped.next(now)) == group && grouped.homed == 0);
   grouped.receive("Six-arm homing cancelled.", now); grouped.receive("ok", now);
   assert(grouped.homed == 0 && !grouped.healthy(now));
@@ -158,7 +201,7 @@ int main() {
       assert(!timiac::compileLine(input, parser, step, 6, 48, 700));
       assert(step.count[board] == 1 && step.count[1 - board] == 0);
       auto commands = execute(local, step.lines[board][0]);
-      assert(commands[2] == std::string("G28 ") + timiac::axes[axis]);
+      assert(commands[4] == std::string("G28 ") + timiac::axes[axis]);
     }
   }
   // Preparing checks publish atomically; idle switches never interrupt a job.
@@ -242,6 +285,8 @@ int main() {
   s.receive("start", now); now += 1001; boot(s);
   assert(s.stage(&home, 1, now)); s.next(now); drivers(s); s.receive("ok", now); s.next(now); assert(s.commit());
   s.next(now); s.receive("ok", now); s.next(now); s.receive("ok", now);
+  s.next(now); s.receive("ok", now); // M220
+  s.next(now); s.receive("ok", now); // M84 S0
   assert(std::string(s.next(now)) == "G28 A");
   assert(std::string(s.stop(now)) == "M112"); assert(s.halted() && s.homed == 0);
   s.receive("ok", now); s.receive("Error:Printer halted. kill() called!", now);
@@ -262,6 +307,8 @@ int main() {
   // Homing can run past the old 60/120-second deadlines. Timeout still stops it.
   assert(s.stage(&home, 1, now)); s.next(now); drivers(s); s.receive("ok", now); s.next(now); s.commit();
   s.next(now); s.receive("ok", now); s.next(now); s.receive("ok", now); s.next(now);
+  s.receive("ok", now); s.next(now); // M220 ack, then M84 S0
+  s.receive("ok", now); s.next(now); // M84 S0 ack, then G28
   assert(s.next(now + 120001) == nullptr && s.running());
   assert(s.next(now + 180001) == nullptr && !s.running());
   assert(std::string(s.stop(now + 180001)) == "M112");

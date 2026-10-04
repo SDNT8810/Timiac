@@ -1,7 +1,7 @@
 {
   "Configuration.h": {
     "STRING_CONFIG_H_AUTHOR": "\"Timiac generation 2\"",
-    "CUSTOM_MACHINE_NAME": "\"TIMIAC2-409426dd9f18\"",
+    "CUSTOM_MACHINE_NAME": "\"TIMIAC2-1416cea7c0a8\"",
     "MOTHERBOARD": "BOARD_BTT_OCTOPUS_V1_1",
     "SERIAL_PORT": "-1",
     "SERIAL_PORT_2": "3",
