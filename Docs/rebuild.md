@@ -1,3 +1,30 @@
+# 1,400 mA RMS motor package - 2026-10-06.1
+
+All twelve axes now request 1,400 mA RMS for running and microswitch homing.
+The 0.5 holding multiplier requests approximately 700 mA at rest. Use the planned
+24 V / 400 W supply and forced-air cooling before commissioning this package.
+Driver overtemperature monitoring, current reduction and shutdown remain enabled.
+
+Install the complete matched **TIMIAC2-3827cd14016b** / protocol 7 package on all five boards:
+
+```powershell
+python run.py verify
+python run.py octopus_release --sd I:\
+python run.py esp1_release --port COM5
+python run.py esp2_release --port COM5
+python run.py master_release --port COM5
+```
+
+Repeat the Octopus card update for both boards; connect each ESP separately.
+Replace the card drive and COM port with their actual values. The master upload
+includes its dashboard filesystem. Use [the short installation guide](../instruction.md).
+Previous bridge-only/master-only instructions below apply to historical packages.
+
+After installation, verify 1,400 mA on all twelve development driver rows, home,
+and test individual arms before simultaneous movement. Check for overheating
+warnings/current reduction and position loss during an extended physical test.
+Hardware flashing and physical torque measurements were not performed here.
+
 # Idle motor shutdown fix - 2026-10-04.1
 
 The clock can leave one whole Octopus at identical coordinates for over ten

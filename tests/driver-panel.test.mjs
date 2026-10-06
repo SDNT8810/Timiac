@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { driverRows, driverIndicators } from '../WebApp/public/driver-panel.js';
-const reported = { currentMa: [800, 800, 800, 800, 800, 800, 800], microstepValues: [64, 64, 64, 64, 64, 64] };
+const reported = { currentMa: [1400, 1400, 1400, 1400, 1400, 1400, 1400], microstepValues: [64, 64, 64, 64, 64, 64] };
 import { boardStatus } from '../WebApp/public/system-panel.js';
 
 test('driver checks identify the exact failed socket and the old Z/ABC mode mismatch', () => {
@@ -21,7 +21,7 @@ test('an unresponsive driver cannot show cached current or a zero-read mode as p
     ageMs: 0, tested: 63, connected: 59, columns: true, settings: 7, current: 63, microsteps: 59, mode: 63,
   } }, true);
   assert.deepEqual(rows[2], { axis: 'Z', socket: 2, uart: 'No response', current: 'Unknown', microsteps: 'Unknown', mode: 'Unknown' });
-  assert.equal(rows[0].current, '800 mA');
+  assert.equal(rows[0].current, '1400 mA');
   assert.equal(rows[0].microsteps, '64');
   assert.equal(rows[0].mode, 'Quiet idle / SpreadCycle motion');
 });
@@ -53,7 +53,7 @@ test('firmware mismatch is visible even when the mismatched bridge is refused', 
 test('driver table uses received values even when browser expectations are stale', () => {
   const board = { octopusConnected: true, drivers: { ...reported, ageMs: 0,
     tested: 63, connected: 63, columns: true, settings: 7, current: 63, microsteps: 63, mode: 63,
-    currentMa: [600, 800, 800, 800, 800, 800], microstepValues: [32, 64, 64, 64, 64, 64] } };
+    currentMa: [600, 1400, 1400, 1400, 1400, 1400], microstepValues: [32, 64, 64, 64, 64, 64] } };
   assert.equal(driverRows(board, true)[0].current, '600 mA');
   assert.equal(driverRows(board, true)[0].microsteps, '32');
   board.drivers.current = 62; board.drivers.microsteps = 62;

@@ -1,3 +1,5 @@
+**1,400 mA motor package (2026-10-06.1):** install the full matched package on both Octopus boards, both ESP-12 bridges, and the master. Use the planned 24 V / 400 W supply and forced-air cooling before running it. See [installation steps](instruction.md).
+
 # Timiac: twelve motors, three ESP modules
 
 **15-minute clock stop fix (2026-10-04.1):** the bridges now disable Marlin's
@@ -7,12 +9,8 @@ unchanged G1 targets and diagnostic traffic do not reset that timer. This could
 invalidate homing and stop tracking at the next five-minute update. Manual Home
 also retains its holding torque until an explicit motor release.
 
-For the installed **TIMIAC2-1416cea7c0a8** speed-control package, flash **both
-ESP bridges** with `python run.py esp1_release --port COM5` and
-`python run.py esp2_release --port COM5`, connecting each module separately.
-Then power-cycle the clock for its normal automatic Home-and-start sequence.
-The Octopus image, master behavior and machine identity are unchanged; no SD-card
-update is needed. Both master images are also rebuilt with the new revision.
+The idle-shutdown fix is included in the current 1,400 mA package. Install all
+five matching board images when upgrading from 800 mA; see [installation steps](instruction.md).
 
 **Home hold and speed control (2026-09-29.8):** manual Home in the release
 dashboard now parks the arms until another movement command. Start clock
@@ -27,7 +25,7 @@ Change speed while idle; it applies to the next movement and survives reboot.
 
 **Reflash both Octopus boards, both ESP bridges and the selected master** using
 the installation commands below. The matched package is
-**TIMIAC2-1416cea7c0a8**, protocol 7. This update includes a Marlin homing-speed
+**TIMIAC2-3827cd14016b**, protocol 7. This update includes a Marlin homing-speed
 patch; earlier master-only upload instructions apply only to earlier revisions.
 
 **Hour-change reset fix (2026-09-29.7):** the automatic dance no longer creates
@@ -80,7 +78,7 @@ Repeat the Octopus card flash for both motor boards. The Octopus and bridge
 images are the same in both modes; each master command includes its matching
 web filesystem. The SD card is only needed to flash an Octopus and can be
 removed after `FIRMWARE.CUR` is written. The matching identity is
-**TIMIAC2-1416cea7c0a8**.
+**TIMIAC2-3827cd14016b**.
 
 **Release startup:** at power-up, the master
 waits for both motor boards to be healthy and idle, homes all twelve arms together,
@@ -89,12 +87,12 @@ Developer mode still starts manually. Stop or a homing fault cancels automatic
 startup; reconnecting a board does not retry it. If the RTC is invalid, homing
 still runs and the clock pose waits for valid time.
 
-**Motor settings:** all twelve arms request **800 mA RMS**
+**Motor settings:** all twelve arms request **1,400 mA RMS**
 for running and microswitch homing, with **64 commanded microsteps** over UART
 and **internal interpolation to 256**. Calibration is **11,520 steps/mm**; travel
 is 0-50 mm. Maximum feed is **500 mm/min** (96,000 step pulses/s); homing
-is **120 mm/min at 100%** (60 at the default 50%). The holding multiplier remains 0.5.
-Driver chopper timing now uses the 24 V preset for the reported 24 V / 7 A supply.
+is **120 mm/min at 100%** (60 at the default 50%). The holding multiplier remains 0.5 (approximately 700 mA at rest).
+Driver chopper timing now uses the 24 V preset for the planned 24 V / 400 W (16.7 A) supply.
 
 **Home all** now uses Lumiac's concurrent six-arm routine on each Octopus:
 all six seek together and each stops at its own physical switch. The master
@@ -107,10 +105,9 @@ report, including numerical mismatches, rather than substituting browser
 constants. These are configured values, not measured coil current.
 When upgrading from older motor settings, reflash **both Octopus boards, both bridges, and the chosen master mode**;
 the master command also installs its web filesystem. Reload the dashboard.
-The matching machine identity is **TIMIAC2-1416cea7c0a8**.
+The matching machine identity is **TIMIAC2-3827cd14016b**.
 
-The requested current is now 800 mA, superseding the earlier 250 mA and
-1,414 mA settings. The Board 2 C2 release fault remains physically unverified;
+The requested current is now 1,400 mA, superseding the earlier 800 mA setting. The Board 2 C2 release fault remains physically unverified;
 new homing errors name the affected axes, and switch protection stays enabled.
 
 **Generation 2 rebuild:** see [the rebuild and installation guide](Docs/rebuild.md).
@@ -219,7 +216,7 @@ bootloader renamed it to **FIRMWARE.CUR**. Do not put an ESP binary on these
 cards. Runtime SD programs and autostart are disabled in this new firmware.
 
 The Octopus build starts from clean Marlin 2.1.2.7 and the explicit six-axis machine definition:
-**Octopus V1.1 / STM32F446, TMC2209 UART, MOTOR0/1/2/3/4/5, 800 mA RMS setting,
+**Octopus V1.1 / STM32F446, TMC2209 UART, MOTOR0/1/2/3/4/5, 1,400 mA RMS setting,
 64 microsteps interpolated to 256, 11,520 steps/mm, 0-50 mm travel, 500 mm/min maximum
 maximum speed, 25 mm/s² S-curve acceleration** (80 mm/s² axis ceiling).
 The build adapts the pinned Lumiac six-arm configuration; see

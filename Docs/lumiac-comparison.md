@@ -49,7 +49,7 @@ its own switch within one shared seek. See [the patch provenance and tests](../M
 
 Lumiac explicitly enables `TMC_USE_SW_SPI` with six TMC5160 drivers: its driver
 configuration uses **SPI**. Timiac instead uses six **TMC2209 UART** drivers per
-board, each on its own socket UART pin at address zero. Timiac requests 800 mA RMS
+board, each on its own socket UART pin at address zero. Timiac requests 1,400 mA RMS
 with 0.11 Ω sense resistance;
 Lumiac's 2,500 mA / 0.075 Ω values are not suitable
 substitutes. The separate Lumiac high-power environment is not used.
@@ -102,7 +102,7 @@ Other deliberate adaptations:
   validation. Lumiac uses the opposite switch polarity.
 - Keep A/B/C as linear actuator coordinates in millimetres; Lumiac's file marks
   them rotational. Copying that flag would change feed calculations and units.
-- Use the 24 V chopper timing for the reported 24 V / 7 A supply;
+- Use the 24 V chopper timing for the planned 24 V / 400 W (16.7 A) supply;
   Lumiac uses 24 V timing. This setting does not change the supply voltage.
 - Keep USART3 and USB at 115200 baud, 192-character command capacity, 600-second
   motor timeout, and homing required after boot or motor release.

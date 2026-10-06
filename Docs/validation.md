@@ -1,3 +1,29 @@
+# 1,400 mA RMS package: 2026-10-06.1
+
+Package **TIMIAC2-3827cd14016b**, protocol 7, requests 1,400 mA RMS for all
+running/homing axes and retains the 0.5 holding multiplier (approximately 700 mA).
+Generated Marlin configuration confirms all six currents on each Octopus, the
+same homing currents, and retained thermal monitoring, 50 mA current reduction,
+reporting and shutdown protection.
+
+Validation completed:
+
+- Shared Octopus, both ESP-12 bridges, development/release ESP32 masters and both
+  dashboard filesystems built successfully; the Marlin compile-time contract
+  checks 1,400 mA on all six driver channels.
+- All 15 Python tests and 48 web/control tests passed.
+- Host firmware parser, Octopus session, both coordinator modes and bridge tests
+  passed, including all 720 concurrent homing switch orders. The Octopus session
+  additionally rejects the previous 800 mA current setting and thermal reduction.
+- `python run.py verify` passed for every prepared image and matching machine
+  identity; `git diff --check` passed.
+
+Prepared images are in `firmware/two-motor`. Update both Octopus boards, both
+bridges and the selected master together, following [instruction.md](../instruction.md).
+Fit the planned 24 V / 400 W supply and cooling before commissioning.
+Hardware was not flashed, and torque, actual coil current, temperatures and
+power consumption have not been measured on the physical machine.
+
 # Idle clock regression: 2026-10-04.1
 
 The coordinator/UART regression simulates Marlin's 600-second inactivity policy.

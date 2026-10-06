@@ -80,8 +80,8 @@ on each physical mechanism before production use.
 |---|---|
 | Board / MCU | BIGTREETECH Octopus V1.1 / STM32F446ZET6 |
 | Motor / driver | X/Y/Z/A/B/C in G-code; Marlin internally calls the last three drivers I/J/K |
-| Reported supply / chopper timing | 24 V / 7 A, CHOPPER_DEFAULT_24V |
-| Current / microsteps | 800 mA RMS requested / 64 commanded, interpolated to 256 |
+| Planned supply / chopper timing | 24 V / 400 W (16.7 A), CHOPPER_DEFAULT_24V |
+| Current / microsteps | 1,400 mA RMS requested / 64 commanded, interpolated to 256 |
 | Steps / travel | 11,520 steps/mm / 0–50 mm |
 | Maximum feed | 8.333 mm/s = 500 mm/min |
 | Acceleration | S-curve: 25 mm/s² travel, 80 mm/s² per-axis ceiling |

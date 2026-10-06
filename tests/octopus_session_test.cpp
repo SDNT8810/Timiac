@@ -63,7 +63,7 @@ std::vector<std::string> execute(OctopusSession& s, const char* line) {
 }
 int main() {
   // Old low-current profiles or a thermally reduced current block new work.
-  for (unsigned current : {250U, 600U, 1414U, timiac::driverCurrent - 50}) {
+  for (unsigned current : {250U, 600U, 800U, 1414U, timiac::driverCurrent - 50}) {
     OctopusSession mismatch;
     mismatch.next(now); identify(mismatch); mismatch.next(now);
     drivers(mismatch, -1, false, timiac::driverMicrosteps, current); mismatch.receive("ok", now);

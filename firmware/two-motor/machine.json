@@ -1,5 +1,5 @@
 {
-  "identity": "TIMIAC2-1416cea7c0a8",
+  "identity": "TIMIAC2-3827cd14016b",
   "generation": 2,
   "protocol": 7,
   "motion_speed_override": "M220-including-homing",
@@ -16,7 +16,7 @@
   "max_acceleration_mm_s2": 80,
   "junction_deviation_mm": 0.3,
   "driver": "TMC2209",
-  "current_ma": 800,
+  "current_ma": 1400,
   "microsteps": 64,
   "rsense": 0.11,
   "uart_address": 0,
