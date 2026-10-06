@@ -1,0 +1,3 @@
+[submodule "Marlin/marlin-2.1.2.7"]
+	path = Marlin/marlin-2.1.2.7
+	url = https://github.com/MarlinFirmware/Marlin.git

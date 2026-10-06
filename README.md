@@ -631,3 +631,20 @@ This is Lumiac's socket order. MOTOR2_1 and MOTOR2_2 share one driver; leave
 MOTOR2_2 empty for the single Z actuator. Endstops remain STOP0 through STOP5.
 The previous MOTOR2 bypass is superseded; the user is replacing both boards
 with new boards. See [the wiring and changes from the previous layout](Docs/lumiac-comparison.md).
+
+## Clone the project
+
+```powershell
+git clone --recurse-submodules https://github.com/SDNT8810/Timiac.git
+cd Timiac
+```
+
+For an existing clone, run `git submodule update --init --recursive` before
+rebuilding. Marlin is pinned to upstream 2.1.2.7; the active build starts from
+that clean tag and applies Timiac's configuration and motion patches.
+
+The pre-existing edits in the local Marlin working folder are preserved in
+`Marlin/patches/legacy-working-tree.patch`. This is an archival snapshot; the
+active build does not apply it. To reproduce those legacy working-folder edits,
+run `git -C Marlin/marlin-2.1.2.7 apply ../patches/legacy-working-tree.patch`
+after initializing the clean submodule.
