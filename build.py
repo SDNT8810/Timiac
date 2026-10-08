@@ -10,7 +10,6 @@ import os
 import tempfile
 import zipfile
 from tools.machine_config import generate, definitions, replace_definitions, baseline
-from run import cloud_pairing_configured
 
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "Marlin/marlin-2.1.2.7"
@@ -87,7 +86,6 @@ def main():
     parser.add_argument("--prepare-only", action="store_true", help="generate the six-axis Marlin source without compiling")
     args = parser.parse_args()
     args.target = aliases.get(args.target, args.target)
-    private_cloud = cloud_pairing_configured()
     generate()
     from tools.generate_presets import generate as generate_presets
     generate_presets()
@@ -109,27 +107,14 @@ def main():
         subprocess.run(command, check=True)
         roles = ("master", "master_release", "board1", "board2") if args.target == "all" else (args.target,)
         for role in roles:
-            if private_cloud and role.startswith("master"):
-                # A paired application embeds the device secret. Keep it out of
-                # the shared, version-controlled firmware folder.
-                continue
             shutil.copy2(ROOT / f"ESP_Timiac/.pio/build/timiac_{role}/firmware.bin", release / f"esp_{role}.bin")
     for role in ("master", "master_release"):
         if args.target not in ("all", role):
-            continue
-        if private_cloud and role == "master":
-            print("Paired master: only the release dashboard is exported; use python build.py master_release")
             continue
         subprocess.run([sys.executable, "-m", "platformio", "run", "-d", str(ROOT / "ESP_Timiac"),
                         "-e", f"timiac_{role}", "-t", "export_master"], check=True)
         master_build = ROOT / f"ESP_Timiac/.pio/build/timiac_{role}"
         layout = json.loads((master_build / "master_flash.json").read_text(encoding="utf-8"))
-        if private_cloud:
-            subprocess.run([sys.executable, "-m", "platformio", "run", "-d", str(ROOT / "ESP_Timiac"),
-                            "-e", f"timiac_{role}", "-t", "buildfs"], check=True)
-            subprocess.run([sys.executable, str(ROOT / "CloudGateway/scripts/export_cloud_firmware.py")], check=True)
-            print("Ready: python run.py master_release --port COM10 uses the paired cloud firmware")
-            continue
         for image in layout["images"]:
             if image["file"] == "esp_master.bin":
                 image["file"] = f"esp_{role}.bin"
@@ -154,8 +139,6 @@ def main():
         updated.append("firmware.bin")
     for role in ("board1", "board2", "master", "master_release"):
         if args.target in ("all", role):
-            if private_cloud and role.startswith("master"):
-                continue
             updated.append(f"esp_{role}.bin")
             if role.startswith("master"):
                 updated.extend(f"{role}_{suffix}.bin" for suffix in ("bootloader", "partitions", "boot_app0", "littlefs"))

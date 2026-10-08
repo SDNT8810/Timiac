@@ -20,18 +20,19 @@ class MasterFlashTests(unittest.TestCase):
         hashes = {}
         for role in ("master", "master_release"):
             images = []
-            for offset, name in (("0x10000", f"esp_{role}.bin"), ("0x290000", f"{role}_littlefs.bin")):
+            for offset, name in (("0x1000", f"{role}_bootloader.bin"), ("0x8000", f"{role}_partitions.bin"),
+                                 ("0xe000", f"{role}_boot_app0.bin"), ("0x10000", f"esp_{role}.bin"),
+                                 ("0x290000", f"{role}_littlefs.bin")):
                 content = name.encode()
                 (self.root / name).write_bytes(content)
                 hashes[name] = hashlib.sha256(content).hexdigest()
                 images.append({"offset": offset, "file": name})
             (self.root / f"{role}_flash.json").write_text(json.dumps({"chip": "esp32", "images": images}))
         (self.root / "SHA256.json").write_text(json.dumps(hashes))
-        self.cloud = self.root / "cloud" / "firmware"
-        self.secrets = self.cloud.parent / "cloudflare-secrets.json"
+        self.cloud_config = self.root / "cloud_config.h"
         self.config = self.root / "config.local.h"
         for name, value in (("RELEASE_DIR", self.root), ("CHECKSUMS_FILE", self.root / "SHA256.json"),
-                            ("CLOUD_RELEASE_DIR", self.cloud), ("CLOUD_SECRETS_FILE", self.secrets),
+                            ("MASTER_CLOUD_CONFIG", self.cloud_config),
                             ("MASTER_LOCAL_CONFIG", self.config)):
             patcher = patch.object(runner, name, value)
             patcher.start()
@@ -62,78 +63,75 @@ class MasterFlashTests(unittest.TestCase):
     def make_paired_release(self):
         from tools.machine_config import load
         _, identity = load()
-        self.cloud.mkdir(parents=True)
         key = "test-device-key-never-print"
-        self.secrets.write_text(json.dumps({"TIMIAC_DEVICE_KEY": key}))
-        manifest = {"chip": "esp32", "flash_size": "4MB", "dashboard": "release",
-                    "machine_id": identity, "remote_url": "https://control.timiac.it", "images": []}
-        for offset, name in (("0x1000", "master_bootloader.bin"), ("0x8000", "master_partitions.bin"),
-                             ("0xe000", "master_boot_app0.bin"), ("0x10000", "esp_master.bin"),
-                             ("0x290000", "littlefs.bin")):
-            data = f"{name} {identity} https://control.timiac.it {key}".encode()
-            (self.cloud / name).write_bytes(data)
-            manifest["images"].append({"file": name, "offset": offset,
-                                       "sha256": hashlib.sha256(data).hexdigest()})
-        (self.cloud / "master_flash.json").write_text(json.dumps(manifest))
-        return manifest
+        self.cloud_config.write_text('#define TIMIAC_CLOUD_URL "https://control.timiac.it"\n'
+                                     '#define TIMIAC_CLOUD_DEVICE_ID "clock-01"\n'
+                                     f'#define TIMIAC_CLOUD_DEVICE_KEY "{key}"\n')
+        data = f"{identity} https://control.timiac.it clock-01 {key}".encode()
+        self.update_application(data)
+        return identity
+
+    def update_application(self, data):
+        (self.root / "esp_master_release.bin").write_bytes(data)
+        hashes = json.loads((self.root / "SHA256.json").read_text())
+        hashes["esp_master_release.bin"] = hashlib.sha256(data).hexdigest()
+        (self.root / "SHA256.json").write_text(json.dumps(hashes))
 
     @patch.object(runner, "ensure_esptool")
     @patch.object(runner.subprocess, "run")
     def test_release_automatically_selects_paired_cloud_firmware(self, execute, _ensure):
         self.make_paired_release()
-        # A missing public release image must not override the selected paired one.
-        (self.root / "esp_master_release.bin").unlink()
+        # A fresh pull has only tracked configuration and normal release files.
+        self.assertFalse(self.config.exists())
         runner.flash_master("COM10", 460800, True)
         command = execute.call_args.args[0]
         self.assertIn("COM10", command)
-        for name in ("esp_master.bin", "littlefs.bin", "master_bootloader.bin", "master_partitions.bin", "master_boot_app0.bin"):
-            self.assertIn(str(self.cloud.resolve() / name), command)
-        self.assertNotIn(str(self.root / "esp_master_release.bin"), command)
+        for name in ("esp_master_release.bin", "master_release_littlefs.bin", "master_release_bootloader.bin",
+                     "master_release_partitions.bin", "master_release_boot_app0.bin"):
+            self.assertIn(str(self.root / name), command)
+        self.assertFalse(any(".local" in arg for arg in command))
 
     @patch.object(runner.subprocess, "run")
     def test_corrupt_paired_image_never_falls_back_to_local_release(self, execute):
         self.make_paired_release()
-        (self.cloud / "esp_master.bin").write_bytes(b"corrupted")
-        with self.assertRaisesRegex(ValueError, "File verification failed"):
+        (self.root / "esp_master_release.bin").write_bytes(b"corrupted")
+        with self.assertRaisesRegex(ValueError, "Checksum mismatch"):
             runner.flash_master("COM10", 460800, True)
         execute.assert_not_called()
 
     @patch.object(runner.subprocess, "run")
     def test_configured_cloud_without_package_never_flashes_local_only(self, execute):
-        self.config.write_text('#define TIMIAC_CLOUD_DEVICE_KEY "paired-device"\n')
-        with self.assertRaisesRegex(FileNotFoundError, "Paired cloud release is missing"):
+        self.make_paired_release()
+        (self.root / "esp_master_release.bin").unlink()
+        with self.assertRaisesRegex(FileNotFoundError, "Missing release file"):
             runner.flash_master("COM10", 460800, True)
         execute.assert_not_called()
 
     @patch.object(runner.subprocess, "run")
     def test_changed_pairing_key_never_flashes_stale_firmware(self, execute):
         self.make_paired_release()
-        self.secrets.write_text(json.dumps({"TIMIAC_DEVICE_KEY": "replacement-key"}))
-        with self.assertRaisesRegex(ValueError, "different device key"):
+        self.cloud_config.write_text(self.cloud_config.read_text().replace("test-device-key-never-print", "replacement-key"))
+        with self.assertRaisesRegex(ValueError, "does not match the cloud pairing"):
             runner.flash_master("COM10", 460800, True)
         execute.assert_not_called()
 
     @patch.object(runner.subprocess, "run")
     def test_checksum_valid_old_cloud_machine_never_flashes(self, execute):
-        manifest = self.make_paired_release()
+        identity = self.make_paired_release()
         stale_identity = "TIMIAC2-000000000000"
-        image = self.cloud / "esp_master.bin"
-        image.write_bytes(image.read_bytes().replace(manifest["machine_id"].encode(), stale_identity.encode()))
-        manifest["machine_id"] = stale_identity
-        for entry in manifest["images"]:
-            if entry["file"] == image.name:
-                entry["sha256"] = hashlib.sha256(image.read_bytes()).hexdigest()
-        (self.cloud / "master_flash.json").write_text(json.dumps(manifest))
-        with self.assertRaisesRegex(ValueError, "release is stale"):
+        image = self.root / "esp_master_release.bin"
+        self.update_application(image.read_bytes().replace(identity.encode(), stale_identity.encode()))
+        with self.assertRaisesRegex(ValueError, "does not contain the current machine identity"):
             runner.flash_master("COM10", 460800, True)
         execute.assert_not_called()
 
     @patch.object(runner.subprocess, "run")
     def test_wrong_cloud_flash_offsets_never_reach_serial(self, execute):
-        manifest = self.make_paired_release()
+        self.make_paired_release()
+        manifest = json.loads((self.root / "master_release_flash.json").read_text())
         manifest["images"][-1]["offset"] = "0x280000"
-        (self.cloud / "master_flash.json").write_text(json.dumps(manifest))
-        with self.assertRaisesRegex(ValueError, "Unexpected paired ESP32 flash layout"):
+        (self.root / "master_release_flash.json").write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "Unexpected ESP32 flash layout"):
             runner.flash_master("COM10", 460800, True)
         execute.assert_not_called()
 

@@ -4,7 +4,7 @@ Examples:
   python run.py esp1_dev --port COM5
   python run.py esp2_release --port COM5
   python run.py master_dev --port COM5
-  python run.py master_release --port COM10  # Uses the paired cloud release when configured
+  python run.py master_release --port COM10  # Paired cloud release included in the repository
   python run.py octopus_release --sd I:\\
 """
 
@@ -27,8 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 RELEASE_DIR = ROOT / "firmware" / "two-motor"
 CHECKSUMS_FILE = RELEASE_DIR / "SHA256.json"
-CLOUD_RELEASE_DIR = ROOT / "CloudGateway" / ".local" / "firmware"
-CLOUD_SECRETS_FILE = CLOUD_RELEASE_DIR.parent / "cloudflare-secrets.json"
+MASTER_CLOUD_CONFIG = ROOT / "ESP_Timiac" / "include" / "cloud_config.h"
 MASTER_LOCAL_CONFIG = ROOT / "ESP_Timiac" / "include" / "config.local.h"
 DEFAULT_ESP_PORT = "COM5"
 DEFAULT_SD_ROOT = Path("E:/")
@@ -87,33 +86,36 @@ def verified_release_file(name: str) -> Path:
     return path
 
 
-def cloud_pairing_configured() -> bool:
-    configured = CLOUD_SECRETS_FILE.is_file()
-    if MASTER_LOCAL_CONFIG.is_file():
-        configured = configured or bool(re.search(
-            r'^\s*#define\s+TIMIAC_CLOUD_DEVICE_KEY\s+"[^"]+"',
-            MASTER_LOCAL_CONFIG.read_text(encoding="utf-8"), re.MULTILINE))
-    return configured
+def master_cloud_settings() -> dict[str, str]:
+    settings = {}
+    # Mirror the C++ defaults: optional local definitions override tracked values.
+    for path in (MASTER_CLOUD_CONFIG, MASTER_LOCAL_CONFIG):
+        if not path.is_file():
+            continue
+        for name, value in re.findall(
+                r'^\s*#define\s+(TIMIAC_CLOUD_(?:URL|DEVICE_ID|DEVICE_KEY))\s+("(?:[^"\\]|\\.)*")',
+                path.read_text(encoding="utf-8"), re.MULTILINE):
+            settings[name] = json.loads(value)
+    return settings
 
 
-def paired_master_images():
-    """Prefer the paired release, and never silently replace it with local-only firmware."""
-    configured = cloud_pairing_configured()
-    if not CLOUD_RELEASE_DIR.exists():
-        if configured:
-            raise FileNotFoundError("Paired cloud release is missing; run python build.py master_release before flashing")
+def verify_master_cloud(image: Path) -> str | None:
+    settings = master_cloud_settings()
+    if not any(settings.values()):
         return None
-    from CloudGateway.scripts.flash_cloud_master import verified_images
+    fields = ("TIMIAC_CLOUD_URL", "TIMIAC_CLOUD_DEVICE_ID", "TIMIAC_CLOUD_DEVICE_KEY")
+    if any(not settings.get(name) for name in fields):
+        raise ValueError("Cloud pairing configuration is incomplete; check ESP_Timiac/include/cloud_config.h")
+    if not settings["TIMIAC_CLOUD_URL"].startswith("https://"):
+        raise ValueError("The cloud relay URL must use HTTPS")
+    firmware = image.read_bytes()
     from tools.machine_config import load
-    manifest, images = verified_images(CLOUD_RELEASE_DIR)
     _, identity = load()
-    if manifest["machine_id"] != identity:
-        raise ValueError("Paired cloud release is stale; run python build.py master_release before flashing")
-    if CLOUD_SECRETS_FILE.is_file():
-        key = json.loads(CLOUD_SECRETS_FILE.read_text(encoding="utf-8")).get("TIMIAC_DEVICE_KEY")
-        if not isinstance(key, str) or not key or key.encode() not in (CLOUD_RELEASE_DIR / "esp_master.bin").read_bytes():
-            raise ValueError("Paired cloud release uses a different device key; run python build.py master_release")
-    return images
+    if identity.encode() not in firmware:
+        raise ValueError("Release master does not contain the current machine identity; run python build.py master_release")
+    if any(settings[name].encode() not in firmware for name in fields):
+        raise ValueError("Release master does not match the cloud pairing settings; run python build.py master_release")
+    return settings["TIMIAC_CLOUD_URL"]
 
 
 def verify_release() -> str:
@@ -141,8 +143,9 @@ def verify_release() -> str:
         for name in expected.values():
             verified_release_file(name)
     print(f"Verified {identity}: microswitch Octopus, shared bridges, dev/release masters and web images.")
-    if paired_master_images() is not None:
-        print("Verified paired cloud release: master_release uses https://control.timiac.it")
+    cloud_url = verify_master_cloud(verified_release_file("esp_master_release.bin"))
+    if cloud_url:
+        print(f"Verified paired cloud release: master_release uses {cloud_url}")
     return identity
 
 
@@ -171,19 +174,6 @@ def flash_esp8266(image_name: str, port: str, baud: int) -> None:
 
 
 def flash_master(port: str, baud: int, release: bool = False) -> None:
-    paired = paired_master_images() if release else None
-    if paired is not None:
-        command = [
-            sys.executable, "-m", "esptool", "--chip", "esp32", "--port", port,
-            "--baud", str(baud), "write-flash",
-        ]
-        for offset, image in paired:
-            command.extend((offset, str(image)))
-        ensure_esptool()
-        print(f"Flashing cloud-enabled release master and dashboard on {port} (https://control.timiac.it)...")
-        subprocess.run(command, check=True)
-        print("Finished. Connect the master to its Wi-Fi router and open https://control.timiac.it/")
-        return
     manifest_path = RELEASE_DIR / ("master_release_flash.json" if release else "master_flash.json")
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Missing master flash manifest: {manifest_path}")
@@ -191,6 +181,15 @@ def flash_master(port: str, baud: int, release: bool = False) -> None:
     images = manifest.get("images")
     if manifest.get("chip") != "esp32" or not isinstance(images, list) or not images:
         raise ValueError(f"Invalid master flash manifest: {manifest_path}")
+    role = "master_release" if release else "master"
+    expected = {
+        "0x1000": f"{role}_bootloader.bin", "0x8000": f"{role}_partitions.bin",
+        "0xe000": f"{role}_boot_app0.bin", "0x10000": f"esp_{role}.bin",
+        "0x290000": f"{role}_littlefs.bin",
+    }
+    actual = {image.get("offset", "").lower(): image.get("file") for image in images}
+    if actual != expected or len(images) != len(expected):
+        raise ValueError(f"Unexpected ESP32 flash layout: {manifest_path}")
 
     command = [
         sys.executable, "-m", "esptool", "--chip", "esp32", "--port", port,
@@ -204,9 +203,13 @@ def flash_master(port: str, baud: int, release: bool = False) -> None:
             raise ValueError(f"Invalid image name in {manifest_path}: {name!r}")
         command.extend((offset, str(verified_release_file(name))))
 
+    cloud_url = verify_master_cloud(verified_release_file("esp_master_release.bin")) if release else None
     ensure_esptool()
-    print(f"Flashing {'user release' if release else 'development'} master ESP and web filesystem on {port}...")
+    label = "cloud-enabled release" if cloud_url else "user release" if release else "development"
+    print(f"Flashing {label} master ESP and web filesystem on {port}...")
     subprocess.run(command, check=True)
+    if cloud_url:
+        print(f"Finished. Connect the master to its Wi-Fi router and open {cloud_url}/")
 
 
 def windows_drive_type(root: Path) -> int | None:

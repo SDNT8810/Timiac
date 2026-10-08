@@ -19,30 +19,33 @@ From the project folder, run the usual command:
 python run.py master_release --port COM10
 ```
 
-This automatically selects `CloudGateway/.local/firmware/`, verifies every
+This selects the included `firmware/two-motor/` release, verifies every
 image, machine identity and pairing key, and flashes the application and local
 dashboard together. It preserves the saved router settings. Only the master
 needs this update; use its actual USB port if it is not COM10.
 
-The paired package is private and excluded from Git. Include that folder and
-`CloudGateway/scripts/flash_cloud_master.py` when transferring the project to
-the clock's operator. A configured installation refuses to flash if the paired
-package is missing or invalid. A clone without pairing uses the shared local
-release until provisioned.
+The pairing defaults in `ESP_Timiac/include/cloud_config.h` and the paired
+release are intentionally tracked in Git. A fresh clone or pull can flash the
+master without copying any credentials. Cloudflare and Google account access
+are unnecessary for flashing. Invalid hashes or mismatched pairing settings
+stop the updater before it writes to the board.
 
-To rebuild the paired release on this provisioned PC:
+To rebuild the paired release on any PC with the project requirements installed:
 
 ```powershell
 python build.py master_release
 python run.py verify
 ```
 
-The build exports the paired image into `.local/firmware/` and refreshes
-`.local/Timiac-cloud-master.zip`. It keeps device secrets out of the shared
-`firmware/two-motor/` folder. `ESP_Timiac/include/config.local.h` must supply the
-cloud URL, device ID, device key and `kCloudflareRootCa` certificate bundle from
-`ESP_Timiac/src/cloudflare_certificate.h`. The matching key is kept in
-`.local/cloudflare-secrets.json` and installed as a Worker secret.
+The build updates `firmware/two-motor/` and its checksums. The tracked
+`cloud_config.h` supplies the cloud URL, device ID, device key and trusted CA
+bundle. Optional `config.local.h` definitions can override these for another
+clock. The deployed Worker's `TIMIAC_DEVICE_KEY` must match this device key.
+
+Repository readers can impersonate hardware status using the included key;
+keep the repository private when sharing with operators. Account-wide
+Cloudflare keys, Google login tokens and the private gateway secret file remain
+excluded from Git.
 
 ## Maintain the deployed gateway
 

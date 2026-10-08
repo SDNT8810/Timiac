@@ -549,12 +549,17 @@ The normal update command automatically uses the paired cloud release:
 python run.py master_release --port COM10
 ```
 
-Replace `COM10` with the master USB port if needed. The private firmware package
-must be present in `CloudGateway/.local/firmware/`; it contains the pairing key
-and is excluded from Git. On this configured machine, `python build.py
-master_release` refreshes that package. A missing or invalid paired package
-stops flashing instead of installing a local-only image. Unprovisioned clones
-continue to use the shared local release until paired.
+Replace `COM10` with the master USB port if needed. The cloud pairing defaults
+are included in `ESP_Timiac/include/cloud_config.h`, and the paired firmware is
+included in `firmware/two-motor/`. A fresh pull needs no credential copying and
+no Cloudflare or Google login to flash the clock. `python build.py master_release`
+rebuilds this same release. Flashing checks the image hashes, machine identity,
+cloud URL and pairing key before writing.
+
+The clock's device key is intentionally included in Git. Repository readers can
+impersonate its status. Keep this repository private when sharing it with the
+clock's operators. Cloudflare account keys and Google account tokens remain
+outside the repository.
 
 The public page stays available when the ESP32 is unplugged. It reports
 **Master is offline** and disables commands after the last status is 30 seconds

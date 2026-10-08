@@ -5,6 +5,7 @@
 #if __has_include("config.local.h")
 #include "config.local.h"
 #endif
+#include "cloud_config.h"
 #ifndef TIMIAC_RELEASE
 #define TIMIAC_RELEASE 0
 #endif
@@ -44,9 +45,8 @@
 #ifndef TIMIAC_NTP_SERVER_2
 #define TIMIAC_NTP_SERVER_2 "pool.ntp.org"
 #endif
-// Leave these empty for local-only operation. config.local.h supplies the
-// deployment URL and the per-device secret. A Google Trust root is built in for
-// legacy Cloud Run endpoints; supply the Cloudflare trust bundle for its relay.
+// cloud_config.h supplies this clock's tracked deployment and pairing defaults.
+// config.local.h can override them for another installation.
 #ifndef TIMIAC_CLOUD_URL
 #define TIMIAC_CLOUD_URL ""
 #endif
