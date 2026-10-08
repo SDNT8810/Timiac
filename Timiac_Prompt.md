@@ -185,6 +185,7 @@ davood.space@gmail.com
 davoudtanha91@gmail.com
 davoudnikkhouy@gmail.com
 
+let the required cridentials be pushed to github , so i can just pull this repo on another pc and run it there without needing copy/past cridentials ! i don't mind !
 
 -------------------------------------------------------------
 

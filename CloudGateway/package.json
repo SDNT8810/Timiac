@@ -2,11 +2,22 @@
   "name": "timiac-cloud-gateway",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
-  "scripts": { "start": "node server.js", "check": "node --check server.js" },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node --check cloudflare/worker.js && node --check public/app.js",
+    "test": "node --test test/*.test.js"
+  },
   "dependencies": {
-    "@google-cloud/firestore": "^7.11.0",
-    "express": "^4.21.2",
-    "google-auth-library": "^9.15.1"
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "wrangler": "^4.148.0"
+  },
+  "overrides": {
+    "sharp": "^0.35.5"
   }
 }

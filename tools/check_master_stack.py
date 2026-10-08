@@ -16,9 +16,11 @@ RESERVE_BYTES = 2048
 
 def animation_stack_report(disassembly, release, stack_bytes):
     functions = {}
+    bodies = {}
     parts = re.split(r"\n([0-9a-f]+) <([^\n]+)>:\n", disassembly)
     for index in range(1, len(parts), 3):
         name, body = parts[index + 1:index + 3]
+        bodies[name] = body
         first = body.splitlines()[0]
         frame = re.search(r"\bentry\s+a1,\s+(0x[0-9a-f]+|\d+)", first)
         if frame:
@@ -40,6 +42,11 @@ def animation_stack_report(disassembly, release, stack_bytes):
     if release:
         paths["automatic_hour"] = base + ["(anonymous namespace)::releaseClockTick()",
                                           "(anonymous namespace)::startBuiltinPreset("] + builders
+    # Inlining folds receiveCloudAction/startCloudAction into cloudTick. Only
+    # enabled, paired builds link this call to the animation builder.
+    cloud = "(anonymous namespace)::cloudTick()"
+    if "startBuiltinPreset(" in bodies.get(cloud, ""):
+        paths["remote_animation"] = base + [cloud, "(anonymous namespace)::startBuiltinPreset("] + builders
     report = {"loop_stack_bytes": stack_bytes, "reserve_bytes": RESERVE_BYTES, "paths": {}}
     for name, path in paths.items():
         frames = [frame_for(prefix) for prefix in path]

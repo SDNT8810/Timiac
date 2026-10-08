@@ -45,8 +45,8 @@
 #define TIMIAC_NTP_SERVER_2 "pool.ntp.org"
 #endif
 // Leave these empty for local-only operation. config.local.h supplies the
-// deployment-specific Cloud Run URL and the per-device secret. A Google Trust
-// root is built in for Cloud Run; set this optional CA only for another origin.
+// deployment URL and the per-device secret. A Google Trust root is built in for
+// legacy Cloud Run endpoints; supply the Cloudflare trust bundle for its relay.
 #ifndef TIMIAC_CLOUD_URL
 #define TIMIAC_CLOUD_URL ""
 #endif
