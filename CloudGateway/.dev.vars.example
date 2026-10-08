@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local Wrangler development; never commit real values.
+# Public settings and the administrator identity are in wrangler.jsonc.
+TIMIAC_DEVICE_KEY=REPLACE_WITH_PRIVATE_CLOCK_PAIRING_KEY
+FIREBASE_API_KEY=REPLACE_WITH_FIREBASE_PROJECT_API_KEY

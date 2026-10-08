@@ -58,6 +58,12 @@ python run.py master_release --port COM5
 
 Wait for successful writing and verification. This also installs the dashboard. Unplug USB afterward.
 
+For this cloud-connected clock, the same command automatically installs its
+paired firmware when `CloudGateway/.local/firmware/` is included in the received
+folder. The terminal should say **Flashing cloud-enabled release master**.
+Reconnect the master to its Wi-Fi router, open **https://control.timiac.it/**,
+and sign in with the account supplied separately.
+
 **5. Start and check**
 
 Restore all connections and power on Timiac. **Keep clear of the arms: they home automatically.** Connect your phone to Wi-Fi **Timiac**, password **12345678**, and open **http://192.168.4.1**. Check both boards are ready and the time is correct. Leave it running for at least **30 minutes** to confirm it keeps updating.
@@ -76,6 +82,8 @@ machine.json
 tools/machine_config.py
 Marlin/profiles/lumiac-reference/  (entire folder)
 firmware/two-motor/               (entire folder, including JSON files)
+CloudGateway/scripts/flash_cloud_master.py
+CloudGateway/.local/firmware/     (private paired master; share only with the operator)
 ```
 
 At **50% speed**, check that Struggle stays between **15 and 35 mm** and finishes within **15 seconds**. Next Hour should open all arms, close all, then show time within **40 seconds** (within **20 seconds** at 100%). Stop if steps are lost or overheating warnings appear. A thermal fault requires cooling and an Octopus reset before homing again.

@@ -535,15 +535,31 @@ This supplies the master with an upstream route. When that route has internet
 access, the DS3231 is synchronized from NTP while the clock is idle. It does
 not route internet traffic for the ESP bridges.
 
-## Remote dashboard at timiac.it
+## Remote hardware dashboard at control.timiac.it
 
-The included [CloudGateway](CloudGateway/README.md) provides a remote release
-dashboard without opening a router port. The master makes a certificate-checked
-outbound HTTPS connection to Cloud Run; administrators sign in with Google and
-the service checks their Gmail address against an allow-list. Remote access is
-disabled until its Cloud Run URL, per-device secret, and CA certificate are set
-in the master's untracked `config.local.h`. Provide the Cloudflare and Google
-Cloud credentials when ready to deploy `timiac.it`.
+The [CloudGateway](CloudGateway/README.md) serves the hardware dashboard at
+`https://control.timiac.it/` using Cloudflare Workers and D1. Sign in with the
+configured username and password. The master ESP32 connects outward over
+verified HTTPS every five seconds; no router port needs opening. The simulator
+at `https://timiac.it/` remains separate.
+
+The normal update command automatically uses the paired cloud release:
+
+```powershell
+python run.py master_release --port COM10
+```
+
+Replace `COM10` with the master USB port if needed. The private firmware package
+must be present in `CloudGateway/.local/firmware/`; it contains the pairing key
+and is excluded from Git. On this configured machine, `python build.py
+master_release` refreshes that package. A missing or invalid paired package
+stops flashing instead of installing a local-only image. Unprovisioned clones
+continue to use the shared local release until paired.
+
+The public page stays available when the ESP32 is unplugged. It reports
+**Master is offline** and disables commands after the last status is 30 seconds
+old. Internet access alone does not enable the relay: the master must be
+flashed with its paired release.
 
 ## Your command format
 

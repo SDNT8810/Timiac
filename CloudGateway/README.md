@@ -1,68 +1,82 @@
-# Timiac remote gateway
+# Timiac remote hardware dashboard
 
-This Cloud Run service gives `timiac.it` a remote release dashboard without
-opening a port on the router. The master makes an outbound, certificate-checked
-HTTPS request every five seconds. Cloud Run stores the last status and queues
-Home, Open, Close, Show time, Stop, and Set time requests until the master is
-idle enough to accept them.
+The hardware dashboard is **https://control.timiac.it/**. Cloudflare Workers
+serves the page and D1 stores hardware status and queued commands. The simulator
+at `https://timiac.it/` runs separately. The master makes outbound, verified HTTPS
+requests every five seconds; router port forwarding is unnecessary.
 
-The public URL is protected twice: Google ID tokens are verified by the service,
-and only email addresses in `TIMIAC_ADMIN_EMAILS` are allowed. The device uses a
-separate secret in `X-Timiac-Device-Key`; the browser never receives it.
+Sign in as **Andrea**, using the password supplied separately. Firebase Spark
+handles password authentication without enabling Google Cloud billing. This
+uses username/password login, with no Gmail sign-in or OAuth redirect settings.
+The Worker accepts only the configured Firebase UID, email and password login
+provider. The ESP32 uses a separate private device key.
 
-## Credentials and configuration
+## Update the master
 
-Before deployment, provide:
-
-1. A Google Cloud project where the deployment account can enable APIs, create
-   Firestore in Native mode, deploy Cloud Run, create Secret Manager secrets,
-   and grant the Cloud Run runtime service account `roles/datastore.user`. A
-   Project Owner role covers those operations. The Google OAuth web client
-   needs the authorized JavaScript origin `https://timiac.it`.
-2. The OAuth client ID, allowed administrator Gmail addresses, a random device
-   ID, and a randomly generated device key of at least 32 random bytes.
-3. The Cloudflare API token/account details and the domain zone for `timiac.it`.
-
-The browser uses Google Identity Services and submits a Google ID token to the
-gateway. It does not use an OAuth redirect flow, so the callback URL and OAuth
-client secret are not used by this project. They may remain in Google Cloud,
-but do not put the client secret or an application `AUTH_SECRET` in this
-repository or the Cloud Run configuration.
-
-`config.local.h` on the master needs this shape:
-
-```cpp
-#define TIMIAC_CLOUD_URL "https://YOUR-CLOUD-RUN-URL"
-#define TIMIAC_CLOUD_DEVICE_ID "clock-01"
-#define TIMIAC_CLOUD_DEVICE_KEY "a-long-random-secret"
-```
-
-The remote relay is disabled unless all three settings are present. It uses the
-built-in Google Trust root for a standard Cloud Run endpoint and never uses an
-insecure TLS connection. `TIMIAC_CLOUD_CA_CERT` remains available only if a
-future deployment uses another trusted origin.
-
-## Deploy to Cloud Run
-
-From this directory, after authenticating `gcloud`, enable Cloud Run, Cloud
-Build, Artifact Registry, and Firestore. Give the Cloud Run runtime service
-account the `roles/datastore.user` role, then deploy from source:
+From the project folder, run the usual command:
 
 ```powershell
-gcloud run deploy timiac-gateway --source . --region europe-west8 --allow-unauthenticated --set-env-vars GOOGLE_OAUTH_CLIENT_ID=YOUR_CLIENT_ID,TIMIAC_DEVICE_ID=clock-01,TIMIAC_ADMIN_EMAILS=admin1@gmail.com,admin2@gmail.com --set-secrets TIMIAC_DEVICE_KEY=timiac-device-key:latest
+python run.py master_release --port COM10
 ```
 
-The service must allow unauthenticated invocation so that the master can make
-its outbound request; application code verifies both the device key and each
-Google ID token. Store the device key in Secret Manager and do not put it in a
-command history or source file.
+This automatically selects `CloudGateway/.local/firmware/`, verifies every
+image, machine identity and pairing key, and flashes the application and local
+dashboard together. It preserves the saved router settings. Only the master
+needs this update; use its actual USB port if it is not COM10.
 
-Deploy the Worker in `cloudflare/worker.js` with `ORIGIN_URL` set to the Cloud
-Run URL, and route it to `timiac.it/*`. The worker keeps the Cloud Run host
-header for the origin while Cloudflare terminates public TLS for `timiac.it`.
-Cloudflare Access with Google can be added as another login gate, but the
-gateway's email allow-list remains the enforcement point.
+The paired package is private and excluded from Git. Include that folder and
+`CloudGateway/scripts/flash_cloud_master.py` when transferring the project to
+the clock's operator. A configured installation refuses to flash if the paired
+package is missing or invalid. A clone without pairing uses the shared local
+release until provisioned.
 
-After setting `config.local.h`, rebuild and flash the selected master image.
-Flash only the master for this remote feature; the bridges and Octopus images do
-not need a change. The dashboard reports the relay state under `/api/status`.
+To rebuild the paired release on this provisioned PC:
+
+```powershell
+python build.py master_release
+python run.py verify
+```
+
+The build exports the paired image into `.local/firmware/` and refreshes
+`.local/Timiac-cloud-master.zip`. It keeps device secrets out of the shared
+`firmware/two-motor/` folder. `ESP_Timiac/include/config.local.h` must supply the
+cloud URL, device ID, device key and `kCloudflareRootCa` certificate bundle from
+`ESP_Timiac/src/cloudflare_certificate.h`. The matching key is kept in
+`.local/cloudflare-secrets.json` and installed as a Worker secret.
+
+## Maintain the deployed gateway
+
+Use Node.js 22.13 or newer. From this directory:
+
+```powershell
+npm ci
+npm run check
+npm test
+npm run deploy
+```
+
+`wrangler.jsonc` defines the domain, D1 database, Firebase project and exact
+administrator identity. Authenticate Wrangler with the Cloudflare account that
+owns `timiac.it`. The deployed Worker requires secrets `TIMIAC_DEVICE_KEY` and
+`FIREBASE_API_KEY`; use `wrangler secret put` or the ignored private secrets file
+with `wrangler secret bulk .local/cloudflare-secrets.json`. Never commit it.
+Initialize a new D1 database with `cloudflare/schema.sql` before deploying.
+
+To update the administrator password, authenticate `gcloud` for the configured
+Firebase project and run `python scripts/provision_firebase.py`. It prompts for
+the new password without echoing it. A fresh Firebase project needs
+Authentication > Get started on the Spark plan first. The old `server.js` and
+Dockerfile describe the retired Cloud Run implementation and are not used by
+the deployed Worker.
+
+## Online status
+
+The public page remains available when the ESP32 is unplugged. After 30 seconds
+without a hardware status, it reports **Master is offline** and disables
+commands. After flashing, connect the master to its internet router; its first
+status should arrive after internet time and TLS are ready.
+
+If it stays offline, inspect the local dashboard at `http://192.168.4.1` and
+`/api/status` for relay errors. The public page does not simulate physical
+movement. Commands expire after 60 seconds and belong to one master boot
+session, preventing delayed movement after reconnecting or rebooting.

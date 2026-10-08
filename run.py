@@ -4,7 +4,7 @@ Examples:
   python run.py esp1_dev --port COM5
   python run.py esp2_release --port COM5
   python run.py master_dev --port COM5
-  python run.py master_release --port COM5
+  python run.py master_release --port COM10  # Uses the paired cloud release when configured
   python run.py octopus_release --sd I:\\
 """
 
@@ -27,6 +27,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 RELEASE_DIR = ROOT / "firmware" / "two-motor"
 CHECKSUMS_FILE = RELEASE_DIR / "SHA256.json"
+CLOUD_RELEASE_DIR = ROOT / "CloudGateway" / ".local" / "firmware"
+CLOUD_SECRETS_FILE = CLOUD_RELEASE_DIR.parent / "cloudflare-secrets.json"
+MASTER_LOCAL_CONFIG = ROOT / "ESP_Timiac" / "include" / "config.local.h"
 DEFAULT_ESP_PORT = "COM5"
 DEFAULT_SD_ROOT = Path("E:/")
 
@@ -84,6 +87,35 @@ def verified_release_file(name: str) -> Path:
     return path
 
 
+def cloud_pairing_configured() -> bool:
+    configured = CLOUD_SECRETS_FILE.is_file()
+    if MASTER_LOCAL_CONFIG.is_file():
+        configured = configured or bool(re.search(
+            r'^\s*#define\s+TIMIAC_CLOUD_DEVICE_KEY\s+"[^"]+"',
+            MASTER_LOCAL_CONFIG.read_text(encoding="utf-8"), re.MULTILINE))
+    return configured
+
+
+def paired_master_images():
+    """Prefer the paired release, and never silently replace it with local-only firmware."""
+    configured = cloud_pairing_configured()
+    if not CLOUD_RELEASE_DIR.exists():
+        if configured:
+            raise FileNotFoundError("Paired cloud release is missing; run python build.py master_release before flashing")
+        return None
+    from CloudGateway.scripts.flash_cloud_master import verified_images
+    from tools.machine_config import load
+    manifest, images = verified_images(CLOUD_RELEASE_DIR)
+    _, identity = load()
+    if manifest["machine_id"] != identity:
+        raise ValueError("Paired cloud release is stale; run python build.py master_release before flashing")
+    if CLOUD_SECRETS_FILE.is_file():
+        key = json.loads(CLOUD_SECRETS_FILE.read_text(encoding="utf-8")).get("TIMIAC_DEVICE_KEY")
+        if not isinstance(key, str) or not key or key.encode() not in (CLOUD_RELEASE_DIR / "esp_master.bin").read_bytes():
+            raise ValueError("Paired cloud release uses a different device key; run python build.py master_release")
+    return images
+
+
 def verify_release() -> str:
     """Do not let a valid checksum disguise a mixture of old and new firmware."""
     from tools.machine_config import load
@@ -109,6 +141,8 @@ def verify_release() -> str:
         for name in expected.values():
             verified_release_file(name)
     print(f"Verified {identity}: microswitch Octopus, shared bridges, dev/release masters and web images.")
+    if paired_master_images() is not None:
+        print("Verified paired cloud release: master_release uses https://control.timiac.it")
     return identity
 
 
@@ -137,6 +171,19 @@ def flash_esp8266(image_name: str, port: str, baud: int) -> None:
 
 
 def flash_master(port: str, baud: int, release: bool = False) -> None:
+    paired = paired_master_images() if release else None
+    if paired is not None:
+        command = [
+            sys.executable, "-m", "esptool", "--chip", "esp32", "--port", port,
+            "--baud", str(baud), "write-flash",
+        ]
+        for offset, image in paired:
+            command.extend((offset, str(image)))
+        ensure_esptool()
+        print(f"Flashing cloud-enabled release master and dashboard on {port} (https://control.timiac.it)...")
+        subprocess.run(command, check=True)
+        print("Finished. Connect the master to its Wi-Fi router and open https://control.timiac.it/")
+        return
     manifest_path = RELEASE_DIR / ("master_release_flash.json" if release else "master_flash.json")
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Missing master flash manifest: {manifest_path}")
