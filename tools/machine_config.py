@@ -157,6 +157,7 @@ def generate():
               f'constexpr float travelMm = {machine["travel_mm"]};',
               f'constexpr float maxFeed = {machine["max_feed_mm_min"]};',
               f'constexpr unsigned driverCurrent = {machine["current_ma"]};',
+              f'constexpr float travelAcceleration = {machine["acceleration_mm_s2"]};',
               f'constexpr unsigned driverMicrosteps = {machine["microsteps"]};', "}"]
     (ROOT / "shared/machine_generated.h").write_text("\n".join(header) + "\n")
     public = {"identity": identity, **machine}

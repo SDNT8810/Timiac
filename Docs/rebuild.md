@@ -1,3 +1,36 @@
+# Cooler motion package - 2026-10-08.1
+
+Running and microswitch homing current is 1,000 mA RMS on all twelve motors.
+Holding current remains 50% (approximately 500 mA). Struggle uses 20 mm/s? travel
+acceleration (20% below normal), a 400 mm/min vector-feed ceiling, and three
+poses within 30-70% of the 50 mm stroke: nearest edge, 12% inward pulse, return to that edge.
+This also keeps repeated Struggle bounded without returning to an endpoint. The motion
+target is <=15 seconds at 50%; lower slider settings extend the duration.
+
+Next Hour and the automatic hourly animation use exactly three poses: all fully
+open, all fully closed, then selected time. Motor speeds remain <=500 mm/min.
+Coordinated vector feed is normalized to each motor's speed limit so motion
+can target <=40 seconds at 50% and <=20 seconds at 100%. Acceleration and
+communication time are included in software timing checks; physical timing
+still needs commissioning on the installed mechanism.
+
+Every job restores normal acceleration (25 mm/s?) before movement, including
+after cancellation. Trajectory capability is version 2. The new matched package
+is **TIMIAC2-03b3b6e145e4**, protocol 7: reflash both Octopus boards, both ESP-12
+bridges and the selected ESP32 master. Follow [instruction.md](../instruction.md).
+Keep the planned 24 V / 400 W supply and active cooling.
+
+There is no configured 80?C temperature cutoff. TMC2209's default internal chip
+warning is approximately 120?C and shutdown is approximately 143?C. External
+surface temperature is a different measurement. A 95?C threshold is not a
+supported setting, and there is no external temperature sensor in this project.
+Hardware thermal protection and Marlin's 50 mA thermal current reduction remain
+active. Thermal warnings/reduced current now produce a specific cooling/reset
+fault rather than only the generic driver-check message. Cool, reset the
+Octopus, and home again; an interrupted motion is never replayed automatically.
+
+Previous installation/current instructions below are historical.
+
 # 1,400 mA RMS motor package - 2026-10-06.1
 
 All twelve axes now request 1,400 mA RMS for running and microswitch homing.

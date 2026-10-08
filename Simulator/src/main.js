@@ -17,8 +17,8 @@ const AXES = 'ABCDEHIJKLUV'.split('');
 const INITIAL_FEED = 900;
 
 const presets = [
-  { id: 'hour-movement', name: 'Hour movement', note: 'circular bloom then fold', code: hourMovementCode, glyph: 'H' },
-  { id: 'circular-struggle', name: 'Circular struggle', note: 'clockwise travelling impulse', code: circularStruggleCode, glyph: 'O' },
+  { id: 'hour-movement', name: 'Hour movement', note: 'all open, all closed, then time', code: hourMovementCode, glyph: 'H' },
+  { id: 'circular-struggle', name: 'Circular struggle', note: 'short pulse within 30-70% stroke', code: circularStruggleCode, glyph: 'O' },
   { id: 'random-struggle', name: 'Feral random', note: 'irregular repeatable spasms', code: randomStruggleCode, glyph: '?' },
   { id: 'harmonic-struggle', name: 'Harmonic struggle', note: 'phase-locked standing wave', code: harmonicStruggleCode, glyph: '~' },
   { id: 'curious', name: 'Curious creature', note: 'reach · recoil · inspect', code: curiousCode, glyph: '◒' },
@@ -835,37 +835,14 @@ function generateTimePose(time, previousTime = '') {
 }
 
 function generateHourMovement(targetTime) {
-  const lines = [
-    `; DODECA / HOUR MOVEMENT TO ${targetTime}`,
-    '; 1. Every arm opens together to maximum.',
-    '; 2. A three-phase closed gap travels clockwise and reopens behind itself.',
-    '; 3. All arms settle together: minute stays open, hour stops halfway.',
+  const words = values => AXES.map((axis, index) => `${axis}${values[index]}`).join(' ');
+  return [
+    `; HOUR MOVEMENT TO ${targetTime}: all open, all closed, then time.`,
     'G90',
-    `G1 ${AXES.map(axis => `${axis}100`).join(' ')} F2400`,
-  ];
-
-  // Build the leading half of a three-arm closing wave.
-  for (let step = 0; step < 12; step += 1) {
-    const words = [];
-    if (step >= 2) words.push(`${AXES[step - 2]}0`);
-    if (step >= 1) words.push(`${AXES[step - 1]}33`);
-    words.push(`${AXES[step]}66`);
-    lines.push(`G1 ${words.join(' ')} F3600`);
-  }
-
-  // Start opening at A before U and V have finished closing.
-  lines.push('G1 A34 U0 V33 F3600');
-  lines.push('G1 A67 B34 V0 F3600');
-  for (let step = 2; step < 12; step += 1) {
-    lines.push(`G1 ${AXES[step - 2]}100 ${AXES[step - 1]}67 ${AXES[step]}34 F3600`);
-  }
-  lines.push('G1 U100 V67 F3600');
-  lines.push('G1 V100 F3600');
-
-  const finalPose = clockPoseValues(targetTime);
-  lines.push('; Simultaneous final settle into the new clock pose.');
-  lines.push(`G1 ${AXES.map((axis, index) => `${axis}${finalPose[index]}`).join(' ')} F1800`);
-  return lines.join('\n');
+    `G1 ${words(Array(12).fill(100))} F1000`,
+    `G1 ${words(Array(12).fill(0))} F1000`,
+    `G1 ${words(clockPoseValues(targetTime))} F1000`,
+  ].join('\n');
 }
 
 function formatClockTime(date = new Date()) {

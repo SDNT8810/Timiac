@@ -12,11 +12,12 @@ struct DriverReport {
   static const char* labels() { return "XYZIJK"; }
   uint8_t connected = 0, tested = 0, settings = 0;
   uint8_t modeOk = 0, currentOk = 0, stepsOk = 0;
+  uint8_t thermalWarning = 0, thermalHistory = 0;
   int32_t currentMa[6] = {-1, -1, -1, -1, -1, -1};
   int32_t microsteps[6] = {-1, -1, -1, -1, -1, -1};
   bool columns = false;
   void begin() { *this = DriverReport(); }
-  bool good() const { return tested == 63 && connected == 63 && columns && settings == 7 && modeOk == 63 && currentOk == 63 && stepsOk == 63; }
+  bool good() const { return tested == 63 && connected == 63 && columns && settings == 7 && modeOk == 63 && currentOk == 63 && stepsOk == 63 && !thermalWarning; }
   void receive(const char* line) {
     if (!strncmp(line, "Testing ", 8)) {
       const char* axis = strchr(labels(), line[8]);
@@ -41,6 +42,13 @@ struct DriverReport {
       if (columns) return;
     }
     if (!columns || count != 7) return;
+    if (!strcmp(tokens[0], "OT prewarn") || !strcmp(tokens[0], " OTP")) {
+      uint8_t& mask = !strcmp(tokens[0], "OT prewarn") ? thermalWarning : thermalHistory;
+      mask = 0;
+      for (unsigned i = 0; i < 6; ++i)
+        if (!strcmp(tokens[i + 1], "true")) mask |= 1U << i;
+      return;
+    }
     uint8_t* mask = nullptr; unsigned expected = 0;
     if (!strcmp(tokens[0], "Set current")) { mask = &currentOk; expected = driverCurrent; settings |= 1; }
     else if (!strcmp(tokens[0], "msteps")) { mask = &stepsOk; expected = driverMicrosteps; settings |= 2; }

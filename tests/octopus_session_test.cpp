@@ -63,7 +63,7 @@ std::vector<std::string> execute(OctopusSession& s, const char* line) {
 }
 int main() {
   // Old low-current profiles or a thermally reduced current block new work.
-  for (unsigned current : {250U, 600U, 800U, 1414U, timiac::driverCurrent - 50}) {
+  for (unsigned current : {250U, 600U, 800U, 1400U, 1414U, timiac::driverCurrent - 50}) {
     OctopusSession mismatch;
     mismatch.next(now); identify(mismatch); mismatch.next(now);
     drivers(mismatch, -1, false, timiac::driverMicrosteps, current); mismatch.receive("ok", now);
@@ -75,6 +75,23 @@ int main() {
     const char* home = "G28 X";
     assert(!mismatch.stage(&home, 1, now));
   }
+  // Thermal warnings and thermal current reduction have a specific fault;
+  // cooling alone cannot silently resume a cancelled job.
+  for (bool reduced : {false, true}) {
+    OctopusSession hot; hot.next(now); identify(hot); hot.next(now);
+    drivers(hot, -1, false, timiac::driverMicrosteps, reduced ? 950 : 1000);
+    hot.receive(reduced ? " OTP\tfalse\tfalse\ttrue\tfalse\tfalse\tfalse"
+                        : "OT prewarn\tfalse\tfalse\ttrue\tfalse\tfalse\tfalse", now);
+    hot.receive("ok", now);
+    assert(!hot.healthy(now) && strstr(hot.fault, "overheated/current reduced"));
+    const char* move = "G1 Z1 F120"; assert(!hot.stage(&move, 1, now));
+    hot.receive("start", now); now += 1001; boot(hot);
+    assert(hot.healthy(now) && !hot.homed);
+  }
+  assert(timiac::validTrajectory("M204 T20.000", 6, 50, 500));
+  assert(timiac::validTrajectory("M204 T25.000", 6, 50, 500));
+  for (const char* invalid : {"M204 T95", "M204 T2e1", "M204 T-20", "M204 T20 S80", "G1 X1 F900"})
+    assert(!timiac::validTrajectory(invalid, 6, 50, 500));
   // Neither native commands nor an old sensorless identity may enable motion.
   OctopusSession switches; boot(switches);
   for (const char* command : {"M914 X128", "M914 A128", "M23 test.gco", "M24", "M32 test.gco", "M98 Ptest.gco"}) {
@@ -91,11 +108,11 @@ int main() {
   for (unsigned a = 0; a < 6; ++a) {
     std::string command = "G28 "; command += timiac::axes[a];
     auto sent = execute(s, command.c_str());
-    assert((sent == std::vector<std::string>{"G21", "G90", "M220 S100", "M84 S0", command, "M400", "M114"}));
+    assert((sent == std::vector<std::string>{"G21", "G90", "M220 S100", "M84 S0", "M204 T25.000", command, "M400", "M114"}));
     assert(s.homed == (1U << (a + 1)) - 1);
   }
   auto sent = execute(s, "G28 X Y Z A B C");
-  assert((sent == std::vector<std::string>{"G21", "G90", "M220 S100", "M84 S0", "G28 X Y Z A B C", "M400", "M114"}));
+  assert((sent == std::vector<std::string>{"G21", "G90", "M220 S100", "M84 S0", "M204 T25.000", "G28 X Y Z A B C", "M400", "M114"}));
   assert(s.homed == 63);
   // The S0 setup keeps a homed pose trusted; explicit motor release still
   // clears all positions and requires a new Home before the next movement.
@@ -116,7 +133,7 @@ int main() {
     while (dance.running()) if (const char* line = dance.next(++now)) {
       actual.push_back(line); dance.receive("ok", now);
     }
-    const std::vector<std::string> expected = {"G21", "G90", "M220 S" + std::to_string(percent), "M84 S0",
+    const std::vector<std::string> expected = {"G21", "G90", "M220 S" + std::to_string(percent), "M84 S0", "M204 T25.000",
       frames[0], "G4 P" + std::to_string(100000U / percent), frames[2], "M400", "M114"};
     assert(actual == expected);
   }
@@ -128,7 +145,7 @@ int main() {
     assert(!slow.stage(&homeAll, 1, now, false, 101));
     assert(slow.stage(&homeAll, 1, now, false, percent));
     slow.next(now); drivers(slow); slow.receive("ok", now); slow.next(now); assert(slow.commit());
-    for (const auto& expected : {std::string("G21"), std::string("G90"), "M220 S" + std::to_string(percent), std::string("M84 S0")}) {
+    for (const auto& expected : {std::string("G21"), std::string("G90"), "M220 S" + std::to_string(percent), std::string("M84 S0"), std::string("M204 T25.000")}) {
       assert(std::string(slow.next(now)) == expected); slow.receive("ok", now);
     }
     assert(std::string(slow.next(now)) == homeAll);
@@ -182,6 +199,7 @@ int main() {
   grouped.next(now); grouped.receive("ok", now); // G90
   grouped.next(now); grouped.receive("ok", now); // M220
   grouped.next(now); grouped.receive("ok", now); // M84 S0
+  grouped.next(now); grouped.receive("ok", now); // restore M204
   assert(std::string(grouped.next(now)) == group && grouped.homed == 0);
   grouped.receive("Six-arm homing cancelled.", now); grouped.receive("ok", now);
   assert(grouped.homed == 0 && !grouped.healthy(now));
@@ -201,7 +219,7 @@ int main() {
       assert(!timiac::compileLine(input, parser, step, 6, 48, 700));
       assert(step.count[board] == 1 && step.count[1 - board] == 0);
       auto commands = execute(local, step.lines[board][0]);
-      assert(commands[4] == std::string("G28 ") + timiac::axes[axis]);
+      assert(commands[5] == std::string("G28 ") + timiac::axes[axis]);
     }
   }
   // Preparing checks publish atomically; idle switches never interrupt a job.
@@ -287,6 +305,7 @@ int main() {
   s.next(now); s.receive("ok", now); s.next(now); s.receive("ok", now);
   s.next(now); s.receive("ok", now); // M220
   s.next(now); s.receive("ok", now); // M84 S0
+  s.next(now); s.receive("ok", now); // M204 normal acceleration
   assert(std::string(s.next(now)) == "G28 A");
   assert(std::string(s.stop(now)) == "M112"); assert(s.halted() && s.homed == 0);
   s.receive("ok", now); s.receive("Error:Printer halted. kill() called!", now);
@@ -308,7 +327,8 @@ int main() {
   assert(s.stage(&home, 1, now)); s.next(now); drivers(s); s.receive("ok", now); s.next(now); s.commit();
   s.next(now); s.receive("ok", now); s.next(now); s.receive("ok", now); s.next(now);
   s.receive("ok", now); s.next(now); // M220 ack, then M84 S0
-  s.receive("ok", now); s.next(now); // M84 S0 ack, then G28
+  s.receive("ok", now); s.next(now); // M84 S0 ack, then M204
+  s.receive("ok", now); s.next(now); // M204 ack, then G28
   assert(s.next(now + 120001) == nullptr && s.running());
   assert(s.next(now + 180001) == nullptr && !s.running());
   assert(std::string(s.stop(now + 180001)) == "M112");

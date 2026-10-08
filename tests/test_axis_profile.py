@@ -43,18 +43,18 @@ class AxisProfileTests(unittest.TestCase):
         self.assertEqual(config["HYBRID_THRESHOLD"], "")
         for axis in "XYZIJK":
             self.assertEqual(config[f"{axis}_HYBRID_THRESHOLD"], "1")
-            self.assertEqual(config[f"{axis}_CURRENT"], "1400")
+            self.assertEqual(config[f"{axis}_CURRENT"], "1000")
             self.assertEqual(config[f"{axis}_CURRENT_HOME"], f"{axis}_CURRENT")
             self.assertEqual(config[f"{axis}_RSENSE"], "0.11")
             self.assertEqual(config[f"{axis}_MICROSTEPS"], "64")
             self.assertEqual(config[f"{axis}_SLAVE_ADDRESS"], "0")
 
-    def test_run_and_home_use_1400_ma_with_24v_timing(self):
+    def test_run_and_home_use_1000_ma_with_24v_timing(self):
         machine, _ = load()
-        self.assertEqual(machine["current_ma"], 1400)
+        self.assertEqual(machine["current_ma"], 1000)
         settings = definitions(machine, "test")["Configuration_adv.h"]
-        self.assertEqual(settings["SPIDER_RUN_CURRENT_MA"], "1400")
-        self.assertEqual(settings["SPIDER_HOME_CURRENT_MA"], "1400")
+        self.assertEqual(settings["SPIDER_RUN_CURRENT_MA"], "1000")
+        self.assertEqual(settings["SPIDER_HOME_CURRENT_MA"], "1000")
         self.assertEqual(settings["CHOPPER_TIMING"], "CHOPPER_DEFAULT_24V")
         self.assertEqual(settings["INTERPOLATE"], "true")
         self.assertEqual(machine["homing_strategy"], "concurrent-all")

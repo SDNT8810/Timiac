@@ -127,15 +127,17 @@ clockwise A/B/C/D/E/H/I/J/K/L/U/V order and are mapped when producing hardware
 commands. Board-qualified manual G-code still addresses the named physical motor.
 
 Next hour and Struggle prepare complete bounded trajectories on both bridges and
-commit once. Each bridge validates and queues at most 32 motion/dwell lines, sends each
+commit once. Each bridge validates and queues at most 32 bounded motion/dwell/acceleration lines, sends each
 after its UART acknowledgement, and uses M400/M114 only at the end. This lets
 Marlin blend consecutive moves instead of emptying its planner after every frame.
 The master derives matching nominal frame durations from current positions using
 Marlin's XYZ-first linear feed metric and axis speed limits. Only a board with
 no movement in a frame dwells; the other keeps moving. Acceleration and network
 timing mean this is not an exact inter-board timing guarantee.
-Struggle's two simulator dwell frames are omitted from its embedded path and
-generated hardware example. Manual Next controls and Struggle pause release
+Struggle uses a three-pose pulse inside 30-70% of travel, with a lower acceleration
+setting bracketed by normal-acceleration restores. Next Hour uses three poses:
+all open, all closed, then time. Trajectory version 2 allows only normal or 80%
+travel acceleration and a bounded coordinated vector-feed envelope. Manual Next controls and Struggle pause release
 RTC tracking until Start clock or Home resumes it.
 
 Marlin's junction direction is normalized across all six axes even when the

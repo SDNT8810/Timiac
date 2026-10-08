@@ -2,7 +2,7 @@
 
 You need internet, two FAT32 microSD cards and a card reader, a USB data cable for the ESP32, and the supplied **3.3 V ESP-12 programming adapter**. Label the ESP-12 modules **1** and **2** before removing them. Switch off Timiac and unplug its USB cables before changing connections.
 
-**Before running:** this package requests 1,400 mA RMS while moving/homing and approximately 700 mA while holding. Fit the planned **24 V / 400 W supply** and cooling fans first. Update all five boards before powering the complete system.
+**Before running:** this package requests 1,000 mA RMS while moving/homing and approximately 500 mA while holding. Fit the planned **24 V / 400 W supply** and cooling fans first. Update all five boards before powering the complete system.
 
 **1. Install the software**
 
@@ -16,7 +16,7 @@ python -m pip install --user -r requirements.txt "esptool>=5,<6"
 python run.py verify
 ```
 
-Continue only if verification says **Verified TIMIAC2-3827cd14016b**. No VS Code extensions are needed.
+Continue only if verification says **Verified TIMIAC2-03b3b6e145e4**. No VS Code extensions are needed.
 
 **2. Update both Octopus boards using their microSD cards**
 
@@ -77,3 +77,5 @@ tools/machine_config.py
 Marlin/profiles/lumiac-reference/  (entire folder)
 firmware/two-motor/               (entire folder, including JSON files)
 ```
+
+At **50% speed**, check that Struggle stays between **15 and 35 mm** and finishes within **15 seconds**. Next Hour should open all arms, close all, then show time within **40 seconds** (within **20 seconds** at 100%). Stop if steps are lost or overheating warnings appear. A thermal fault requires cooling and an Octopus reset before homing again.

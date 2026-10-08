@@ -83,10 +83,10 @@ int main(int argc, char** argv) {
         }
       }
     }
-    assert(moves >= 20);
+    assert(moves >= (preset == Preset::Curious ? 20U : 6U));
     if (preset == Preset::Struggle) {
       assert(dwells == 0); // Physical Struggle omits simulator rests.
-      for (float position : positions) assert(fabsf(position - travel * .9f) < .001f);
+      for (float position : positions) assert(fabsf(position - travel * .3f) < .001f);
     } else if (preset == Preset::Hour) {
       assert(dwells == 0);
       for (unsigned i = 0; i < 12; ++i) assert(positions[i] == (i == 6 ? 0 : i == 9 ? halfTravel : travel));
@@ -132,16 +132,17 @@ int main(int argc, char** argv) {
   for (Preset preset : {Preset::Hour, Preset::Struggle}) for (unsigned target : {0U, 60U, 210U, 755U, 1439U}) for (float initial : {0.0f, halfTravel, travel}) {
     float positions[12]; for (float& position : positions) position = initial;
     unsigned commands = 0;
+    double bounds[2] = {}; // full stop at every frame: conservative acceleration allowance
     for (unsigned i = 0; i < presetCount(preset); ++i) {
       float previous[12]; memcpy(previous, positions, sizeof(previous));
       Step frame; assert(presetTrajectoryFrame(preset, i, target, travel, maxFeed, positions, frame));
       if (!frame.count[0] && !frame.count[1]) continue;
       ++commands;
       assert(frame.count[0] == 1 && frame.count[1] == 1);
-      double seconds[2]; bool moving = false;
+      double seconds[2], largestVelocity = 0; bool moving = false;
       for (unsigned b = 0; b < 2; ++b) {
         const char* line = frame.lines[b][0];
-        assert(validNative(line, 6, travel, maxFeed) && trajectoryCommand(line));
+        assert(validTrajectory(line, 6, travel, maxFeed) && trajectoryCommand(line));
         if (!strncmp(line, "G4 P", 4)) seconds[b] = strtod(line + 4, nullptr) / 1000;
         else {
           moving = true; float primary = 0, secondary = 0;
@@ -149,15 +150,31 @@ int main(int argc, char** argv) {
             const float delta = positions[b * 6 + a] - previous[b * 6 + a];
             (a < 3 ? primary : secondary) += delta * delta;
           }
-          seconds[b] = sqrt(primary > 0 ? primary : secondary) * 60 / strtod(strchr(line, 'F') + 1, nullptr);
+          const double path = sqrt(primary > 0 ? primary : secondary);
+          const double velocity = strtod(strchr(line, 'F') + 1, nullptr) / 60;
+          seconds[b] = path / velocity;
+          largestVelocity = fmax(largestVelocity, velocity);
+          if (preset == Preset::Struggle) assert(velocity * 60 <= maxFeed * .8 + .001);
+          for (unsigned arm = 0; arm < 6; ++arm) {
+            const double axisSpeed = fabs(positions[b * 6 + arm] - previous[b * 6 + arm]) / path * velocity * 60;
+            assert(axisSpeed <= maxFeed * (preset == Preset::Struggle ? .8 : 1.0) + .02);
+          }
+          if (preset == Preset::Struggle) for (unsigned arm = 0; arm < 12; ++arm)
+            assert(positions[arm] >= travel * .3f - .001f && positions[arm] <= travel * .7f + .001f);
+
         }
       }
       assert(moving && fabs(seconds[0] - seconds[1]) < .003);
+      const double accel = travelAcceleration * (preset == Preset::Struggle ? .8 : 1.0);
+      bounds[0] += seconds[0] * 2 + largestVelocity * .5 / accel;
+      bounds[1] += seconds[0] + largestVelocity / accel;
     }
-    assert(commands > 20 && commands <= maxTrajectoryCommands);
+    assert(commands >= 2 && commands <= 3);
+    assert(bounds[0] + .4 <= (preset == Preset::Struggle ? 15 : 40));
+    if (preset == Preset::Hour) assert(bounds[1] + .4 <= 20);
     if (preset == Preset::Hour) for (unsigned arm = 0; arm < 12; ++arm)
       assert(positions[arm] == (faceHour[arm] == target % 60 / 5 ? 0 : faceHour[arm] == target / 60 % 12 ? halfTravel : travel));
-    else for (float position : positions) assert(fabsf(position - travel * .9f) < .001f);
+    else for (float position : positions) assert(fabsf(position - travel * (initial <= halfTravel ? .3f : .7f)) < .001f);
   }
   for (const char* action : {"home", "open", "close"}) {
     Step pose; assert(userAction(action, 0, 0, travel, timiac::maxFeed, pose));

@@ -1,3 +1,41 @@
+# Cooler motion validation - 2026-10-08.1
+
+Matched package **TIMIAC2-03b3b6e145e4**, protocol 7, trajectory capability 2.
+All twelve axes request 1,000 mA RMS for running/homing and retain 50% holding.
+
+Validation completed:
+
+- Shared Octopus, both bridges, dev/release masters and both web filesystems
+  build successfully. `python run.py verify` validates all package images.
+- 15 Python tests and 48 dashboard/control tests pass. Host firmware, both
+  production coordinator modes and bridge tests pass, including a simulated
+  24-hour clock cycle and all 720 homing switch orders.
+- Motion checks test Hour and Struggle from fully open, halfway and fully closed
+  positions across midnight, overlapping hands and different clock targets.
+  Both boards have matching nominal frame durations, all motor speeds remain
+  bounded, and final poses match the requested time or Struggle band edge.
+- Struggle vector feed is capped at 400 mm/min (80% of the former 500), with
+  20 mm/s? acceleration. Every commanded pose is within 15-35 mm. Timing checks
+  include a conservative full-stop acceleration allowance at each frame plus
+  0.4 seconds of communication margin: <=15 seconds at 50% speed.
+- Hour uses three poses: all open, all closed, then time. Normalized vector feed
+  keeps each motor <=500 mm/min; equivalent checks meet <=40 seconds at 50%
+  and <=20 seconds at 100%. Slower slider settings take longer.
+- Bounded M204 controls are allowed only in trajectories; ordinary command
+  limits remain intact. Tests cover normal acceleration restoration, Stop,
+  reset, legacy current rejection and specific thermal warning/derating faults.
+- Simulator production build passes. Whitespace checks pass for this change;
+  the independently edited Timiac_Prompt.md is excluded from that check.
+
+No hardware was flashed. Temperature, missed steps, torque, physical timing and
+power draw still require commissioning. Thermal protection was retained: this
+project has no external temperature input or 80?C cutoff, and the TMC2209 does
+not support a 95?C threshold. Its datasheet default internal warning/shutdown
+thresholds are approximately 120?C/143?C.
+
+Install all five boards using [instruction.md](../instruction.md), with the
+24 V / 400 W supply and active cooling. Historical results follow below.
+
 # 1,400 mA RMS package: 2026-10-06.1
 
 Package **TIMIAC2-3827cd14016b**, protocol 7, requests 1,400 mA RMS for all

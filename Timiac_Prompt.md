@@ -169,3 +169,24 @@ Close must send all arms to 52
 
 also make the max strok 52 instead of 48
 
+
+
+-------------------------------------------------------------
+
+https://timiac.it/ is assigned to timiac simulator and its running on another pc (vps)
+i like to have access to clock (real hardware) with https://timiac.control.it/ domain when master_esp is connected to wifi (has internet access) so i can see the dashboard on https://timiac.control.it/
+
+what parameters do you need to set cloudflare ? 
+i think i have provided some gcloud and cloudflare tokens, let me know if you need any other things
+
+also it must have sign-in with gmail ! so only registered emails can have access
+here is the list of gmails that must have access:
+davood.space@gmail.com
+davoudtanha91@gmail.com
+davoudnikkhouy@gmail.com
+
+
+-------------------------------------------------------------
+
+
+change of mind ! make it "current_ma": 1200,

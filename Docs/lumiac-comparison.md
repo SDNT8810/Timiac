@@ -49,7 +49,7 @@ its own switch within one shared seek. See [the patch provenance and tests](../M
 
 Lumiac explicitly enables `TMC_USE_SW_SPI` with six TMC5160 drivers: its driver
 configuration uses **SPI**. Timiac instead uses six **TMC2209 UART** drivers per
-board, each on its own socket UART pin at address zero. Timiac requests 1,400 mA RMS
+board, each on its own socket UART pin at address zero. Timiac requests 1,000 mA RMS
 with 0.11 Ω sense resistance;
 Lumiac's 2,500 mA / 0.075 Ω values are not suitable
 substitutes. The separate Lumiac high-power environment is not used.

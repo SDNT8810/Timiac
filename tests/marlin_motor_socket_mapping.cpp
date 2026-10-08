@@ -62,7 +62,7 @@ static_assert(I_MIN_PIN == PG11 && J_MIN_PIN == PG12 && K_MIN_PIN == PG13, "A/B/
 static_assert(I_DIR_PIN == PC1 && I_ENABLE_PIN == PA0 && I_SERIAL_TX_PIN == PC7 && I_SERIAL_RX_PIN == PC7, "A signals");
 static_assert(J_DIR_PIN == PF10 && J_ENABLE_PIN == PG2 && J_SERIAL_TX_PIN == PF2 && J_SERIAL_RX_PIN == PF2, "B signals");
 static_assert(K_DIR_PIN == PF0 && K_ENABLE_PIN == PF1 && K_SERIAL_TX_PIN == PE4 && K_SERIAL_RX_PIN == PE4, "C signals");
-static_assert(X_CURRENT == 1400 && Y_CURRENT == X_CURRENT && Z_CURRENT == X_CURRENT && I_CURRENT == X_CURRENT && J_CURRENT == X_CURRENT && K_CURRENT == X_CURRENT, "1400 mA current on every driver");
+static_assert(X_CURRENT == 1000 && Y_CURRENT == X_CURRENT && Z_CURRENT == X_CURRENT && I_CURRENT == X_CURRENT && J_CURRENT == X_CURRENT && K_CURRENT == X_CURRENT, "1000 mA current on every driver");
 constexpr int chopperTiming[] = CHOPPER_TIMING;
 static_assert(chopperTiming[0] == 4 && chopperTiming[1] == 2 && chopperTiming[2] == 1, "Use the 24 V chopper timing");
 static_assert(X_CURRENT_HOME == X_CURRENT && Y_CURRENT_HOME == X_CURRENT && Z_CURRENT_HOME == X_CURRENT && I_CURRENT_HOME == X_CURRENT && J_CURRENT_HOME == X_CURRENT && K_CURRENT_HOME == X_CURRENT, "Use the same current for microswitch homing");

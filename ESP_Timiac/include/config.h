@@ -67,7 +67,7 @@
 #endif
 constexpr unsigned long kBaud = 115200;
 // Application revision is separate from the hardware identity shared with Marlin.
-constexpr char kSoftwareRevision[] = "2026-10-06.1";
+constexpr char kSoftwareRevision[] = "2026-10-08.1";
 // Checked against the compiled animation call chains before exporting a master.
 constexpr unsigned kMasterLoopStackBytes = 8192;
 // Wi-Fi/serial telemetry can be delayed while every axis is homing. These are

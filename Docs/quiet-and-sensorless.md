@@ -18,8 +18,8 @@ If converting back from DIAG homing:
    and streams motion sequences; the card has no runtime role.
 5. In dev mode verify each switch lamp changes when pressed before homing.
 
-Quiet holding and normal-speed SpreadCycle remain: 1,400 mA requested running/homing current,
-50% holding multiplier (approximately 700 mA at rest), 64 commanded microsteps interpolated to 256, and a
+Quiet holding and normal-speed SpreadCycle remain: 1,000 mA requested running/homing current,
+50% holding multiplier (approximately 500 mA at rest), 64 commanded microsteps interpolated to 256, and a
 1 mm/s hybrid threshold. Maximum motion feed is 500 mm/min; homing is 120 mm/min.
 The planned 24 V / 400 W (16.7 A) supply uses the 24 V chopper timing preset.
 

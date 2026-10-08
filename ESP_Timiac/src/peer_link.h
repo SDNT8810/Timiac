@@ -87,6 +87,7 @@ void writeBoard(JsonObject board, unsigned index) {
   checks["current"] = drivers.currentOk; checks["microsteps"] = drivers.stepsOk;
   checks["mode"] = drivers.modeOk; checks["columns"] = drivers.columns;
   checks["settings"] = drivers.settings; checks["ok"] = drivers.good();
+  checks["thermalWarning"] = drivers.thermalWarning; checks["thermalHistory"] = drivers.thermalHistory;
   // Send the report's values, not just pass/fail masks. A stale browser must
   // never turn a passing bit into an old hard-coded current or resolution.
   JsonArray currents = checks.createNestedArray("currentMa");
@@ -267,6 +268,8 @@ void processPeer(Peer& p, const String& line) {
     board.drivers.modeOk = checks["mode"] | 0;
     board.drivers.columns = checks["columns"] | false;
     board.drivers.settings = checks["settings"] | 0;
+    board.drivers.thermalWarning = checks["thermalWarning"] | 0;
+    board.drivers.thermalHistory = checks["thermalHistory"] | 0;
     for (unsigned i = 0; i < 6; ++i) {
       board.drivers.currentMa[i] = checks["currentMa"][i].is<uint16_t>() ? checks["currentMa"][i].as<int32_t>() : -1;
       board.drivers.microsteps[i] = checks["microstepValues"][i].is<uint16_t>() ? checks["microstepValues"][i].as<int32_t>() : -1;

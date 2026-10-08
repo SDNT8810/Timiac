@@ -9,9 +9,17 @@
 
 namespace timiac {
 constexpr unsigned maxTrajectoryCommands = 32;
-constexpr unsigned trajectoryVersion = 1;
+constexpr unsigned trajectoryVersion = 2;
+inline bool trajectoryAcceleration(const char* line) {
+  if (strncmp(line, "M204 T", 6)) return false;
+  for (const char* p = line + 6; *p; ++p) if (!isdigit(*p) && *p != '.') return false;
+  char* end = nullptr;
+  const float value = strtof(line + 6, &end);
+  return end != line + 6 && !*end &&
+    (value == travelAcceleration || value == travelAcceleration * .8f);
+}
 inline bool trajectoryCommand(const char* line) {
-  return !strncmp(line, "G1 ", 3) || !strncmp(line, "G4 ", 3);
+  return !strncmp(line, "G1 ", 3) || !strncmp(line, "G4 ", 3) || trajectoryAcceleration(line);
 }
 // Dashboard/program letters and native Octopus G-code letters are identical.
 // The master selects the board using the 1/2 suffix; bridges keep XYZABC intact.
@@ -171,5 +179,11 @@ inline bool validNative(const char* line, unsigned axisCount, float travel, floa
     if (*p && *p != ' ') return false;
   }
   return any && (home || feed);
+}
+// Coordinated XYZ moves use vector feed, while Marlin limits each motor's
+// speed separately. Only bounded built-in trajectories may use this envelope.
+inline bool validTrajectory(const char* line, unsigned axisCount, float travel, float maxFeed) {
+  return trajectoryAcceleration(line) || (trajectoryCommand(line) &&
+    validNative(line, axisCount, travel, maxFeed * sqrtf(3.0f) + .001f));
 }
 } // namespace timiac

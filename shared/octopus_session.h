@@ -48,9 +48,11 @@ class OctopusSession {
     // until an explicit release, including after manual Home. S0 changes
     // only the idle timeout: bare M18/M84 still releases motors normally.
     add("M84 S0");
+    // Restore the normal travel acceleration even after an interrupted preset.
+    char acceleration[24]; snprintf(acceleration, sizeof(acceleration), "M204 T%.3f", travelAcceleration); add(acceleration);
     for (unsigned n = 0; n < count; ++n) {
-      if (!validNative(lines[n], axisCount, travelMm, maxFeed)) { size = 0; return false; }
-      if (trajectory && !trajectoryCommand(lines[n])) { size = 0; return false; }
+      if (!(trajectory ? validTrajectory(lines[n], axisCount, travelMm, maxFeed)
+                       : validNative(lines[n], axisCount, travelMm, maxFeed))) { size = 0; return false; }
       if (!strncmp(lines[n], "G4 P", 4)) {
         // A stationary board uses dwell to match its partner's trajectory
         // frame. M220 only scales moves, so scale waits explicitly as well.
@@ -191,7 +193,9 @@ class OctopusSession {
       driverReportAvailable = true;
       driverAt = now;
       if (!drivers.good()) {
-        snprintf(fault, sizeof(fault), "Driver check failed: connection/current/microsteps/mode; see driver panel");
+        snprintf(fault, sizeof(fault), "%s", drivers.thermalWarning || (drivers.thermalHistory && drivers.currentOk != 63)
+          ? "Driver overheated/current reduced: cool drivers, then reset Octopus and Home"
+          : "Driver check failed: connection/current/microsteps/mode; see driver panel");
         if (state == State::Prepare || state == State::Run) { ++failures; size = cursor = 0; clearPosition(); }
         state = State::Ready;
       } else {

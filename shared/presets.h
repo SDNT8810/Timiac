@@ -66,6 +66,16 @@ inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target
       if (const char* word = strchr(line, axes[a])) next[b * 6 + a] = strtof(word + 1, nullptr);
     if (const char* word = strchr(line, 'F')) feed = strtof(word + 1, nullptr);
   }
+  if (preset == Preset::Struggle) {
+    // Enter by the nearer band edge, pulse 12% inward, then return to that
+    // edge. Keep the old vector-feed convention at 80% so this is slower
+    // even when several motors move together, and bounded from any pose.
+    for (unsigned arm = 0; arm < 12; ++arm)
+      next[arm] = index == 0 ? travel * (positions[arm] <= travel * .5f ? .3f : .7f)
+                : index == 1 ? positions[arm] + travel * (positions[arm] <= travel * .5f ? .12f : -.12f)
+                : travel * (positions[arm] <= travel * .5f ? .3f : .7f);
+    feed = maxFeed * .8f;
+  }
   float distance[2] = {}, span = 0;
   for (unsigned b = 0; b < 2; ++b) {
     float primary = 0, secondary = 0;
@@ -76,7 +86,7 @@ inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target
     }
     // Marlin's linear XYZABC feed distance: XYZ if moving, otherwise ABC.
     distance[b] = sqrtf(primary > 0 ? primary : secondary);
-    if (distance[b] > span) span = distance[b];
+    if (preset == Preset::Struggle && distance[b] > span) span = distance[b];
   }
   step.clear();
   if (span < .0001f) return true; // Already at this pose on both boards.
@@ -91,7 +101,7 @@ inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target
         length += snprintf(line + length, sizeof(line) - length, " %c%.3f", axes[a], next[b * 6 + a]);
       snprintf(line + length, sizeof(line) - length, " F%.3f", distance[b] * 60000 / durationMs);
     }
-    if (!validNative(line, 6, travel, maxFeed)) return false;
+    if (!validTrajectory(line, 6, travel, maxFeed)) return false;
     step.add(b, line);
   }
   memcpy(positions, next, sizeof(next));

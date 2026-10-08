@@ -114,8 +114,9 @@ uint32_t commandHash(JsonVariant a, JsonVariant b) {
 bool validLines(JsonVariant value, bool trajectory = false) {
   if (!value.is<JsonArray>() || value.size() > (trajectory ? timiac::maxTrajectoryCommands : kMaxCommands)) return false;
   for (JsonVariant entry : value.as<JsonArray>())
-    if (!entry.is<const char*>() || !timiac::validNative(entry.as<const char*>(), kAxisCount, kTravelMm, kMaxFeed) ||
-        (trajectory && !timiac::trajectoryCommand(entry.as<const char*>()))) return false;
+    if (!entry.is<const char*>() || !(trajectory
+        ? timiac::validTrajectory(entry.as<const char*>(), kAxisCount, kTravelMm, kMaxFeed)
+        : timiac::validNative(entry.as<const char*>(), kAxisCount, kTravelMm, kMaxFeed))) return false;
   return true;
 }
 bool validStep(JsonVariant step) {

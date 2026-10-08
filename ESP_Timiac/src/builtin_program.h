@@ -21,12 +21,18 @@ bool writePresetTrajectory(timiac::Preset preset, unsigned targetMinute, JsonVar
     positions[b * 6 + a] = value;
   }
   JsonArray a = doc.createNestedArray("a"), b = doc.createNestedArray("b");
+  char acceleration[24];
+  snprintf(acceleration, sizeof(acceleration), "M204 T%.3f",
+    timiac::travelAcceleration * (preset == timiac::Preset::Struggle ? .8f : 1.0f));
+  if (!a.add(String(acceleration)) || !b.add(String(acceleration))) return false;
   for (unsigned i = 0; i < timiac::presetCount(preset); ++i) {
     timiac::Step frame;
     if (!timiac::presetTrajectoryFrame(preset, i, targetMinute, kTravelMm, kMaxFeed, positions, frame)) return false;
     for (unsigned board = 0; board < 2; ++board) for (unsigned n = 0; n < frame.count[board]; ++n)
       if (!(board ? b : a).add(String(frame.lines[board][n]))) return false;
   }
+  snprintf(acceleration, sizeof(acceleration), "M204 T%.3f", timiac::travelAcceleration);
+  if (!a.add(String(acceleration)) || !b.add(String(acceleration))) return false;
   return a.size() && b.size() && validLines(a, true) && validLines(b, true);
 }
 const char* startBuiltinPreset(timiac::Preset preset, unsigned targetMinute, const String& id, uint32_t hash) {

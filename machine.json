@@ -15,7 +15,7 @@
   "max_acceleration_mm_s2": 80,
   "junction_deviation_mm": 0.3,
   "driver": "TMC2209",
-  "current_ma": 1400,
+  "current_ma": 1000,
   "microsteps": 64,
   "rsense": 0.11,
   "uart_address": 0,

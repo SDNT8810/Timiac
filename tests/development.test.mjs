@@ -114,7 +114,7 @@ test('all twelve live driver lamps update independently without a control lease 
   const { context, state, element, calls, disconnect } = await dashboard();
   state.a = { bridgeConnected: true, octopusConnected: true, drivers: {
     ageMs: 80, tested: 63, connected: 59, columns: true, settings: 7, current: 63, microsteps: 59, mode: 63,
-    currentMa: [1400, 1400, 1400, 1400, 1400, 1400, 1400], microstepValues: [64, 64, 64, 64, 64, 64],
+    currentMa: [1000, 1000, 1000, 1000, 1000, 1000, 1000], microstepValues: [64, 64, 64, 64, 64, 64],
   } };
   state.b = { bridgeConnected: false, octopusConnected: false };
   vm.runInContext('render(api.status)', context);
