@@ -31,7 +31,7 @@ static_assert(CURRENT_STEP_DOWN == 50, "Retain thermal current reduction");
 
 static_assert(NUM_AXES == 6, "Timiac requires six axes per Octopus");
 constexpr float homeFeeds[] = HOMING_FEEDRATE_MM_M;
-constexpr float expectedHomeFeed = 120;
+constexpr float expectedHomeFeed = 240;
 static_assert(homeFeeds[0] == expectedHomeFeed && homeFeeds[1] == expectedHomeFeed && homeFeeds[2] == expectedHomeFeed &&
   homeFeeds[3] == expectedHomeFeed && homeFeeds[4] == expectedHomeFeed && homeFeeds[5] == expectedHomeFeed,
   "Microswitch homing feed must match on all six axes");

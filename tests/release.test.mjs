@@ -208,7 +208,7 @@ test('hand distance stays visible before homing and during animation, and clears
   assert.equal(element('sensor-status').textContent, 'Clear');
   state.a.homed = 0; vm.runInContext('render()', context);
   assert.equal(element('sensor-distance').textContent, '73.2 cm');
-  assert.match(element('machine-status').textContent, /Ready to home/);
+  assert.match(element('machine-status').textContent, /Homing required/);
   state.a.homed = 63;
   state.proximity.distanceCm = null; state.proximity.armed = false;
   vm.runInContext('render()', context);

@@ -64,6 +64,22 @@ test('each insect study is distinct, asymmetric, and matches the firmware source
   });
 });
 
+test('each Struggle segment is exactly 30 percent faster, including the final time pose', () => {
+  for (let variant = 0; variant < 7; variant++) {
+    let previous = clockPoseValues('03:30');
+    const frames = moves(generateStruggle(previous, '03:30', variant));
+    frames.forEach((frame, index) => {
+      const delta = frame.values.map((value, arm) => value - previous[arm]);
+      const span = Math.max(...delta.map(Math.abs));
+      const distance = Math.max(span, ...[[0, 11, 10, 9, 8, 7], [6, 5, 4, 3, 2, 1]].map(board =>
+        Math.hypot(...board.slice(0, 3).map(arm => delta[arm])) || Math.hypot(...board.slice(3).map(arm => delta[arm]))));
+      const oldFeed = Math.min(STRUGGLE_PATTERNS[variant].frames[index]?.feed ?? 800, 800) * span / distance;
+      assert.ok(Math.abs(frame.feed - oldFeed * 1.3) <= .00051);
+      previous = frame.values;
+    });
+  }
+});
+
 test('random Struggle selection can reach every pattern without an immediate repeat', () => {
   for (let previous = -1; previous < 7; previous++) {
     const seen = new Set();

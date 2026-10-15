@@ -1,15 +1,15 @@
 {
-  "esp_board1.bin": "8b0cd5dbd59fc76833d2c520790bfa9a10c6eb19704ffc323a571bf97e636e7e",
-  "esp_board2.bin": "9ac6e50525049f37e5401fda9ecc710f892981a51db503193e81ccefa37e1b78",
-  "esp_master.bin": "0a17600c37e119b2d1020335c7112dd34f7ed6a9389d791ad7901bc230c4fc8d",
-  "esp_master_release.bin": "498047fa5fc823100d8bf7f0303e026457bcb89494a164b6f30576e73a4e493e",
-  "firmware.bin": "c880af9eb9e2380c3ac3e66279e0ce67839a6cdc55f42f04493e4858598107c7",
+  "esp_board1.bin": "82bb3bf2a0e20caba94214725a04b1acdbda341d2e57c44f94dcab4a0e3e7685",
+  "esp_board2.bin": "dbd17ce2c028179b2da07e2a3c47a933949a00a0e9ce0470da3e5879e5ed5f81",
+  "esp_master.bin": "dee3bb42b2e69821421496bd258a387b453736440b58392f0f4964848cee2184",
+  "esp_master_release.bin": "3bdd9eeb6649c5028cdf3b5a17f0c9039439d6773ebf51515fe72817f70ac02d",
+  "firmware.bin": "5f5f8a37ab86592947a3ac8778d1e5730a759eccba94014c2c562149b7927248",
   "master_boot_app0.bin": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
   "master_bootloader.bin": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
-  "master_littlefs.bin": "5b3b9217826faff997c7e63ff5ada3c20b5ef1213cc63ef161dace24ffc3b4b4",
+  "master_littlefs.bin": "6a6190cb0e81873f7753038c3fa59a7598ffbafe898c05975c49cb6e27d35e9b",
   "master_partitions.bin": "148b959cbff1c38aa8e1d5c0ba9d612c54997b945e56a63f41223eef650653a1",
   "master_release_boot_app0.bin": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
   "master_release_bootloader.bin": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
-  "master_release_littlefs.bin": "97a656558218a4ac14620e65c3a910b504b4bcd6247a92ff350741457bb58766",
+  "master_release_littlefs.bin": "ae6b307a5d31d08af29bd18dbef31661d34bd9524c17fe99d255d5a2ee4462b0",
   "master_release_partitions.bin": "148b959cbff1c38aa8e1d5c0ba9d612c54997b945e56a63f41223eef650653a1"
 }

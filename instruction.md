@@ -16,7 +16,7 @@ python -m pip install --user -r requirements.txt "esptool>=5,<6"
 python run.py verify
 ```
 
-Continue only if verification says **Verified TIMIAC2-03b3b6e145e4**. No VS Code extensions are needed.
+Continue only if verification says **Verified TIMIAC2-f09aa035bf26**. No VS Code extensions are needed.
 
 **2. Update both Octopus boards using their microSD cards**
 
@@ -87,13 +87,16 @@ firmware/two-motor/               (entire folder, including JSON files)
 ESP_Timiac/include/cloud_config.h  (included clock pairing defaults)
 ```
 
-For update **2026-10-15.5**, install the new GPIO27 photoelectric sensor
+For update **2026-10-15.6**, install the new GPIO27 photoelectric sensor
 interface first, following [the wiring diagram](Docs/master-wiring.md). Leave the
 old GPIO18/19 traces unused. **Update all five boards once to enable remote updates.** Struggle and the
 hand sensor choose one of **seven random insect movements**, opening by at most
-**20 mm**, then returning directly to the time display. A valid RTC is required.
-Next Hour should open all arms, then close directly into the time display,
-with both moves **30% slower**. Stop if steps are lost or overheating warnings
+**20 mm**, now 30% faster, then returning directly to the time display.
+Speed is fixed at **75%** and homing is twice as fast. **Open** fully opens and
+holds; use **Maintenance > Calibrate arms** for actual homing.
+Next Hour opens all arms, briefly struggles within **37-48 mm** for about
+**3 seconds**, then closes directly into the time display. A valid RTC is required.
+Stop if steps are lost or overheating warnings
 appear. A thermal fault requires cooling and an Octopus reset before homing again.
 
 After this initial installation, future updates can be made from Canada through

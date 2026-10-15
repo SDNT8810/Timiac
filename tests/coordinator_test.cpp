@@ -224,6 +224,24 @@ int main() {
   }
   trackManualClockAction("show-time"); releaseClockTick();
   assert(releaseClockEnabled && operation.barrier.active() && !operation.homing);
+  // The new Open control parks with a normal move, and never resumes the clock
+  // when an hour or five-minute boundary passes.
+  resetMaster(); connectBoard(0); connectBoard(1);
+  boards[0].homed = boards[1].homed = 63;
+  releaseClockEnabled = true;
+  timiac::Step openStep; assert(timiac::userAction("open", 0, 0, kTravelMm, kMaxFeed, openStep));
+  DynamicJsonDocument openCommand(2048);
+  assert(writePresetStep(openStep, openCommand.to<JsonVariant>()));
+  startOperation(openCommand["a"], openCommand["b"], "open", 101);
+  trackManualClockAction("open");
+  assert(operation.barrier.active() && !operation.homing);
+  report(0, "preparing", true); report(1, "preparing", true); operationTick();
+  report(0, "done"); report(1, "done");
+  for (unsigned minute : {0U, 5U, 55U}) {
+    rtcTime.h = 15; rtcTime.m = minute; releaseClockTick();
+    assert(operation.id == "open" && !operation.barrier.active() && !program.reserved());
+    assert(!releaseClockEnabled && !releaseStartupPending);
+  }
 #endif
   // A received current must survive bridge -> master -> browser unchanged,
   // including a mismatch. Do not replace actual reports with expectations.
@@ -421,7 +439,7 @@ int main() {
     assert(wire.length() <= timiac::PeerOutbox::maxPacket);
     assert(!deserializeJson(packet, wire));
     assert(packet["type"] == "prepare" && packet["trajectory"] == true);
-    assert(packet["lines"].size() == 4);
+    assert(packet["lines"].size() == 7);
     assert(validLines(packet["lines"], true) && !validLines(packet["lines"]));
     const char* lines[timiac::maxTrajectoryCommands]; unsigned count = 0;
     for (JsonVariant line : packet["lines"].as<JsonArray>()) lines[count++] = line.as<const char*>();
@@ -435,7 +453,7 @@ int main() {
       if (!strcmp(line, "M400")) ++drains;
       kernel.receive("ok", hostNow);
     }
-    assert(moves == 2 && drains == 1 && kernel.completions == 1);
+    assert(moves == 5 && drains == 1 && kernel.completions == 1);
   }
   report(0, "preparing", true); operationTick(); programTick();
   assert(lastType(0) == "prepare");

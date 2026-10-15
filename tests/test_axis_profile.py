@@ -58,6 +58,7 @@ class AxisProfileTests(unittest.TestCase):
         self.assertEqual(settings["CHOPPER_TIMING"], "CHOPPER_DEFAULT_24V")
         self.assertEqual(settings["INTERPOLATE"], "true")
         self.assertEqual(machine["homing_strategy"], "concurrent-all")
+        self.assertEqual(machine["homing_feed_mm_min"], 240)
         self.assertLessEqual(machine["steps_per_mm"] * machine["max_feed_mm_min"] / 60, 100000)
 
     def test_microstep_change_preserves_measured_travel(self):
@@ -90,7 +91,7 @@ class AxisProfileTests(unittest.TestCase):
             self.assertNotIn("#define I_STEP_PIN", adapted)
             self.assertNotIn("#define CASE_LIGHT_ENABLE", adapted)
         self.assertEqual(settings["Configuration.h"]["DEFAULT_ACCELERATION"], "25")
-        self.assertEqual(settings["Configuration.h"]["HOMING_FEEDRATE_MM_M"], "{ 120, 120, 120, 120, 120, 120 }")
+        self.assertEqual(settings["Configuration.h"]["HOMING_FEEDRATE_MM_M"], "{ 240, 240, 240, 240, 240, 240 }")
         self.assertEqual(settings["Configuration.h"]["JUNCTION_DEVIATION_MM"], "0.3")
         self.assertEqual(settings["Configuration.h"]["S_CURVE_ACCELERATION"], "")
         self.assertEqual(settings["Configuration_adv.h"]["ENDSTOPS_ALWAYS_ON_DEFAULT"], "")

@@ -24,10 +24,10 @@ function render(state = controller.status) {
   $('running-status').textContent = !connected ? 'Waiting for clock status…' :
     startupPending ? 'Starting automatically: waiting for both motor boards, then homing all arms.' :
     moving && state.operation?.homing ? (state.clock?.running ? 'Homing all arms. The clock will start when homing finishes.' : 'Homing all arms. They will stay home until your next command.') :
-    !homed ? 'Restart the master to home the arms before moving.' :
+    !homed ? 'Use Calibrate arms under Maintenance before moving.' :
     !state.clock?.running ? 'Clock paused. Press Start clock to follow the time.' : !state.clock.valid ? 'Clock waiting for a valid time.' :
     'Clock running. Arms follow the time every five minutes, even with this page closed.';
-  $('machine-status').textContent = !connected ? 'Connection lost. Waiting for Timiac…' : state.fault || (otherOwner ? 'Another device has control. Please wait.' : moving ? 'Arms are moving…' : !state.machineReady ? 'Waiting for both motor boards…' : !homed ? 'Homing required. Restart the master to home all arms.' : 'All 12 arms are ready.');
+  $('machine-status').textContent = !connected ? 'Connection lost. Waiting for Timiac…' : state.fault || (otherOwner ? 'Another device has control. Please wait.' : moving ? 'Arms are moving…' : !state.machineReady ? 'Waiting for both motor boards…' : !homed ? 'Homing required. Use Calibrate arms under Maintenance.' : 'All 12 arms are ready.');
   if (connected && programBusy && !state.fault) $('machine-status').textContent = `${state.program.name || 'Movement'} · ${state.program.completed}/${state.program.total} steps`;
   if (connected && !moving && !otherOwner && !state.fault && homed && state.machineReady && state.proximity?.enabled && state.proximity.ready && !state.proximity.armed) {
     $('machine-status').textContent = 'All 12 arms ready. Move hand away to arm the sensor.';

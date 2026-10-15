@@ -13,20 +13,19 @@ also retains its holding torque until an explicit motor release.
 The idle-shutdown fix is included in the current 1,000 mA package. Install all
 five matching board images when upgrading from 800 mA; see [installation steps](instruction.md).
 
-**Home hold and speed control (2026-09-29.8):** manual Home in the release
-dashboard now parks the arms until another movement command. Start clock
-resumes automatic time tracking. Power-on startup still homes and starts the
-clock automatically.
+**Motion update (2026-10-15.6):** the main **Open** button moves all arms
+fully open and keeps them there until the next command. It does not home.
+**Maintenance > Calibrate arms** retains real homing after a reset or update.
+Power-on startup still homes and starts the clock automatically.
 
-The release dashboard has a **20–100% movement speed slider**, initially 50%.
-100% is the previous speed for each movement (up to 500 mm/min travel and
-120 mm/min homing). The saved setting applies to both boards, including dances,
-five-minute/hour changes, automatic clock movements, and all homing phases.
-Change speed while idle; it applies to the next movement and survives reboot.
+Movement speed is fixed at **75%**, including dances, five-minute/hour changes
+and homing. The slider is removed; older saved slider settings are ignored.
+Homing feed is doubled to **240 mm/min before scaling** (180 mm/min at 75%).
+All seven Struggle patterns run **30% faster** than the previous profile.
 
 **Reflash both Octopus boards, both ESP bridges and the selected master** using
 the installation commands below. The matched package is
-**TIMIAC2-03b3b6e145e4**, protocol 7. This update includes a Marlin homing-speed
+**TIMIAC2-f09aa035bf26**, protocol 7. This update includes a Marlin homing-speed
 patch; earlier master-only upload instructions apply only to earlier revisions.
 
 **Hour-change reset fix (2026-09-29.7):** the automatic dance no longer creates
@@ -79,7 +78,7 @@ Repeat the Octopus card flash for both motor boards. The Octopus and bridge
 images are the same in both modes; each master command includes its matching
 web filesystem. The SD card is only needed to flash an Octopus and can be
 removed after `FIRMWARE.CUR` is written. The matching identity is
-**TIMIAC2-03b3b6e145e4**.
+**TIMIAC2-f09aa035bf26**.
 
 **Release startup:** at power-up, the master
 waits for both motor boards to be healthy and idle, homes all twelve arms together,
@@ -92,7 +91,7 @@ still runs and the clock pose waits for valid time.
 for running and microswitch homing, with **64 commanded microsteps** over UART
 and **internal interpolation to 256**. Calibration is **11,520 steps/mm**; travel
 is 0-50 mm. Maximum feed is **500 mm/min** (96,000 step pulses/s); homing
-is **120 mm/min at 100%** (60 at the default 50%). The holding multiplier remains 0.5 (approximately 500 mA at rest).
+is **240 mm/min before the fixed 75% scaling** (180 mm/min in use). The holding multiplier remains 0.5 (approximately 500 mA at rest).
 Driver chopper timing now uses the 24 V preset for the planned 24 V / 400 W (16.7 A) supply.
 
 **Home all** now uses Lumiac's concurrent six-arm routine on each Octopus:
@@ -106,7 +105,7 @@ report, including numerical mismatches, rather than substituting browser
 constants. These are configured values, not measured coil current.
 When upgrading from older motor settings, reflash **both Octopus boards, both bridges, and the chosen master mode**;
 the master command also installs its web filesystem. Reload the dashboard.
-The matching machine identity is **TIMIAC2-03b3b6e145e4**.
+The matching machine identity is **TIMIAC2-f09aa035bf26**.
 
 The requested current is now 1,000 mA, superseding the earlier 1,400 mA setting. The Board 2 C2 release fault remains physically unverified;
 new homing errors name the affected axes, and switch protection stays enabled.
@@ -156,15 +155,15 @@ After this matched update, switching modes only needs the master upload.
 
 **Dev:** the existing dashboard, manual controls, G-code uploads, driver/switch
 diagnostics, and test animations, with microswitch homing.
-**Release:** Home, Close, Start clock, Next 5 min, Next hour, Struggle, Stop,
-time and Wi-Fi settings.
-Release starts with automatic Home all, then continuous RTC tracking. Manual
-Home parks the arms until another command. Start clock resumes
-tracking; Close, Next 5 min, Next hour, Struggle, Stop and faults pause it. Arms update at five-minute
+**Release:** Open, Close, Start clock, Next 5 min, Next hour, Struggle, Stop,
+time and Wi-Fi settings, and Calibrate arms under Maintenance.
+Release starts with automatic Home all, then continuous RTC tracking. Open
+parks the arms fully open until another command. Start clock resumes
+tracking; Open, Close, Next 5 min, Next hour, Struggle, Stop and faults pause it. Arms update at five-minute
 boundaries and return to current time after a hand gesture, with no phone or
 SD card required. Every release-master boot starts a fresh homing sequence;
 interrupted commands and programs are never replayed. After Stop or fault recovery,
-Home again if needed, or Start clock when all arms remain homed. Developer mode
+Calibrate arms again if needed, or Start clock when all arms remain homed. Developer mode
 requires manual Home after power-up. The RTC must be valid to display time.
 Development command/program endpoints and detailed RTC diagnostics are unavailable
 in release mode. Internal driver, endstop, Stop and connection checks remain active.
@@ -278,10 +277,10 @@ python run.py master_release --port COM5  # User dashboard
 ~~~
 
 Both serve **http://192.168.4.1/** on the same Timiac Wi-Fi network. The user
-dashboard contains Home, Close, Start clock, Next 5 min, Next hour, Struggle, a live RTC readout, and a
+dashboard contains Open, Close, Start clock, Next 5 min, Next hour, Struggle, a live RTC readout, and a
 date/time setting box. Stop uses a quick-stop for ordinary motion; interrupted
 homing requires an Octopus reset. Wait for both boards
-to report back, then Home before moving again. Control is acquired automatically,
+to report back, then Calibrate arms under Maintenance before moving again. Control is acquired automatically,
 with one device controlling at a time. The development G-code and
 program endpoints are disabled in release mode.
 
@@ -305,7 +304,9 @@ master including its filesystem** (`python run.py esp1`, `python run.py esp2`,
 Octopus firmware already supports these reports. Automatic switch polling is
 enabled by the development master; the release dashboard has no switch panel.
 
-- **Home:** homes all twelve axes to **0 mm**, which is physically fully open.
+- **Open (release):** moves all twelve homed axes to **0 mm**, fully open, and holds.
+  Use **Maintenance > Calibrate arms** for actual homing.
+- **Home (dev / calibration):** homes all twelve axes to **0 mm**, which is physically fully open.
   Release runs this automatically at master startup; dev requires the button.
   Required again after a motor-board restart or loss of homing state.
 - **Close:** moves all arms to the configured maximum stroke (**50 mm**).
@@ -320,17 +321,19 @@ enabled by the development master; the release dashboard has no switch panel.
   avoiding the previous selection. Arms open by **0–20 mm** in staggered groups,
   with three movement beats and no programmed pause. In the final move,
   other arms close fully while the hour/minute arms take their clock positions.
-  Vector feed remains capped at 400 mm/min and travel acceleration at 20 mm/s².
+  Vector feed is 30% higher, capped at 520 mm/min before the fixed 75% override
+  (390 mm/min in use). Travel acceleration remains 20 mm/s².
   Homing and a valid RTC are required. The current time is captured when the
   command is accepted, and the arms retain that final pose with tracking paused.
 - **Next 5 min:** advances the arm pose to the next five-minute boundary, just
   like the simulator's Next 5 min control (13:58 becomes 14:00).
-- **Next hour:** adds one hour, runs `Simulator/gcodes/hour-movement.gcode`, and
-  opens all arms together, then closes directly into the selected time
-  (13:35 becomes 14:35). The minute arm stays open and the hour arm moves halfway.
-  Both moves run 30% slower (350 mm/min per-axis ceiling before the speed slider).
-  Removing the separate all-closed pose keeps the software timing bounds within
-  40 seconds at 50% and 20 seconds at 100%.
+- **Next hour:** adds one hour, opens all arms together, adds an asymmetric
+  flutter with openings between **37 and 48 mm**, then closes directly into the
+  selected time (13:35 becomes 14:35). The flutter has **3 seconds of nominal
+  motion at the fixed 75% speed**; real acceleration adds a short allowance.
+  The opening and final move retain the slower 350 mm/min per-axis profile
+  before the fixed override. Non-time arms close while time arms take their
+  final positions, with no separate all-closed pose.
 
 The next-time controls advance from the last arm time, or the RTC if no arm time
 is selected. Repeated presses continue advancing; midnight wraps normally.
@@ -369,7 +372,7 @@ are already actuator coordinates and receive no additional inversion. Positive
 relative motion closes an arm; negative motion opens it. Homing direction,
 endstop wiring and physical calibration remain unchanged (now 11,520 steps/mm
 at 64 commanded microsteps, formerly 720 at four). Homing now uses
-120 mm/min, with a 180-second acknowledgement budget and a 300-second
+240 mm/min before the fixed override, with a 180-second acknowledgement budget and a 300-second
 whole-operation budget. Marlin uses its normal serial command path;
 there is no custom host watchdog or remote-reset command.
 Reload the updated hardware animation files before uploading older programs.

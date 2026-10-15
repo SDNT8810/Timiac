@@ -113,6 +113,17 @@ int main(int argc, char** argv) {
       }
     }
   }
+  // Open is a normal absolute move to full extension; it must never re-home.
+  Step opened; assert(userAction("open", 0, 0, travel, maxFeed, opened));
+  for (unsigned b = 0; b < 2; ++b) {
+    assert(opened.count[b] == 2 && !strcmp(opened.lines[b][0], "G90"));
+    assert(!strncmp(opened.lines[b][1], "G1 ", 3));
+    for (char axis : axes) {
+      if (!axis) continue;
+      const char* word = strchr(opened.lines[b][1], axis); assert(word);
+      assert(strtof(word + 1, nullptr) == 0);
+    }
+  }
   // Clock controls advance physically clockwise: 12:00 -> C2 at :05,
   // 12:05 -> B2 at :10; 12:00 -> C2 halfway at 13:00. Midnight wraps.
   for (unsigned base : {0U, 5U, 55U, 12U * 60, 13U * 60 + 35, 23U * 60 + 55}) {
@@ -132,6 +143,7 @@ int main(int argc, char** argv) {
     float positions[12]; for (float& position : positions) position = initial;
     unsigned commands = 0;
     double bounds[2] = {}; // full stop at every frame: conservative acceleration allowance
+    double flutterSeconds = 0;
     for (unsigned i = 0; i < presetCount(preset, variant); ++i) {
       float previous[12]; memcpy(previous, positions, sizeof(previous));
       Step frame; assert(presetTrajectoryFrame(preset, i, target, travel, maxFeed, positions, frame, variant));
@@ -165,6 +177,7 @@ int main(int argc, char** argv) {
         }
       }
       assert(moving && fabs(seconds[0] - seconds[1]) < .003);
+      if (preset == Preset::Hour && i > 0 && i + 1 < presetCount(preset)) flutterSeconds += seconds[0];
       const double accel = travelAcceleration * (preset == Preset::Struggle ? .8 : 1.0);
       bounds[0] += seconds[0] * 2 + largestVelocity * .5 / accel;
       bounds[1] += seconds[0] + largestVelocity / accel;
@@ -172,6 +185,7 @@ int main(int argc, char** argv) {
     assert(commands >= (preset == Preset::Struggle ? 3U : 1U) && commands <= (preset == Preset::Struggle ? 4U : 5U));
     assert(bounds[0] + .4 <= (preset == Preset::Struggle ? 56 : 52));
     assert(bounds[1] + .4 <= (preset == Preset::Struggle ? 28 : 26));
+    if (preset == Preset::Hour) assert(fabs(flutterSeconds / .75 - 3) < .01);
     for (unsigned arm = 0; arm < 12; ++arm)
       assert(positions[arm] == (faceHour[arm] == target % 60 / 5 ? 0 : faceHour[arm] == target / 60 % 12 ? halfTravel : travel));
   }

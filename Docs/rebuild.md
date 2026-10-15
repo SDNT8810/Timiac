@@ -1,4 +1,4 @@
-# Remote update package - 2026-10-15.5
+# Motion and remote update package - 2026-10-15.6
 
 Install all five boards once to enable [remote updates](remote-updates.md).
 The existing bootloaders are retained, and both Octopus cards stay installed.
@@ -9,28 +9,37 @@ CRC/readback checks protect activation. No physical OTA test has been performed 
 The master now uses a Heschen E3F-DS30B2 NPN NC hand sensor on GPIO27 with the
 three-resistor 24 V interface. Preserve the existing 3.3 V converter and leave
 the old GPIO18/19 PCB traces unused. See [the complete master wiring](master-wiring.md).
-The animation behavior is unchanged. Struggle randomly selects one of seven
+Struggle randomly selects one of seven
 insect patterns from both the button and hand input; see [the preview guide](struggle-patterns.md).
 
 Running and microswitch homing current is 1,000 mA RMS on all twelve motors.
 Holding current remains 50% (approximately 500 mA). Struggle retains 20 mm/s²
-travel acceleration (20% below normal) and a 400 mm/min vector-feed ceiling.
+travel acceleration (20% below normal); every segment is 30% faster, with a
+520 mm/min vector-feed ceiling before the fixed 75% override (390 mm/min in use).
 Each pattern has three asymmetric movement poses bounded to 0–20 mm open,
 then moves directly to the current time. The final move closes the non-time
 arms fully and returns hour/minute arms to their normal positions. A valid RTC is
 required. All poses share one trajectory with no programmed pause.
 
-Next Hour and the automatic hourly animation use two poses: all fully open,
-then directly to selected time. Both moves run 30% slower, at <=350 mm/min per motor.
-Coordinated vector feed is normalized to each motor's speed limit so motion
-can target <=40 seconds at 50% and <=20 seconds at 100%. Acceleration and
-communication time are included in software timing checks; physical timing
-still needs commissioning on the installed mechanism.
+All user motion is fixed at **75%**; no dashboard speed slider remains and
+previously saved percentages are ignored. Homing is **240 mm/min before scaling**,
+double the old 120; the fixed override gives **180 mm/min**.
+
+Next Hour and the automatic hourly animation first open all arms, then run
+three asymmetric flutter poses within **37-48 mm opening**, then move directly
+to the selected time. The flutter has 3 seconds of nominal motion at 75%;
+acceleration adds a small allowance on real hardware. Opening and the final
+move retain the 350 mm/min per-axis profile before the fixed override.
+Firmware and simulator use the same generated frames and fixed speed.
+The **Open** button sends a normal move to full opening and parks there.
+Real homing remains in automatic startup and **Maintenance > Calibrate arms**.
 
 Every job restores normal acceleration (25 mm/s?) before movement, including
 after cancellation. Trajectory capability is version 2. The new matched package
-remains **TIMIAC2-03b3b6e145e4**, protocol 7. Remote-update setup requires the
-new receiver firmware on all five boards; subsequent updates can target one board.
+is **TIMIAC2-f09aa035bf26**, protocol 7. Remote-update setup requires the
+new matching firmware on all five boards. The homing contract changed, so this
+package requires a local USB/SD installation; OTA refuses a hardware identity
+change. Later updates that keep this identity can target individual boards.
 Use `python run.py master_release --port COM10` with the master's actual USB port.
 Keep the planned 24 V / 400 W supply and active cooling.
 

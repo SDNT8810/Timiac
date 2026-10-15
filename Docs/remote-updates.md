@@ -1,9 +1,13 @@
-# Remote updates for all five boards — 2026-10-15.5
+# Remote updates for all five boards — 2026-10-15.6
 
 After one initial installation, update the master ESP32, both ESP-12 bridges,
 and both Octopus boards through **https://control.timiac.it/**. Only the master
 needs internet; it forwards the other images over the clock's own Wi-Fi.
 No PC beside the clock or extra control wires are needed for routine updates.
+
+This package changes the homing configuration and identity to
+**TIMIAC2-f09aa035bf26**. Install all five boards locally with this matched package;
+the OTA service deliberately rejects changes to the hardware identity.
 
 ## Initial installation in Italy — once
 
@@ -21,7 +25,7 @@ Follow [instruction.md](../instruction.md) using this complete package:
    the master to its internet router. Check both boards, the RTC and hand input.
 5. Sign in at **https://control.timiac.it/**. Firmware updates should report ready.
    Perform the first remote update while someone is still beside the clock,
-   and confirm Home and Start clock work afterward.
+   and confirm Calibrate arms (under Maintenance), Open, and Start clock work afterward.
 
 The existing ESP and Octopus bootloaders are used. Initial ESP flashing includes
 the normal ESP bootloader/layout; the new application enables its update receiver.
@@ -63,7 +67,7 @@ select its file below and press **Install firmware**, one component at a time.
 Wait for **complete** before the next update. Keep power connected. Updates pause
 the clock, cancel queued motion, and wait for the connected bridges to acknowledge
 Stop. The clock remains parked across an update reboot. When finished, select
-**Home**, then **Show time / Start clock**. Starting the clock restores the normal
+**Maintenance > Calibrate arms**, then **Show time / Start clock**. Starting the clock restores the normal
 automatic startup behavior for subsequent power cycles.
 
 Keep the mechanism clear and secure any load that relies on motor holding torque:
