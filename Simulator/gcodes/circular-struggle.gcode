@@ -1,7 +1,10 @@
-; Short Struggle: 30-70% stroke, 20% less speed, 20% less acceleration.
-; Hardware runtime chooses each arm's nearer band edge from its current pose.
-; This simulator/example sequence starts at home. Target <=15 s at 50% speed.
+; Struggle: two continuous out-and-back cycles across 10-90% of stroke.
+; On the 50 mm mechanism, each sweep is 40 mm between actuator positions 5 and 45 mm.
+; Runtime enters at each arm's nearer edge. This example starts fully open.
+; Retain the 400 mm/min hardware vector feed and 20 mm/s^2 acceleration.
 G90
-G1 A70 B70 C70 D70 E70 H70 I70 J70 K70 L70 U70 V70 F800
-G1 A58 B58 C58 D58 E58 H58 I58 J58 K58 L58 U58 V58 F800
-G1 A70 B70 C70 D70 E70 H70 I70 J70 K70 L70 U70 V70 F800
+G1 A90 B90 C90 D90 E90 H90 I90 J90 K90 L90 U90 V90 F800
+G1 A10 B10 C10 D10 E10 H10 I10 J10 K10 L10 U10 V10 F800
+G1 A90 B90 C90 D90 E90 H90 I90 J90 K90 L90 U90 V90 F800
+G1 A10 B10 C10 D10 E10 H10 I10 J10 K10 L10 U10 V10 F800
+G1 A90 B90 C90 D90 E90 H90 I90 J90 K90 L90 U90 V90 F800

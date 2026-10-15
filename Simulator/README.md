@@ -11,14 +11,23 @@ npm run dev
 
 Open <http://localhost:4000>.
 
+**Next Hour** now opens all arms, then closes directly into the selected time,
+with both moves 30% slower. **Struggle** enters at each arm's nearer band edge,
+then makes two continuous 40 mm out-and-back sweeps. It stays between actuator
+positions 5 and 45 mm and ends at the starting edge, with the clock paused.
+Both buttons start from the visible arm pose without snapping to another pose.
+Choose **0.5×** playback to approximate the hardware's default 50% speed;
+**1.0×** represents 100%. Nominal Struggle timing follows the two boards' vector
+feed convention; the renderer does not model Marlin's acceleration exactly.
+
 Use the **3D** viewport to orbit, pan, and zoom around all twelve mechanisms while G-code is running. Switch to **FRONT** for the clock-face projection. The 3D kinematic path is calibrated so actuator positions `0`, `50`, and `100` pass through `close.jpeg`, `middle.jpeg`, and `open.jpeg` respectively.
 
 ## Simulator G-code dialect
 
-- `A` through `L` are arms 1–12, clockwise from 12 o'clock.
-- Axis values are linear actuator stroke in millimetres: `0` folds the finger up out of the face plane and `100` lays it open in the face plane.
+- `A B C D E H I J K L U V` are arms 1–12, clockwise from 12 o'clock.
+- Axis values are percentages of the physical 50 mm stroke: `0` folds the finger up out of the face plane and `100` lays it open in the face plane.
 - `G0`/`G1` move one or more arms simultaneously.
-- `F` is feed rate in millimetres per minute.
+- `F` is feed rate in percentage points per minute (multiply by 0.5 for mm/min).
 - `G4 P500` dwells for 500 ms; `G4 S1` dwells for one second.
 - `G90` uses absolute positions; `G91` uses relative positions.
 - `G28` retracts every arm to home.

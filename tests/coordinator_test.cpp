@@ -419,7 +419,7 @@ int main() {
     assert(wire.length() <= timiac::PeerOutbox::maxPacket);
     assert(!deserializeJson(packet, wire));
     assert(packet["type"] == "prepare" && packet["trajectory"] == true);
-    assert(packet["lines"].size() == 5);
+    assert(packet["lines"].size() == 4);
     assert(validLines(packet["lines"], true) && !validLines(packet["lines"]));
     const char* lines[timiac::maxTrajectoryCommands]; unsigned count = 0;
     for (JsonVariant line : packet["lines"].as<JsonArray>()) lines[count++] = line.as<const char*>();
@@ -433,7 +433,7 @@ int main() {
       if (!strcmp(line, "M400")) ++drains;
       kernel.receive("ok", hostNow);
     }
-    assert(moves >= 2 && moves <= 3 && drains == 1 && kernel.completions == 1);
+    assert(moves == 2 && drains == 1 && kernel.completions == 1);
   }
   report(0, "preparing", true); operationTick(); programTick();
   assert(lastType(0) == "prepare");
@@ -443,20 +443,20 @@ int main() {
   report(1, "done"); programTick(); assert(program.state == "done" && armTimeMinutes == 210);
   programTick(); assert(peers[0].socket.sent.size() == 2 && peers[1].socket.sent.size() == 2);
 
-  // Struggle uses the same single queued operation, but deliberately omits
-  // its simulator-only G4 rests so the travelling wave never pauses.
+  // Both Struggle cycles share one queued operation, with no intermediate
+  // completion barrier or pause between the two out-and-back sweeps.
   assert(!startBuiltinPreset(timiac::Preset::Struggle, 0, "struggle", 124)); programTick();
   assert(program.total == 1 && program.hasStep && operation.barrier.active());
-  bool stationary[2][5] = {};
+  bool stationary[2][7] = {};
   for (unsigned b = 0; b < 2; ++b) {
     // Larger Struggle packets span multiple normal network-loop writes.
     while (peers[b].outbox.pending()) assert(flushPeer(peers[b]));
     DynamicJsonDocument packet(4096);
     assert(!deserializeJson(packet, peers[b].socket.sent.back()));
     assert(packet["type"] == "prepare" && packet["trajectory"] == true);
-    assert(packet["lines"].size() == 5);
+    assert(packet["lines"].size() == 7);
     assert(packet["lines"][0] == "M204 T20.000");
-    assert(packet["lines"][4] == "M204 T25.000");
+    assert(packet["lines"][6] == "M204 T25.000");
     const char* lines[timiac::maxTrajectoryCommands]; unsigned count = 0;
     for (JsonVariant line : packet["lines"].as<JsonArray>()) {
       lines[count] = line.as<const char*>();
@@ -473,9 +473,9 @@ int main() {
       if (!strcmp(line, "M400")) ++drains;
       kernel.receive("ok", hostNow);
     }
-    assert(frames == 6 && drains == 1 && kernel.completions == 1); // includes stage acceleration reset
+    assert(frames == 8 && drains == 1 && kernel.completions == 1); // includes stage acceleration reset
   }
-  for (unsigned i = 0; i < 5; ++i) assert(!stationary[0][i] || !stationary[1][i]);
+  for (unsigned i = 0; i < 7; ++i) assert(!stationary[0][i] || !stationary[1][i]);
   report(0, "preparing", true); operationTick(); programTick();
   report(1, "preparing", true); operationTick(); programTick();
   report(0, "done"); programTick(); assert(program.state == "running");

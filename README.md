@@ -1,4 +1,4 @@
-**Cooler, shorter animations (2026-10-08.1):** running/homing current is 1,000 mA RMS and holding current is approximately 500 mA. Struggle uses 30-70% of travel, 20% less speed and acceleration, and targets at most 15 seconds at 50% speed. Next Hour is all open, all closed, then time, targeting 40 seconds at 50% and 20 seconds at 100%. Install all five matching images using [instruction.md](instruction.md).
+**Updated animations (2026-10-15.1):** Next Hour runs 30% slower and opens all arms, then closes directly into the selected time. Struggle makes two continuous out-and-back sweeps between 5 and 45 mm, retaining its reduced speed and acceleration. The simulator uses the same movements. Only the master needs flashing for this update; current remains 1,000 mA RMS.
 
 
 # Timiac: twelve motors, three ESP modules
@@ -315,15 +315,20 @@ enabled by the development master; the release dashboard has no switch panel.
   the fully open minute arm takes precedence. The physical mechanism is inverted
   relative to the simulator's extension coordinates. Dev moves once per press;
   release continues following the RTC.
-- **Struggle:** moves each arm to its nearer 30% or 70% stroke edge, pulses 12% inward,
-  then returns to that edge. Vector feed is capped at 400 mm/min and travel acceleration
-  is 20 mm/s?. It targets <=15 seconds at the default 50%; lower speeds take longer.
+- **Struggle:** enters at each arm's nearer 5 or 45 mm edge, then makes two
+  complete 40 mm out-and-back sweeps without a programmed pause. Vector feed
+  remains capped at 400 mm/min and travel acceleration at 20 mm/s². The wider
+  double cycle takes longer than the former 15-second pulse; speed settings scale
+  the duration. It ends at the starting edge.
   It requires homing but not an RTC.
 - **Next 5 min:** advances the arm pose to the next five-minute boundary, just
   like the simulator's Next 5 min control (13:58 becomes 14:00).
 - **Next hour:** adds one hour, runs `Simulator/gcodes/hour-movement.gcode`, and
-  opens all arms together, closes all together, then shows the selected time
-  (13:35 becomes 14:35). It targets <=40 seconds at 50% and <=20 at 100%.
+  opens all arms together, then closes directly into the selected time
+  (13:35 becomes 14:35). The minute arm stays open and the hour arm moves halfway.
+  Both moves run 30% slower (350 mm/min per-axis ceiling before the speed slider).
+  Removing the separate all-closed pose keeps the software timing bounds within
+  40 seconds at 50% and 20 seconds at 100%.
 
 The next-time controls advance from the last arm time, or the RTC if no arm time
 is selected. Repeated presses continue advancing; midnight wraps normally.

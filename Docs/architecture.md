@@ -134,9 +134,10 @@ The master derives matching nominal frame durations from current positions using
 Marlin's XYZ-first linear feed metric and axis speed limits. Only a board with
 no movement in a frame dwells; the other keeps moving. Acceleration and network
 timing mean this is not an exact inter-board timing guarantee.
-Struggle uses a three-pose pulse inside 30-70% of travel, with a lower acceleration
-setting bracketed by normal-acceleration restores. Next Hour uses three poses:
-all open, all closed, then time. Trajectory version 2 allows only normal or 80%
+Struggle enters the nearer 10% or 90% travel edge, then makes two complete
+out-and-back sweeps, with lower acceleration bracketed by normal restores.
+Next Hour uses two poses at 70% of its former speed: all open, then directly to
+time. Trajectory version 2 allows only normal or 80%
 travel acceleration and a bounded coordinated vector-feed envelope. Manual Next controls and Struggle pause release
 RTC tracking until Start clock or Home resumes it.
 

@@ -83,10 +83,10 @@ int main(int argc, char** argv) {
         }
       }
     }
-    assert(moves >= (preset == Preset::Curious ? 20U : 6U));
+    assert(moves >= (preset == Preset::Curious ? 20U : preset == Preset::Hour ? 4U : 10U));
     if (preset == Preset::Struggle) {
       assert(dwells == 0); // Physical Struggle omits simulator rests.
-      for (float position : positions) assert(fabsf(position - travel * .3f) < .001f);
+      for (float position : positions) assert(fabsf(position - travel * .1f) < .001f);
     } else if (preset == Preset::Hour) {
       assert(dwells == 0);
       for (unsigned i = 0; i < 12; ++i) assert(positions[i] == (i == 6 ? 0 : i == 9 ? halfTravel : travel));
@@ -157,10 +157,10 @@ int main(int argc, char** argv) {
           if (preset == Preset::Struggle) assert(velocity * 60 <= maxFeed * .8 + .001);
           for (unsigned arm = 0; arm < 6; ++arm) {
             const double axisSpeed = fabs(positions[b * 6 + arm] - previous[b * 6 + arm]) / path * velocity * 60;
-            assert(axisSpeed <= maxFeed * (preset == Preset::Struggle ? .8 : 1.0) + .02);
+            assert(axisSpeed <= maxFeed * (preset == Preset::Struggle ? .8 : .7) + .02);
           }
           if (preset == Preset::Struggle) for (unsigned arm = 0; arm < 12; ++arm)
-            assert(positions[arm] >= travel * .3f - .001f && positions[arm] <= travel * .7f + .001f);
+            assert(positions[arm] >= travel * .1f - .001f && positions[arm] <= travel * .9f + .001f);
 
         }
       }
@@ -169,12 +169,42 @@ int main(int argc, char** argv) {
       bounds[0] += seconds[0] * 2 + largestVelocity * .5 / accel;
       bounds[1] += seconds[0] + largestVelocity / accel;
     }
-    assert(commands >= 2 && commands <= 3);
-    assert(bounds[0] + .4 <= (preset == Preset::Struggle ? 15 : 40));
+    assert(commands >= (preset == Preset::Struggle ? 4U : 1U) && commands <= (preset == Preset::Struggle ? 5U : 2U));
+    assert(bounds[0] + .4 <= (preset == Preset::Struggle ? 96 : 40));
     if (preset == Preset::Hour) assert(bounds[1] + .4 <= 20);
     if (preset == Preset::Hour) for (unsigned arm = 0; arm < 12; ++arm)
       assert(positions[arm] == (faceHour[arm] == target % 60 / 5 ? 0 : faceHour[arm] == target / 60 % 12 ? halfTravel : travel));
-    else for (float position : positions) assert(fabsf(position - travel * (initial <= halfTravel ? .3f : .7f)) < .001f);
+    else for (float position : positions) assert(fabsf(position - travel * (initial <= halfTravel ? .1f : .9f)) < .001f);
+  }
+  // Next Hour has two poses, and never closes the minute hand before reopening.
+  assert(presetCount(Preset::Hour) == 2);
+  for (unsigned target : {0U, 60U, 210U, 1439U}) {
+    float positions[12]; for (float& value : positions) value = travel;
+    Step frame;
+    assert(presetTrajectoryFrame(Preset::Hour, 0, target, travel, maxFeed, positions, frame));
+    for (float value : positions) assert(value == 0);
+    assert(presetTrajectoryFrame(Preset::Hour, 1, target, travel, maxFeed, positions, frame));
+    for (unsigned arm = 0; arm < 12; ++arm)
+      assert(positions[arm] == (faceHour[arm] == target % 60 / 5 ? 0 : faceHour[arm] == target / 60 % 12 ? halfTravel : travel));
+  }
+  // Two complete 40 mm out-and-back sweeps from mixed poses, without a dwell
+  // between cycles or any drift when Struggle is commanded again.
+  assert(presetCount(Preset::Struggle) == 5);
+  float mixed[12], edges[12];
+  for (unsigned arm = 0; arm < 12; ++arm) {
+    mixed[arm] = (arm % 3) * halfTravel;
+    edges[arm] = travel * (mixed[arm] <= halfTravel ? .1f : .9f);
+  }
+  for (unsigned repeat = 0; repeat < 4; ++repeat) for (unsigned index = 0; index < 5; ++index) {
+    float previous[12]; memcpy(previous, mixed, sizeof(previous));
+    Step frame;
+    assert(presetTrajectoryFrame(Preset::Struggle, index, 0, travel, maxFeed, mixed, frame));
+    for (unsigned arm = 0; arm < 12; ++arm) {
+      assert(fabsf(mixed[arm] - (index % 2 ? travel - edges[arm] : edges[arm])) < .001f);
+      if (index) assert(fabsf(fabsf(mixed[arm] - previous[arm]) - travel * .8f) < .001f);
+    }
+    for (unsigned b = 0; b < 2; ++b) for (unsigned n = 0; n < frame.count[b]; ++n)
+      assert(strncmp(frame.lines[b][n], "G4 ", 3));
   }
   for (const char* action : {"home", "open", "close"}) {
     Step pose; assert(userAction(action, 0, 0, travel, timiac::maxFeed, pose));

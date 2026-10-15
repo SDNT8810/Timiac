@@ -1,4 +1,4 @@
-# Cooler motion validation - 2026-10-08.1
+# Motion validation - 2026-10-15.1
 
 Matched package **TIMIAC2-03b3b6e145e4**, protocol 7, trajectory capability 2.
 All twelve axes request 1,000 mA RMS for running/homing and retain 50% holding.
@@ -7,19 +7,20 @@ Validation completed:
 
 - Shared Octopus, both bridges, dev/release masters and both web filesystems
   build successfully. `python run.py verify` validates all package images.
-- 15 Python tests and 48 dashboard/control tests pass. Host firmware, both
+- 21 Python tests and 50 dashboard/control/simulator tests pass. Host firmware, both
   production coordinator modes and bridge tests pass, including a simulated
   24-hour clock cycle and all 720 homing switch orders.
 - Motion checks test Hour and Struggle from fully open, halfway and fully closed
   positions across midnight, overlapping hands and different clock targets.
   Both boards have matching nominal frame durations, all motor speeds remain
   bounded, and final poses match the requested time or Struggle band edge.
-- Struggle vector feed is capped at 400 mm/min (80% of the former 500), with
-  20 mm/s? acceleration. Every commanded pose is within 15-35 mm. Timing checks
-  include a conservative full-stop acceleration allowance at each frame plus
-  0.4 seconds of communication margin: <=15 seconds at 50% speed.
-- Hour uses three poses: all open, all closed, then time. Normalized vector feed
-  keeps each motor <=500 mm/min; equivalent checks meet <=40 seconds at 50%
+- Struggle retains the 400 mm/min vector ceiling and 20 mm/s² acceleration.
+  Two full 40 mm out-and-back sweeps stay inside 5-45 mm, with no dwell or
+  intermediate completion barrier. Repeated mixed starting poses cannot drift
+  toward the endpoints. Conservative software bounds are <=96 seconds at 50%
+  including entry, per-frame acceleration and 0.4 seconds of communication margin.
+- Hour uses two poses: all open, then directly to time. Both run 30% slower.
+  Normalized vector feed keeps each motor <=350 mm/min; checks meet <=40 seconds at 50%
   and <=20 seconds at 100%. Slower slider settings take longer.
 - Bounded M204 controls are allowed only in trajectories; ordinary command
   limits remain intact. Tests cover normal acceleration restoration, Stop,

@@ -2,23 +2,22 @@ import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { cadPose, LINK_TOPOLOGY, outputFoldAngle, toMechanism3D } from './mechanism.js';
+import { AXES, clockPoseValues, generateHourMovement, generateStruggle } from './clock-motion.js';
 import breatheCode from '../gcodes/breathing.gcode?raw';
 import curiousCode from '../gcodes/curious-creature.gcode?raw';
 import rippleCode from '../gcodes/tidal-ripple.gcode?raw';
 import scuttleCode from '../gcodes/scuttle.gcode?raw';
-import struggleCode from '../gcodes/struggle.gcode?raw';
 import circularStruggleCode from '../gcodes/circular-struggle.gcode?raw';
 import randomStruggleCode from '../gcodes/random-struggle.gcode?raw';
 import harmonicStruggleCode from '../gcodes/harmonic-struggle.gcode?raw';
 import hourMovementCode from '../gcodes/hour-movement.gcode?raw';
 
 // F is reserved for feed rate. These names address arms 1 through 12 clockwise.
-const AXES = 'ABCDEHIJKLUV'.split('');
 const INITIAL_FEED = 900;
 
 const presets = [
-  { id: 'hour-movement', name: 'Hour movement', note: 'all open, all closed, then time', code: hourMovementCode, glyph: 'H' },
-  { id: 'circular-struggle', name: 'Circular struggle', note: 'short pulse within 30-70% stroke', code: circularStruggleCode, glyph: 'O' },
+  { id: 'hour-movement', name: 'Hour movement', note: 'all open, then directly to time; 30% slower', code: hourMovementCode, glyph: 'H' },
+  { id: 'circular-struggle', name: 'Circular struggle', note: 'two continuous 40 mm sweeps out and back', code: circularStruggleCode, glyph: 'O' },
   { id: 'random-struggle', name: 'Feral random', note: 'irregular repeatable spasms', code: randomStruggleCode, glyph: '?' },
   { id: 'harmonic-struggle', name: 'Harmonic struggle', note: 'phase-locked standing wave', code: harmonicStruggleCode, glyph: '~' },
   { id: 'curious', name: 'Curious creature', note: 'reach · recoil · inspect', code: curiousCode, glyph: '◒' },
@@ -77,7 +76,7 @@ document.querySelector('#app').innerHTML = `
       <section class="axis-monitor-section">
         <div class="section-heading"><span>03</span><h2>Actuator stroke</h2></div>
         <div class="axis-monitor" id="axis-monitor"></div>
-        <div class="travel-key"><span>RETRACTED</span><span>100 MM</span></div>
+        <div class="travel-key"><span>RETRACTED</span><span>100%</span></div>
       </section>
     </aside>
 
@@ -93,7 +92,7 @@ document.querySelector('#app').innerHTML = `
           <button data-view="3d" class="active">3D</button>
         </div>
         <div class="stage-corner top-left">X 0.000<br>Y 0.000</div>
-        <div class="stage-corner top-right">LINEAR INPUT<br>0—100 MM</div>
+        <div class="stage-corner top-right">50 MM STROKE<br>0—100%</div>
         <canvas id="clock-3d" aria-label="Orbitable three-dimensional view of the twelve folding arm mechanisms"></canvas>
         <svg id="clock" viewBox="0 0 700 700" role="img" aria-label="Twelve arm kinetic clock simulator">
           <defs>
@@ -218,7 +217,7 @@ document.querySelector('#app').innerHTML = `
       </div>
       <div class="dialect-note">
         <span>AXIS MAP</span>
-        <p><b>A B C D E H I J K L U V</b> map clockwise from 12 o’clock. <b>F</b> is feed rate. Values are linear actuator stroke; <b>0</b> is folded, <b>100</b> is fully unfolded.</p>
+        <p><b>A B C D E H I J K L U V</b> map clockwise from 12 o’clock. <b>F</b> is feed rate. Values are percentages of the <b>50 mm</b> stroke; <b>0</b> is folded, <b>100</b> is fully unfolded.</p>
         <p><b>G1</b> move · <b>G4 P</b> dwell · <b>G90/G91</b> absolute/relative · <b>G28</b> home</p>
       </div>
     </aside>
@@ -794,6 +793,7 @@ function updateLineNumbers() {
 }
 
 function loadPreset(preset, autoplay = false) {
+  const initialState = player.parsed ? stateAt(player.position).values : Array(12).fill(0);
   setPlaying(false);
   player.onComplete = null;
   clockState.live = false;
@@ -801,29 +801,20 @@ function loadPreset(preset, autoplay = false) {
   clockState.displayTime = '';
   document.body.classList.remove('is-struggling');
   document.querySelectorAll('.preset').forEach(button => button.classList.toggle('active', button.dataset.preset === preset.id));
-  els.editor.value = preset.code.trim();
+  els.editor.value = preset.id === 'circular-struggle' ? generateStruggle(initialState) : preset.code.trim();
   els.sequenceName.textContent = preset.name.toUpperCase();
   els.fileName.textContent = `${preset.id === 'breathe' ? 'breathing' : preset.id === 'ripple' ? 'tidal-ripple' : preset.id}.gcode`;
   els.clockMode.textContent = 'SEQUENCE MODE · LIVE CLOCK PAUSED';
-  els.loop.checked = true;
-  rebuildProgram();
+  els.loop.checked = !['circular-struggle', 'hour-movement'].includes(preset.id);
+  rebuildProgram({ initialState });
   if (autoplay) setPlaying(true);
 }
 
-function clockPoseValues(time) {
-  const [hourText, minuteText] = time.split(':');
-  const hour = Number(hourText) % 12;
-  const minute = Number(minuteText);
-  const hourIndex = hour;
-  const minuteIndex = Math.floor(minute / 5) % 12;
-  return AXES.map((axis, index) => index === minuteIndex ? 100 : index === hourIndex ? 50 : 0);
-}
-
-function generateTimePose(time, previousTime = '') {
+function generateTimePose(time, previousTime = '', initialState = null) {
   const [hourText, minuteText] = time.split(':');
   const hourIndex = Number(hourText) % 12;
   const minuteIndex = Math.floor(Number(minuteText) / 5) % 12;
-  const previous = previousTime ? clockPoseValues(previousTime) : Array(12).fill(0);
+  const previous = initialState || (previousTime ? clockPoseValues(previousTime) : Array(12).fill(0));
   const target = clockPoseValues(time);
   const changed = AXES
     .map((axis, index) => previous[index] !== target[index] ? `${axis}${target[index]}` : null)
@@ -831,18 +822,7 @@ function generateTimePose(time, previousTime = '') {
   const overlap = hourIndex === minuteIndex ? `\n; Hour and minute hands overlap on axis ${AXES[hourIndex]}.` : '';
   const transition = changed.length ? `G1 ${changed.join(' ')} F780` : 'G4 P1';
   const from = previousTime ? `\n; Transition from ${previousTime}: unchanged arms remain physically still.` : '';
-  return `; DODECA / TWO-ARM CLOCK ${time}\n; The 50 mm arm marks the hour; the 100 mm arm marks five-minute steps.\n; Axis A is 12 o'clock; axes continue clockwise.${from}${overlap}\nG90\n${transition}`;
-}
-
-function generateHourMovement(targetTime) {
-  const words = values => AXES.map((axis, index) => `${axis}${values[index]}`).join(' ');
-  return [
-    `; HOUR MOVEMENT TO ${targetTime}: all open, all closed, then time.`,
-    'G90',
-    `G1 ${words(Array(12).fill(100))} F1000`,
-    `G1 ${words(Array(12).fill(0))} F1000`,
-    `G1 ${words(clockPoseValues(targetTime))} F1000`,
-  ].join('\n');
+  return `; DODECA / TWO-ARM CLOCK ${time}\n; 50% extension marks the hour; 100% marks five-minute steps.\n; Values are percentages of the physical 50 mm stroke.\n; Axis A is 12 o'clock; axes continue clockwise.${from}${overlap}\nG90\n${transition}`;
 }
 
 function formatClockTime(date = new Date()) {
@@ -857,14 +837,14 @@ function showClockPose(time, { animate = false, live = true } = {}) {
   setPlaying(false);
   player.onComplete = null;
   const previousTime = clockState.displayTime;
-  const initialState = previousTime ? clockPoseValues(previousTime) : Array(12).fill(0);
+  const initialState = player.parsed ? stateAt(player.position).values : Array(12).fill(0);
   clockState.live = live;
   clockState.struggling = false;
   clockState.displayTime = time;
   document.body.classList.remove('is-struggling');
   document.querySelectorAll('.preset').forEach(button => button.classList.remove('active'));
   els.timeInput.value = time;
-  els.editor.value = generateTimePose(time, previousTime);
+  els.editor.value = generateTimePose(time, previousTime, initialState);
   els.sequenceName.textContent = `${live ? 'LIVE CLOCK' : 'TIME POSE'} / ${time}`;
   els.fileName.textContent = `clock-${time.replace(':', '')}.gcode`;
   els.clockMode.textContent = live ? 'LIVE · HOURLY MOVEMENT ARMED' : 'MANUAL TIME · LIVE CLOCK PAUSED';
@@ -880,29 +860,33 @@ function showClockPose(time, { animate = false, live = true } = {}) {
 
 function startStruggle({ automatic = false } = {}) {
   if (clockState.struggling) return;
+  const initialState = player.parsed ? stateAt(player.position).values : Array(12).fill(0);
   const time = formatClockTime();
   setPlaying(false);
   player.onComplete = null;
-  clockState.live = true;
+  clockState.live = false;
   clockState.struggling = true;
   clockState.displayTime = '';
   document.body.classList.add('is-struggling');
   document.querySelectorAll('.preset').forEach(button => button.classList.remove('active'));
   els.timeInput.value = time;
-  els.editor.value = struggleCode.trim();
+  els.editor.value = generateStruggle(initialState);
   els.sequenceName.textContent = `${automatic ? 'HOURLY ' : ''}SPIDER STRUGGLE`;
-  els.fileName.textContent = 'struggle.gcode';
-  els.clockMode.textContent = automatic ? 'HOUR CHANGED · ONE STRUGGLE' : 'MANUAL STRUGGLE · RETURNING TO CLOCK';
+  els.fileName.textContent = 'circular-struggle.gcode';
+  els.clockMode.textContent = 'TWO STRUGGLE CYCLES · CLOCK PAUSED';
   els.loop.checked = false;
-  rebuildProgram();
-  player.onComplete = () => showClockPose(formatClockTime(), { animate: true, live: true });
+  rebuildProgram({ initialState });
+  player.onComplete = () => {
+    clockState.struggling = false;
+    document.body.classList.remove('is-struggling');
+    els.clockMode.textContent = 'STRUGGLE COMPLETE · CLOCK PAUSED';
+  };
   setPlaying(true);
 }
 
 function startHourMovement(targetTime, { automatic = false } = {}) {
   if (clockState.struggling) return;
-  const previousTime = clockState.displayTime;
-  const initialState = previousTime ? clockPoseValues(previousTime) : Array(12).fill(0);
+  const initialState = player.parsed ? stateAt(player.position).values : Array(12).fill(0);
   setPlaying(false);
   player.onComplete = null;
   clockState.live = automatic;
@@ -914,7 +898,7 @@ function startHourMovement(targetTime, { automatic = false } = {}) {
   els.editor.value = generateHourMovement(targetTime);
   els.sequenceName.textContent = `HOUR MOVEMENT / ${targetTime}`;
   els.fileName.textContent = 'hour-movement.gcode';
-  els.clockMode.textContent = automatic ? 'HOUR CHANGED · CIRCULAR BLOOM' : 'TESTING NEXT HOUR · CIRCULAR BLOOM';
+  els.clockMode.textContent = automatic ? 'HOUR CHANGED · OPEN THEN TIME' : 'TESTING NEXT HOUR · OPEN THEN TIME';
   els.loop.checked = false;
   rebuildProgram({ initialState });
   player.onComplete = () => {

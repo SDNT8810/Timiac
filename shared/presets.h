@@ -16,15 +16,15 @@ inline unsigned presetCount(Preset preset) {
 }
 inline bool presetStep(Preset preset, unsigned index, unsigned target, float travel, float maxFeed, Step& step) {
   if (index >= presetCount(preset) || target >= 1440) return false;
-  if (preset == Preset::Hour && index + 1 == presetCount(preset))
-    return userAction("show-time", target / 60, target % 60, travel, maxFeed, step);
   step.clear();
   const auto& frame = preset == Preset::Hour ? hourFrames[index] : preset == Preset::Curious ? curiousFrames[index] : struggleFrames[index];
+  float feed = frame.feed * travel / 100;
+  if (feed > maxFeed) feed = maxFeed;
+  if (preset == Preset::Hour && index + 1 == presetCount(preset))
+    return userAction("show-time", target / 60, target % 60, travel, feed, step);
   if (frame.dwell) {
     char line[24]; snprintf(line, sizeof(line), "G4 P%u", frame.dwell); step.both(line); return true;
   }
-  float feed = frame.feed * travel / 100;
-  if (feed > maxFeed) feed = maxFeed;
   for (unsigned b = 0; b < 2; ++b) {
     char line[128] = "G1"; unsigned length = 2;
     for (unsigned a = 0; a < 6; ++a) {
@@ -67,13 +67,12 @@ inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target
     if (const char* word = strchr(line, 'F')) feed = strtof(word + 1, nullptr);
   }
   if (preset == Preset::Struggle) {
-    // Enter by the nearer band edge, pulse 12% inward, then return to that
-    // edge. Keep the old vector-feed convention at 80% so this is slower
-    // even when several motors move together, and bounded from any pose.
+    // Enter at the nearer 10/90% edge, then sweep to the opposite edge and
+    // back twice. All frames share one queued trajectory without dwell gaps.
+    // Keep the existing 80% vector-feed ceiling and acceleration reduction.
     for (unsigned arm = 0; arm < 12; ++arm)
-      next[arm] = index == 0 ? travel * (positions[arm] <= travel * .5f ? .3f : .7f)
-                : index == 1 ? positions[arm] + travel * (positions[arm] <= travel * .5f ? .12f : -.12f)
-                : travel * (positions[arm] <= travel * .5f ? .3f : .7f);
+      next[arm] = index == 0 ? travel * (positions[arm] <= travel * .5f ? .1f : .9f)
+                            : travel - positions[arm];
     feed = maxFeed * .8f;
   }
   float distance[2] = {}, span = 0;

@@ -1,14 +1,14 @@
-# Cooler motion package - 2026-10-08.1
+# Motion package - 2026-10-15.1
 
 Running and microswitch homing current is 1,000 mA RMS on all twelve motors.
-Holding current remains 50% (approximately 500 mA). Struggle uses 20 mm/s? travel
-acceleration (20% below normal), a 400 mm/min vector-feed ceiling, and three
-poses within 30-70% of the 50 mm stroke: nearest edge, 12% inward pulse, return to that edge.
-This also keeps repeated Struggle bounded without returning to an endpoint. The motion
-target is <=15 seconds at 50%; lower slider settings extend the duration.
+Holding current remains 50% (approximately 500 mA). Struggle retains 20 mm/s²
+travel acceleration (20% below normal) and a 400 mm/min vector-feed ceiling.
+It enters at the nearer 5 or 45 mm edge, then sweeps across the 40 mm span and
+back twice. All five poses share one queued trajectory with no programmed
+pause. The wider double cycle replaces the former 15-second pulse.
 
-Next Hour and the automatic hourly animation use exactly three poses: all fully
-open, all fully closed, then selected time. Motor speeds remain <=500 mm/min.
+Next Hour and the automatic hourly animation use two poses: all fully open,
+then directly to selected time. Both moves run 30% slower, at <=350 mm/min per motor.
 Coordinated vector feed is normalized to each motor's speed limit so motion
 can target <=40 seconds at 50% and <=20 seconds at 100%. Acceleration and
 communication time are included in software timing checks; physical timing
@@ -16,8 +16,9 @@ still needs commissioning on the installed mechanism.
 
 Every job restores normal acceleration (25 mm/s?) before movement, including
 after cancellation. Trajectory capability is version 2. The new matched package
-is **TIMIAC2-03b3b6e145e4**, protocol 7: reflash both Octopus boards, both ESP-12
-bridges and the selected ESP32 master. Follow [instruction.md](../instruction.md).
+remains **TIMIAC2-03b3b6e145e4**, protocol 7. Only the ESP32 master needs reflashing
+for this animation update; installed matching bridges and Octopus boards are unchanged.
+Use `python run.py master_release --port COM10` with the master's actual USB port.
 Keep the planned 24 V / 400 W supply and active cooling.
 
 There is no configured 80?C temperature cutoff. TMC2209's default internal chip
