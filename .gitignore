@@ -7,3 +7,6 @@ BackUp/
 .venv/
 ESP_Timiac/include/config.local.h
 *.log
+
+# Local build-service credentials
+.local/

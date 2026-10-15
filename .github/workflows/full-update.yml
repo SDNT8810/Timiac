@@ -1,0 +1,46 @@
+name: Full firmware update
+run-name: Full update ${{ inputs.update_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      update_id:
+        description: Dashboard request ID
+        required: true
+        type: string
+      source_sha:
+        description: Exact source commit requested by the dashboard
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: full-update-${{ inputs.update_id }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      UPDATE_ID: ${{ inputs.update_id }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      FIRMWARE_BUILD_KEY: ${{ secrets.FIRMWARE_BUILD_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install build tools
+        run: python -m pip install -r requirements.txt
+      - name: Fetch pinned Marlin source tag
+        run: git -C Marlin/marlin-2.1.2.7 fetch origin tag 2.1.2.7
+      - name: Build every firmware
+        run: python build.py all
+      - name: Verify and publish complete bundle
+        run: python tools/publish_full_update.py --gateway https://control.timiac.it --update-id "$UPDATE_ID" --source-sha "$SOURCE_SHA"
+      - name: Report build failure
+        if: failure()
+        run: python tools/publish_full_update.py --gateway https://control.timiac.it --update-id "$UPDATE_ID" --source-sha "$SOURCE_SHA" --failed

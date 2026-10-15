@@ -22,3 +22,20 @@ CREATE TABLE IF NOT EXISTS ota_jobs (
   created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ota_queue ON ota_jobs(state, expires_at);
+
+-- One durable build/install sequence; per-step jobs retain the existing OTA receipts.
+CREATE TABLE IF NOT EXISTS full_updates (
+  id TEXT PRIMARY KEY, device_id TEXT NOT NULL, state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
+  source_sha TEXT NOT NULL, controller TEXT NOT NULL, validate_only INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS full_update_active ON full_updates(device_id) WHERE state IN ('building','installing');
+CREATE TABLE IF NOT EXISTS full_update_images (
+  full_id TEXT NOT NULL REFERENCES full_updates(id), target TEXT NOT NULL, kind TEXT NOT NULL,
+  image_id TEXT NOT NULL REFERENCES ota_images(id), PRIMARY KEY(full_id,target,kind)
+);
+CREATE TABLE IF NOT EXISTS full_update_steps (
+  full_id TEXT NOT NULL REFERENCES full_updates(id), position INTEGER NOT NULL,
+  target TEXT NOT NULL, kind TEXT NOT NULL, image_id TEXT NOT NULL REFERENCES ota_images(id),
+  job_id TEXT NOT NULL UNIQUE, PRIMARY KEY(full_id,position)
+);

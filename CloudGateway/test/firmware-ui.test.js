@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
-async function dashboard({ active = false, supported = true, uploadError = false, statusPatch = {}, online = true, queued = 0 } = {}) {
+async function dashboard({ active = false, supported = true, uploadError = false, statusPatch = {}, online = true, queued = 0, fullUpdate = null } = {}) {
   const nodes = new Map(), requests = [], listeners = {};
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', hidden: false, disabled: false, files: [],
@@ -14,7 +14,7 @@ async function dashboard({ active = false, supported = true, uploadError = false
   node('firmware-target').value = 'master:app';
   const document = { getElementById: node, activeElement: null,
     querySelectorAll: () => buttons, querySelector: () => buttons[0], addEventListener: (name, fn) => { listeners[name] = fn; } };
-  const status = { online, queued, status: { machineReady: true, a: { homed: 63 }, b: { homed: 63 },
+  const status = { online, queued, fullUpdate, status: { machineReady: true, a: { homed: 63 }, b: { homed: 63 },
     clock: { valid: true, localTime: '2026-10-15T18:15:42', armMinute: 1095 },
     ota: { supported, active, state: active ? 'downloading' : 'idle' }, ...statusPatch } };
   const fetch = async (path, options = {}) => {
@@ -103,4 +103,21 @@ test('Home key invokes Open and the cloud page has no speed control', async () =
   const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   assert.match(html, /data-action="open">Open/);
   assert.doesNotMatch(html, /type="range"|id="speed"/);
+});
+
+
+test('Full update button requests a fresh build without asking for firmware files', async () => {
+  const f = await dashboard();
+  assert.equal(f.node('full-update').disabled, false);
+  await f.node('full-update').onclick();
+  const calls = f.requests.filter(r => r.path.endsWith('/full-update'));
+  assert.equal(calls.length, 1); assert.deepEqual(JSON.parse(calls[0].options.body), {});
+  assert.equal(f.requests.some(r => r.path.endsWith('/firmware') || r.path.endsWith('/updates')), false);
+});
+
+test('reopening the dashboard restores durable Full update progress and prevents duplicate clicks', async () => {
+  const f = await dashboard({fullUpdate: {state: 'installing', steps: [{target: 'esp1', state: 'complete'}, {target: 'esp2', state: 'delivered'}]}});
+  assert.match(f.node('full-update-status').textContent, /2\/2: esp2/);
+  assert.equal(f.node('full-update').disabled, true); assert.equal(f.node('stop').disabled, false);
+  assert.ok(f.buttons.every(button => button.disabled));
 });

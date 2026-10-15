@@ -27,8 +27,11 @@
     <details><summary>Maintenance</summary><p>Establish the arm positions after a reset or firmware update.</p><button id="calibrate">Calibrate arms</button></details>
     <section class="firmware-panel" aria-labelledby="firmware-title">
       <h2 id="firmware-title">Firmware updates</h2>
-      <p>Updates pause the clock. Install one board at a time, then Calibrate arms under Maintenance and Show time when finished.</p>
-      <form id="firmware-form">
+      <p>Updates pause the clock. After updating, Calibrate arms under Maintenance and Show time when finished.</p>
+      <p>Full update builds the latest pushed code, checks every image, then installs each board automatically. Keep power connected.</p>
+      <button id="full-update" type="button" disabled>Full update</button>
+      <p id="full-update-status" role="status">Checking full update support...</p><a id="full-update-log" target="_blank" rel="noopener" hidden>Build progress / log</a>
+      <details><summary>Update one component manually</summary><form id="firmware-form">
         <label>Board / image <select id="firmware-target">
           <option value="master:app">Master ESP32 — application</option>
           <option value="master:filesystem">Master ESP32 — local dashboard</option>
@@ -37,7 +40,7 @@
         </select></label>
         <label>Firmware .bin file <input id="firmware-file" type="file" accept=".bin" required></label>
         <button id="install-firmware" type="submit">Install firmware</button>
-      </form>
+      </form></details>
       <p id="firmware-status" role="status">Initial USB/SD setup is required before the first remote update.</p>
     </section>
   </section>

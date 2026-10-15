@@ -23,6 +23,7 @@ function stateLabel(board) { if (!board?.bridgeConnected) return 'ESP offline'; 
 function commandBlockReason(remote) {
   const state = remote.status || {};
   if (!remote.online) return 'Master is offline';
+  if (['building', 'installing'].includes(remote.fullUpdate?.state)) return 'Full update in progress. Stop is available.';
   if (uploadingFirmware || state.ota?.active) return 'Firmware update in progress';
   if (state.stopPending) return 'Waiting for Stop confirmation';
   if (state.fault) return state.fault;
@@ -57,6 +58,19 @@ function render(remote) {
   $('calibrate').disabled = busy;
   $('install-firmware').disabled = busy || !state.ota?.supported;
   const ota = state.ota;
+  const full = remote.fullUpdate;
+  $('full-update-log').hidden = !full?.buildUrl;
+  if (full?.buildUrl) $('full-update-log').href = full.buildUrl;
+  const fullActive = ['building', 'installing'].includes(full?.state);
+  $('full-update').disabled = busy || fullActive || !state.ota?.supported;
+  const completed = full?.steps?.filter(step => step.state === 'complete').length || 0;
+  const current = full?.steps?.find(step => step.state !== 'complete');
+  $('full-update-status').textContent = !full ? 'Build all firmware and install it automatically. No files to select.'
+    : full.state === 'building' ? 'Building all firmware. This can take several minutes. You may close this page.'
+    : full.state === 'installing' ? `Installing ${completed + 1}/${full.steps.length}: ${current?.target || ''} ${current?.kind === 'filesystem' ? 'dashboard' : ''}. Keep power connected.`
+    : full.state === 'complete' ? full.validate_only ? 'Build verified. No hardware was updated.' : 'Full update complete. Calibrate/Home the arms before resuming.'
+    : `Full update ${full.state}: ${full.error || 'Check the connection and try again.'}`;
+  $('full-update-status').classList.toggle('error', full?.state === 'failed');
   const job = remote.update;
   const progress = ota?.size ? ` · ${Math.min(100, Math.round(ota.done / ota.size * 100))}%` : '';
   $('firmware-status').textContent = !ota?.supported ? 'Install the initial USB/SD update package before using remote updates.'
@@ -117,3 +131,13 @@ document.addEventListener('keydown', event => {
   }
 });
 start().catch(error => showLogin(error.message === 'Please sign in' ? '' : error.message));
+
+$('full-update').onclick = async () => {
+  $('full-update').disabled = true;
+  uploadingFirmware = true;
+  try {
+    await api('/api/devices/' + config.deviceId + '/full-update', { method: 'POST', body: '{}' });
+    say('Building all firmware. Updates will install automatically when the build succeeds.');
+  } catch (error) { say(error.message, true); }
+  finally { uploadingFirmware = false; await refresh(); }
+};

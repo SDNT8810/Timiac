@@ -138,3 +138,25 @@ References: [ESP32 OTA partitions](https://docs.espressif.com/projects/esp-idf/e
 [ESP8266 updater](https://arduino-esp8266.readthedocs.io/en/3.1.1/ota_updates/readme.html),
 [BTT Octopus SD bootloader](https://github.com/bigtreetech/docs/blob/master/docs/Octopus.md),
 [Cloudflare D1 limits](https://developers.cloudflare.com/d1/platform/limits/).
+
+## Full update: one button
+
+Open the remote dashboard, sign in, and press **Full update** under Firmware updates. No firmware files need to be selected.
+
+1. The server requests a fresh GitHub Actions build of the latest pushed commit (main).
+2. Every firmware is built and checked before any board is updated.
+3. The server installs the complete package in sequence, waiting for each board's verified success and reboot before continuing. Progress survives closing the browser.
+4. If any build or installation fails, the sequence stops. Check the message/build log before trying again. Keep power connected throughout installation. **Stop** cancels the remaining sequence; a flash already activating must finish safely.
+5. After success, calibrate/home the arms and resume operation from the dashboard.
+
+Timiac installs ESP bridge 1, ESP bridge 2, Octopus 1, Octopus 2, master ESP32 application, then its local dashboard (six steps across five boards).
+
+The initial USB/SD setup is still required once. Leave all Octopus microSD cards inserted and connect the controller to Internet Wi-Fi. Push your code before using Full update: uncommitted changes on a PC are not included.
+
+### Automatic-build setup (maintainers)
+
+The gateway uses `GITHUB_REPOSITORY`, `GITHUB_REF`, and the Worker secrets `GITHUB_BUILD_TOKEN` (repository Actions write/content read) and `FIRMWARE_BUILD_KEY`. The matching repository Actions secret `FIRMWARE_BUILD_KEY` authenticates uploads only; browser accounts and device keys cannot publish builds. `.github/workflows/full-update.yml` must also exist on the repository default branch for workflow dispatch registration. Lumiac's source/build branch remains RF.
+
+The workflow runs on GitHub-hosted runners; no local PC or VPS build agent is needed. Build failures are reported to the dashboard. GitHub Actions must be enabled and have available build minutes. The builder uploads the verified complete bundle; bootloaders and partition tables are excluded from OTA.
+
+For a build-only smoke test, an authenticated administrator can POST `{"validateOnly":true}` to `/api/devices/DEVICE_ID/full-update`. This builds and verifies everything without creating hardware update jobs. Normal dashboard clicks always build and install.

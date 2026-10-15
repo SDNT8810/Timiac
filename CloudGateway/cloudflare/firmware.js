@@ -63,9 +63,12 @@ export async function firmwareApi(request, env, { administrator, checkOrigin, re
     const sha256 = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))), id = crypto.randomUUID(), crc32 = kind === 'octopus' ? firmwareCrc32(bytes) : 0;
     // Keep one week of completed receipts/artifacts without accumulating every
     // firmware upload forever in this clock's existing free-tier database.
+    await env.DB.prepare("DELETE FROM full_update_steps WHERE full_id IN (SELECT id FROM full_updates WHERE state NOT IN ('building','installing') AND created_at < ?)").bind(now - 7 * 86400000).run();
+    await env.DB.prepare("DELETE FROM full_update_images WHERE full_id IN (SELECT id FROM full_updates WHERE state NOT IN ('building','installing') AND created_at < ?)").bind(now - 7 * 86400000).run();
+    await env.DB.prepare("DELETE FROM full_updates WHERE state NOT IN ('building','installing') AND created_at < ?").bind(now - 7 * 86400000).run();
     await env.DB.prepare("DELETE FROM ota_jobs WHERE state NOT IN ('queued','delivered') AND created_at < ?").bind(now - 7 * 86400000).run();
-    await env.DB.prepare('DELETE FROM ota_chunks WHERE image_id IN (SELECT id FROM ota_images WHERE created_at < ? AND id NOT IN (SELECT image_id FROM ota_jobs))').bind(now - 7 * 86400000).run();
-    await env.DB.prepare('DELETE FROM ota_images WHERE created_at < ? AND id NOT IN (SELECT image_id FROM ota_jobs)').bind(now - 7 * 86400000).run();
+    await env.DB.prepare('DELETE FROM ota_chunks WHERE image_id IN (SELECT id FROM ota_images WHERE created_at < ? AND id NOT IN (SELECT image_id FROM ota_jobs) AND id NOT IN (SELECT image_id FROM full_update_images))').bind(now - 7 * 86400000).run();
+    await env.DB.prepare('DELETE FROM ota_images WHERE created_at < ? AND id NOT IN (SELECT image_id FROM ota_jobs) AND id NOT IN (SELECT image_id FROM full_update_images)').bind(now - 7 * 86400000).run();
     await env.DB.prepare('INSERT INTO ota_images(id,target,kind,size,sha256,revision,machine,crc32,created_at,complete) VALUES(?,?,?,?,?,?,?,?,?,0)')
       .bind(id, target, kind, bytes.length, sha256, metadata.revision, metadata.machine, crc32, now).run();
     for (let offset = 0; offset < bytes.length; offset += 65536)
@@ -78,6 +81,7 @@ export async function firmwareApi(request, env, { administrator, checkOrigin, re
   const image = await env.DB.prepare('SELECT ' + fields + ' FROM ota_images WHERE id = ? AND complete = 1').bind(body.imageId).first();
   if (!image) throw fail('Firmware image not found', 404);
   const remote = await deviceState(), state = remote.status;
+  if (['building', 'installing'].includes(remote.fullUpdate?.state)) throw fail('Full update is already in progress', 409);
   if (!remote.online || !state?.session) throw fail('Master is offline', 409);
   if (!state.ota?.supported) throw fail('Install the initial Wi-Fi update firmware on the master by USB first', 409);
   const board = image.target.endsWith('1') ? state.a : state.b;
@@ -89,7 +93,7 @@ export async function firmwareApi(request, env, { administrator, checkOrigin, re
   if (state.control?.owner && !state.control.owner.startsWith('cloud:')) throw fail('A local dashboard has control', 423);
   if (state.firmware && image.machine !== state.firmware) throw fail('This package changes the hardware identity; install a matched package locally', 409);
   const id = crypto.randomUUID();
-  const inserted = await env.DB.prepare("INSERT INTO ota_jobs(id,image_id,device_id,session,state,created_at,expires_at) SELECT ?,?,?,?,'queued',?,? WHERE NOT EXISTS (SELECT 1 FROM ota_jobs WHERE state IN ('queued','delivered') AND expires_at > ?) AND NOT EXISTS (SELECT 1 FROM actions WHERE state='queued' AND expires_at > ?)")
+  const inserted = await env.DB.prepare("INSERT INTO ota_jobs(id,image_id,device_id,session,state,created_at,expires_at) SELECT ?,?,?,?,'queued',?,? WHERE NOT EXISTS (SELECT 1 FROM ota_jobs WHERE state IN ('queued','delivered') AND expires_at > ?) AND NOT EXISTS (SELECT 1 FROM actions WHERE state='queued' AND expires_at > ?) AND NOT EXISTS (SELECT 1 FROM full_updates WHERE state IN ('building','installing'))")
     .bind(id, image.id, env.TIMIAC_DEVICE_ID, state.session, now, now + 60000, now, now).run();
   if (!inserted.meta.changes) throw fail('Another command or firmware update is already queued', 409);
   return json({ id, state: 'queued' }, 202);
@@ -112,7 +116,7 @@ export async function firmwareDownload(request, env, authenticateDevice) {
   return new Response(bytes, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(bytes.length),
     'Cache-Control': 'no-store, no-transform', 'X-Timiac-SHA256': image.sha256 } });
 }
-export async function syncFirmware(env, status, now, action) {
+export async function syncFirmware(env, status, now, action, advance = async () => {}) {
   const ota = status.ota;
   if (uuid(ota?.id) && ['complete', 'failed'].includes(ota.state) && /^[a-f0-9]{64}$/.test(ota.sha256 || ''))
     await env.DB.prepare("UPDATE ota_jobs SET state = ?, error = ? WHERE id = ? AND device_id = ? AND state = 'delivered' AND image_id IN (SELECT id FROM ota_images WHERE sha256 = ?)")
@@ -122,6 +126,7 @@ export async function syncFirmware(env, status, now, action) {
   if (action?.type === 'stop') {
     await env.DB.prepare("UPDATE ota_jobs SET state='cancelled' WHERE state='queued'").run(); return null;
   }
+  await advance();
   if (action || !ota?.supported || ota.active || status.stopPending || status.a?.busy || status.b?.busy ||
       (status.control?.owner && !status.control.owner.startsWith('cloud:')) ||
       ['preparing', 'running'].includes(status.operation?.state) || ['running', 'paused', 'uploading'].includes(status.program?.state)) return null;

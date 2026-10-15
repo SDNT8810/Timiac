@@ -6,15 +6,32 @@
   "account_id": "b9481989c8860f15e84a010c88d2f2b4",
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [{ "pattern": "control.timiac.it", "custom_domain": true }],
-  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
-  "d1_databases": [{ "binding": "DB", "database_name": "timiac-control", "database_id": "2e7b83c7-1128-48fe-a7a8-165b1ab2348d" }],
+  "routes": [
+    {
+      "pattern": "control.timiac.it",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "timiac-control",
+      "database_id": "2e7b83c7-1128-48fe-a7a8-165b1ab2348d"
+    }
+  ],
   "vars": {
     "TIMIAC_PUBLIC_ORIGIN": "https://control.timiac.it",
     "TIMIAC_DEVICE_ID": "clock-01",
     "TIMIAC_ADMIN_USERNAME": "Andrea",
     "TIMIAC_ADMIN_EMAIL": "andrea@timiac.it",
     "TIMIAC_ADMIN_UID": "andrea",
-    "FIREBASE_PROJECT_ID": "timiac-control-20261008"
+    "FIREBASE_PROJECT_ID": "timiac-control-20261008",
+    "GITHUB_REPOSITORY": "SDNT8810/Timiac",
+    "GITHUB_REF": "main"
   }
 }
