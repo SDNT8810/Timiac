@@ -67,11 +67,12 @@ class AxisProfileTests(unittest.TestCase):
         self.assertEqual(machine["max_feed_mm_min"], 500)
         self.assertEqual(machine["steps_per_mm"] / machine["microsteps"], 720 / 4)
 
-    def test_only_microswitch_homing_and_no_sd_runtime(self):
+    def test_only_microswitch_homing_and_onboard_sd_update_storage(self):
         machine, identity = load()
         settings = definitions(machine, identity)
         self.assertEqual(machine["homing_mode"], "microswitch")
-        self.assertIsNone(settings["Configuration.h"]["SDSUPPORT"])
+        self.assertEqual(settings["Configuration.h"]["SDSUPPORT"], "")
+        self.assertEqual(settings["Configuration_adv.h"]["SDCARD_CONNECTION"], "ONBOARD")
         advanced = settings["Configuration_adv.h"]
         self.assertIsNone(advanced["SENSORLESS_HOMING"])
         self.assertEqual(advanced["NO_SD_AUTOSTART"], "")

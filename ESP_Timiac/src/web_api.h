@@ -13,6 +13,7 @@ void statusReply(AsyncWebServerRequest* request) {
   doc["dashboard"] = TIMIAC_RELEASE ? "release" : "development";
   doc["firmware"] = timiac::machineId; doc["protocol"] = timiac::protocolVersion;
   doc["software"] = kSoftwareRevision;
+  writeFirmwareUpdateStatus(doc.createNestedObject("ota"));
   doc["speedPercent"] = motionSpeedPercent;
   JsonObject clock = doc.createNestedObject("clock");
   writeRtcStatus(clock);
@@ -86,6 +87,7 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
     }
     stopRequested = true; statusReply(request); return;
   }
+  if (firmwareUpdating) { errorReply(request, 409, "Firmware update in progress; only Stop is available"); return; }
   bool writer = path != "/api/claim";
   if (!authorized(request, doc, writer)) return;
   if (path == "/api/speed") {

@@ -26,7 +26,7 @@ Insert the first card into the PC. Open **File Explorer → This PC** and note i
 python run.py octopus_release --sd I:\
 ```
 
-Safely eject the card, insert it into the **powered-off first Octopus**, then power that board on. Keep the master off. Wait one minute, switch the board off, and check the card in the PC: `firmware.bin` should have disappeared and become `FIRMWARE.CUR`. After confirming this, remove the card; it is not needed during operation.
+Safely eject the card, insert it into the **powered-off first Octopus**, then power that board on. Keep the master off. Wait one minute, switch the board off, and check the card in the PC: `firmware.bin` should have disappeared and become `FIRMWARE.CUR`. After confirming this, reinsert the card and **leave it installed for remote firmware updates**.
 
 **Repeat the same procedure with the second card and second Octopus.** Both use the same command. Leave both boards off afterward.
 
@@ -77,7 +77,9 @@ Keep these paths inside one `Timiac` folder:
 ```text
 instruction.md
 run.py
+remote_update.py
 requirements.txt
+Docs/                            (wiring and remote update guides)
 machine.json
 tools/machine_config.py
 Marlin/profiles/lumiac-reference/  (entire folder)
@@ -85,11 +87,16 @@ firmware/two-motor/               (entire folder, including JSON files)
 ESP_Timiac/include/cloud_config.h  (included clock pairing defaults)
 ```
 
-For master update **2026-10-15.4**, install the new GPIO27 photoelectric sensor
+For update **2026-10-15.5**, install the new GPIO27 photoelectric sensor
 interface first, following [the wiring diagram](Docs/master-wiring.md). Leave the
-old GPIO18/19 traces unused. Only the master needs reflashing. Struggle and the
+old GPIO18/19 traces unused. **Update all five boards once to enable remote updates.** Struggle and the
 hand sensor choose one of **seven random insect movements**, opening by at most
 **20 mm**, then returning directly to the time display. A valid RTC is required.
 Next Hour should open all arms, then close directly into the time display,
 with both moves **30% slower**. Stop if steps are lost or overheating warnings
 appear. A thermal fault requires cooling and an Octopus reset before homing again.
+
+After this initial installation, future updates can be made from Canada through
+**Firmware updates** at **https://control.timiac.it/**, or with
+`python remote_update.py --target all`. Keep both microSD cards installed.
+Use [the remote update guide](Docs/remote-updates.md) for the file list and first test.

@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { firmwareApi, firmwareDownload, syncFirmware } from './firmware.js';
 
 const keys = createRemoteJWKSet(new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'));
 const COOKIE = '__Host-timiac-session';
@@ -82,7 +83,9 @@ async function deviceState(env, now) {
   if (!row) return { online: false, updatedAt: '', status: null, queued: 0 };
   const pending = await env.DB.prepare("SELECT COUNT(*) AS count FROM actions WHERE device_id = ? AND state = 'queued' AND expires_at > ?")
     .bind(env.TIMIAC_DEVICE_ID, now).first();
-  return { online: now - row.updated_at <= ONLINE_MS, updatedAt: new Date(row.updated_at).toISOString(), status: JSON.parse(row.status), queued: pending.count };
+  const updates = await env.DB.prepare("SELECT COUNT(*) AS count FROM ota_jobs WHERE device_id = ? AND state IN ('queued','delivered') AND expires_at > ?").bind(env.TIMIAC_DEVICE_ID, now).first();
+  const update = await env.DB.prepare('SELECT id, state, error FROM ota_jobs WHERE device_id = ? ORDER BY created_at DESC LIMIT 1').bind(env.TIMIAC_DEVICE_ID).first();
+  return { online: now - row.updated_at <= ONLINE_MS, updatedAt: new Date(row.updated_at).toISOString(), status: JSON.parse(row.status), queued: pending.count + updates.count, update };
 }
 
 export function createGateway({ verifyToken = verifyFirebaseToken, upstream = fetch, clock = Date.now } = {}) {
@@ -116,6 +119,13 @@ export function createGateway({ verifyToken = verifyFirebaseToken, upstream = fe
         }
         if (pathname === '/api/session' && request.method === 'GET')
           return protect(json({ username: await administrator(request, env, verifyToken) }));
+        const firmwareResponse = await firmwareApi(request, env, {
+          administrator: () => administrator(request, env, verifyToken), checkOrigin: () => checkOrigin(request, env),
+          readJson: () => readJson(request, 2048), deviceState: () => deviceState(env, now), now,
+        });
+        if (firmwareResponse) return protect(firmwareResponse);
+        const download = await firmwareDownload(request, env, () => authenticateDevice(request, env));
+        if (download) return protect(download);
         const apiMatch = pathname.match(/^\/api\/devices\/([^/]+)\/(status|actions)$/);
         if (apiMatch) {
           const username = await administrator(request, env, verifyToken);
@@ -130,16 +140,16 @@ export function createGateway({ verifyToken = verifyFirebaseToken, upstream = fe
             const remote = await deviceState(env, now);
             if (!remote.online || !remote.status?.session) throw failure('The master is offline. Reconnect it before sending a command', 409);
             const state = remote.status;
-            if (body.type !== 'stop' && (remote.queued || state.stopPending || state.a?.busy || state.b?.busy ||
+            if (body.type !== 'stop' && (remote.queued || state.ota?.active || state.stopPending || state.a?.busy || state.b?.busy ||
                 ['preparing', 'running'].includes(state.operation?.state) || ['running', 'paused', 'uploading'].includes(state.program?.state)))
               throw failure('Wait for the current command to finish', 409);
             if (body.type !== 'stop' && state.control?.owner && !state.control.owner.startsWith('cloud:')) throw failure('A local dashboard has control', 423);
             const id = crypto.randomUUID();
             // The INSERT checks the queue size atomically to reject races.
             const queued = await env.DB.prepare('INSERT INTO actions(id, device_id, type, local_time, percent, session, requested_by, created_at, expires_at) ' +
-              "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM actions WHERE device_id = ? AND state = 'queued' AND expires_at > ?) < ?")
+              "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM actions WHERE device_id = ? AND state = 'queued' AND expires_at > ?) < ? AND (?=1 OR NOT EXISTS(SELECT 1 FROM ota_jobs WHERE state IN ('queued','delivered') AND expires_at>?))")
               .bind(id, env.TIMIAC_DEVICE_ID, body.type, body.localTime || '', body.type === 'set-speed' ? body.percent : null,
-                state.session, username, now, now + ACTION_MS, env.TIMIAC_DEVICE_ID, now, body.type === 'stop' ? 10 : 1).run();
+                state.session, username, now, now + ACTION_MS, env.TIMIAC_DEVICE_ID, now, body.type === 'stop' ? 10 : 1, body.type === 'stop' ? 1 : 0, now).run();
             if (!queued.meta.changes) throw failure('Another command is already queued', 409);
             return protect(json({ id, state: 'queued' }, 202));
           }
@@ -155,7 +165,7 @@ export function createGateway({ verifyToken = verifyFirebaseToken, upstream = fe
           await env.DB.prepare('INSERT INTO devices(id, status, updated_at) VALUES(?, ?, ?) ' +
             'ON CONFLICT(id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at')
             .bind(env.TIMIAC_DEVICE_ID, JSON.stringify(status), now).run();
-          const ready = !status.stopPending && !status.fault && !status.a?.busy && !status.b?.busy &&
+          const ready = !status.ota?.active && !status.stopPending && !status.fault && !status.a?.busy && !status.b?.busy &&
             !['preparing', 'running'].includes(status.operation?.state) && !['running', 'paused', 'uploading'].includes(status.program?.state);
           const action = await env.DB.prepare("UPDATE actions SET state = 'delivered', delivered_at = ? WHERE id = (" +
             "SELECT id FROM actions WHERE device_id = ? AND state = 'queued' AND expires_at > ? AND session = ? " +
@@ -170,7 +180,8 @@ export function createGateway({ verifyToken = verifyFirebaseToken, upstream = fe
           // boot session. Keep only one day of receipts for diagnostics.
           await env.DB.prepare('DELETE FROM actions WHERE expires_at <= ? OR (device_id = ? AND session != ?)')
             .bind(now - 86400000, env.TIMIAC_DEVICE_ID, status.session).run();
-          return protect(json({ action }));
+          const update = await syncFirmware(env, status, now, action);
+          return protect(json(update ? { action, update } : { action }));
         }
         if (pathname.startsWith('/api/') || pathname.startsWith('/device/')) throw failure('Not found', 404);
         if (!['GET', 'HEAD'].includes(request.method)) throw failure('Method not allowed', 405);

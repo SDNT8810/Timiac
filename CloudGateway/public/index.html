@@ -25,6 +25,21 @@
     <label class="speed-control">Movement speed <span id="speed-value">50%</span><input id="speed" type="range" min="20" max="100" step="1" value="50"></label>
     <form id="time-form"><label>Set local clock time <input id="local-time" type="datetime-local" step="1" required></label><button id="save-time">Save time</button></form>
     <button id="stop" class="stop">Stop</button><p id="message" role="status"></p>
+    <section class="firmware-panel" aria-labelledby="firmware-title">
+      <h2 id="firmware-title">Firmware updates</h2>
+      <p>Updates pause the clock. Install one board at a time, then Home and Show time when finished.</p>
+      <form id="firmware-form">
+        <label>Board / image <select id="firmware-target">
+          <option value="master:app">Master ESP32 — application</option>
+          <option value="master:filesystem">Master ESP32 — local dashboard</option>
+          <option value="esp1:app">ESP-12 bridge 1</option><option value="esp2:app">ESP-12 bridge 2</option>
+          <option value="octopus1:octopus">Octopus 1</option><option value="octopus2:octopus">Octopus 2</option>
+        </select></label>
+        <label>Firmware .bin file <input id="firmware-file" type="file" accept=".bin" required></label>
+        <button id="install-firmware" type="submit">Install firmware</button>
+      </form>
+      <p id="firmware-status" role="status">Initial USB/SD setup is required before the first remote update.</p>
+    </section>
   </section>
 </main><script type="module" src="/app.js"></script></body>
 </html>

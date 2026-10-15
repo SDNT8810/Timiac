@@ -54,6 +54,7 @@ void resetMaster() {
   rtcValid = true; rtcTime.h = 13; rtcTime.m = 45;
   lastStruggleVariant = timiac::struggleVariantCount;
   configureProximity(); proximityTriggers = 0; photoelectricLevel = HIGH;
+  firmwareUpdating = firmwareUpdateCancel = false;
   for (auto& r : receipts) r = Receipt();
   for (unsigned b = 0; b < 2; ++b) { peers[b] = Peer(); boards[b] = RemoteBoard(); lastBoardBoot[b] = ""; }
 }
@@ -659,5 +660,12 @@ int main() {
 #if TIMIAC_RELEASE
   releaseClockEnabled = false; sensorFor(0, 600); assert(!proximityGate.armed); // Manual Home/paused clock.
 #endif
-  std::cout << "Production coordinator: independent boards, jobs, Stop, and photoelectric GPIO/gesture checks passed\n";
+  resetMaster(); connectBoard(0); connectBoard(1);
+  firmwareUpdating = true;
+  assert(!bothHealthy() && !boardsHealthy(1));
+  stopAll("Operator cancelled a firmware update"); assert(firmwareUpdateCancel);
+  resetMaster(); connectBoard(0); connectBoard(1);
+  boards[0].updating = true;
+  assert(!boardOnline(0) && !bothHealthy() && boardsHealthy(2));
+  std::cout << "Production coordinator: independent boards, jobs, Stop, photoelectric gestures and update motion guards passed\n";
 }

@@ -16,4 +16,5 @@ for source in (project.parent / "WebApp" / "release").iterdir():
         shutil.copy2(source, assets / source.name)
 for name in ("hardware.js", "clock-panel.js", "system-panel.js"):
     shutil.copy2(project.parent / "WebApp/public" / name, assets / name)
+shutil.copy2(project.parent / "WebApp/public/firmware-version.json", assets / "firmware-version.json")
 env.Replace(PROJECT_DATA_DIR=str(assets))

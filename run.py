@@ -285,8 +285,8 @@ def prepare_octopus_card(sd_root: Path, allow_fixed_drive: bool) -> None:
 
     print("Done. Insert the card into a powered-off Octopus, then power it on.")
     print("The board should rename firmware.bin to FIRMWARE.CUR after a successful flash.")
-    print("After confirming the flash, power off, remove the card, and power on again.")
-    print("The master ESP32 stores and streams all motion programs; no runtime SD card is needed.")
+    print("After confirming the flash, power off and leave the card installed for future remote firmware updates.")
+    print("The master still stores motion programs; the Octopus card now also stores verified remote firmware updates.")
 
 
 def main() -> int:

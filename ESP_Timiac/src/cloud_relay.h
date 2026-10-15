@@ -18,6 +18,9 @@ void cloudSnapshot(JsonObject snapshot) {
   snapshot["session"] = bootId; snapshot["machineReady"] = bothHealthy();
   snapshot["fault"] = systemFault; snapshot["stopPending"] = stopPending || stopRequested;
   snapshot["speedPercent"] = motionSpeedPercent;
+  snapshot["software"] = kSoftwareRevision;
+  snapshot["firmware"] = timiac::machineId;
+  writeFirmwareUpdateStatus(snapshot.createNestedObject("ota"));
   JsonObject clock = snapshot.createNestedObject("clock");
   writeRtcStatus(clock); writeNtpStatus(clock);
   clock["automatic"] = bool(TIMIAC_RELEASE); clock["running"] = releaseClockEnabled;
@@ -35,6 +38,7 @@ void cloudSnapshot(JsonObject snapshot) {
 }
 const char* startCloudAction(const String& type, const String& requestId, JsonVariant action) {
   if (type == "stop") { stopRequested = true; return nullptr; }
+  if (firmwareUpdating) return "Firmware update in progress";
   if (operation.barrier.active() || program.reserved()) return "Clock is busy";
   if (lease.live() && !lease.owner.startsWith("cloud:")) return "A local dashboard has control";
   if (type == "set-speed") return saveMotionSpeed(action);
@@ -109,7 +113,7 @@ void cloudTick() {
   if (!request.begin(client, endpoint)) { cloudState = "connection failed"; cloudError = "Could not start secure cloud connection"; return; }
   request.addHeader("Content-Type", "application/json");
   request.addHeader("X-Timiac-Device-Key", TIMIAC_CLOUD_DEVICE_KEY);
-  DynamicJsonDocument outbound(6144); cloudSnapshot(outbound.createNestedObject("status"));
+  DynamicJsonDocument outbound(8192); cloudSnapshot(outbound.createNestedObject("status"));
   if (outbound.overflowed()) {
     cloudState = "connection failed"; cloudError = "Cloud status is too large"; request.end(); return;
   }
@@ -118,10 +122,11 @@ void cloudTick() {
   if (code != 200) {
     cloudState = "connection failed"; cloudError = "Cloud service returned HTTP " + String(code); request.end(); return;
   }
-  DynamicJsonDocument inbound(1024);
+  DynamicJsonDocument inbound(2048);
   const DeserializationError parsed = deserializeJson(inbound, request.getStream());
   request.end();
   if (parsed) { cloudState = "connection failed"; cloudError = "Invalid cloud response"; return; }
   cloudState = "connected"; cloudError = "";
   receiveCloudAction(inbound["action"]);
+  if (!inbound["action"].is<JsonObject>()) acceptFirmwareUpdate(inbound["update"]);
 }

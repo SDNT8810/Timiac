@@ -8,6 +8,7 @@
 #include "../../shared/peer_outbox.h"
 #include "../../shared/timeouts.h"
 #include "../../shared/gcode.h"
+#include "../../shared/firmware_transfer.h"
 #include "../../shared/endstops.h"
 #include "../../shared/driver_report.h"
 #include "../../shared/octopus_session.h"
@@ -20,7 +21,13 @@
 #include <RTClib.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <Update.h>
+#include <mbedtls/sha256.h>
+#include <mbedtls/md.h>
 SET_LOOP_TASK_STACK_SIZE(kMasterLoopStackBytes);
+#else
+#include <Updater.h>
+#include <bearssl/bearssl.h>
 #endif
 
 namespace {
@@ -40,9 +47,12 @@ WiFiServer listener(kPeerPort);
 #include "wifi_uplink.h"
 #include "ntp_clock.h"
 #include "motion_speed.h"
+#include "firmware_update.h"
 #include "cloud_relay.h"
 #include "web_api.h"
 #include "release_clock.h"
+#else
+#include "firmware_update.h"
 #endif
 }
 
@@ -63,7 +73,7 @@ void setup() {
   configureClock();
   rtcTick(true);
   configureProximity();
-  LittleFS.begin(); configureHttp(); listener.begin();
+  LittleFS.begin(); configureFirmwareUpdate(); configureHttp(); listener.begin();
 #else
   bridgeResetReason = ESP.getResetReason();
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
@@ -72,7 +82,9 @@ void setup() {
   if (TIMIAC_SERIAL_SWAP) Serial.swap();
   serialLine.reserve(513);
   WiFi.mode(WIFI_STA); WiFi.hostname("timiac-board" + String(TIMIAC_BOARD_ID));
+  WiFi.config(IPAddress(192,168,4,240 + TIMIAC_BOARD_ID), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
   WiFi.setAutoReconnect(true); WiFi.begin(TIMIAC_WIFI_SSID, TIMIAC_WIFI_PASSWORD);
+  configureFirmwareUpdate();
 #endif
 #if TIMIAC_MASTER && TIMIAC_RELEASE
   logMessage("Timiac release boot; waiting for both boards, then automatic Home all and clock");
@@ -85,11 +97,12 @@ void loop() {
   {
     RuntimeLock lock;
     networkTick(); operationTick();
-    dns.processNextRequest(); programTick(); uplinkTick(); ntpTick(); rtcTick(); releaseClockTick(); proximityTick(); cloudTick();
+    dns.processNextRequest(); programTick(); uplinkTick(); ntpTick(); rtcTick(); releaseClockTick(); proximityTick(); cloudTick(); firmwareUpdateTick();
   }
 #else
   networkTick(); operationTick();
-  uart.tick(); operationTick();
+  if (!firmwareUpdateOwnsUart()) uart.tick();
+  firmwareUpdateTick(); operationTick();
 #endif
   yield();
 }

@@ -1,13 +1,39 @@
-# Master validation - 2026-10-15.4
+# Remote update validation - 2026-10-15.5
 
 Matched package **TIMIAC2-03b3b6e145e4**, protocol 7, trajectory capability 2.
 All twelve axes request 1,000 mA RMS for running/homing and retain 50% holding.
 
 Validation completed:
 
+- All five board images, both master dashboard filesystems and their OTA role /
+  revision markers build and pass the same binary validation used by the gateway.
+- Cloud tests cover administrator/device separation, wrong-board rejection,
+  immutable binary storage, private downloads, one-job queueing, old-session
+  expiry, Stop cancellation, initial-install capability checks and retention.
+  UI tests check exact target/image submission, rejected uploads, update motion
+  locks and keyboard handling in the firmware selector.
+- The production SD updater is exercised with a host SD adapter: duplicate blocks,
+  truncated streams, wrong STM32 headers, missing cards, I/O and rename failures,
+  full CRC/readback, re-verification failure and activation only after verification.
+- The production ESP image writer is tested with both SDK adapter branches for
+  split TCP headers, bad hashes, truncation, failed writes, retry after failure and
+  the filesystem mount/abort path. Platform SHA/HMAC implementations are compiled
+  from mbedTLS/BearSSL; these host tests mock those SDK adapters.
+- The remote Python command verifies the package before login, sends each target
+  once, stops on failed jobs and retries only read-only status after connection loss.
+
+The initial on-site USB/SD installation and a physical OTA trial are still required.
+The stock bootloaders are preserved. See [remote-updates.md](remote-updates.md).
+
+The cloud schema and update controls were deployed to `control.timiac.it`.
+Authenticated live upload/private-download checks passed for an ESP image and the
+full 1,441,792-byte master filesystem, with matching SHA-256 hashes. No install
+job or motion command was submitted. The existing online master still reports no
+OTA capability, so it needs the initial local installation.
+
 - Shared Octopus, both bridges, dev/release masters and both web filesystems
   build successfully. `python run.py verify` validates all package images.
-- 21 Python tests and 56 dashboard/control/simulator tests pass. Host firmware, both
+- 28 Python tests, 25 cloud gateway tests and 56 dashboard/control/simulator tests pass. Host firmware, both
   production coordinator modes and bridge tests pass, including a simulated
   24-hour clock cycle and all 720 homing switch orders.
 - Motion checks test Hour and Struggle from fully open, halfway and fully closed

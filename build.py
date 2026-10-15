@@ -36,6 +36,18 @@ def prepare_marlin():
         # Pin the working six-arm Lumiac configuration, then adapt the driver,
         # mechanics, and host interfaces to Timiac. No dependency on ../Lumiac.
         path.write_text(replace_definitions(reference[name], values), encoding="utf-8")
+    # Keep the factory SD bootloader; receive into a non-boot filename and
+    # promote only after the complete file has passed SD readback verification.
+    import re
+    revision = re.search(r'kSoftwareRevision\[\] = "([^"]+)"', (ROOT / 'ESP_Timiac/include/config.h').read_text()).group(1)
+    with (staged / 'Marlin/Configuration.h').open('a', encoding='utf-8') as config:
+        config.write(f'\n#define TIMIAC_FIRMWARE_REVISION "{revision}"\n')
+    shutil.copy2(ROOT / 'shared/firmware_transfer.h', staged / 'Marlin/src/feature/timiac_update_protocol.h')
+    shutil.copy2(ROOT / 'Marlin/timiac_sd_ota.cpp', staged / 'Marlin/src/gcode/control/M997.cpp')
+    m115 = staged / 'Marlin/src/gcode/host/M115.cpp'
+    m115_source = m115.read_text(encoding='utf-8')
+    m115.write_text(m115_source.replace('void GcodeSuite::M115() {',
+        'void GcodeSuite::M115() {\n  SERIAL_ECHOLNPGM("Cap:TIMIAC_SD_OTA:1");\n  SERIAL_ECHOLNPGM("TIMIAC_FW_VERSION:" TIMIAC_FIRMWARE_REVISION);'), encoding='utf-8')
     # Port Lumiac's independently latched six-arm homing to pinned Marlin.
     # The patch is stored here; a rebuild never depends on ../Lumiac.
     subprocess.run(["git", "apply", str(ROOT / "Marlin/patches/concurrent-homing.patch")],

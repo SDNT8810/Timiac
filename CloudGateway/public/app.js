@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let config, timer, pendingAction = '';
+let config, timer, pendingAction = '', uploadingFirmware = false;
 const localDate = () => {
   const d = new Date(), p = n => String(n).padStart(2, '0');
   return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
@@ -11,7 +11,7 @@ function showLogin(message = '') {
   $('login-message').textContent = message; $('password').value = '';
 }
 async function api(path, options = {}) {
-  const response = await fetch(path, { ...options, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, cache: 'no-store' });
+  const response = await fetch(path, { ...options, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...options.headers }, cache: 'no-store' });
   const body = await response.json();
   if (!response.ok) {
     if (response.status === 401 && path !== '/api/login') showLogin(body.error);
@@ -19,7 +19,7 @@ async function api(path, options = {}) {
   }
   return body;
 }
-function stateLabel(board) { if (!board?.bridgeConnected) return 'ESP offline'; if (!board.octopusConnected) return 'Octopus offline'; if (board.fault) return 'Stopped'; if (board.busy) return 'Moving'; return board.homed === 63 ? 'Ready' : 'Home required'; }
+function stateLabel(board) { if (!board?.bridgeConnected) return 'ESP offline'; if (board.updating) return 'Updating firmware'; if (!board.octopusConnected) return 'Octopus offline'; if (board.fault) return 'Stopped'; if (board.busy) return 'Moving'; return board.homed === 63 ? 'Ready' : 'Home required'; }
 function render(remote) {
   const state = remote.status || {};
   $('connection').textContent = !remote.online ? 'Master is offline' : state.fault || state.operation?.error || (state.machineReady ? 'Connected to Timiac' : 'Waiting for motor boards');
@@ -28,11 +28,20 @@ function render(remote) {
   $('clock-mode').textContent = state.clock?.running ? 'Clock running' : 'Clock paused';
   $('board-a').textContent = stateLabel(state.a); $('board-b').textContent = stateLabel(state.b);
   const localControl = state.control?.owner && !state.control.owner.startsWith('cloud:');
-  const busy = !remote.online || state.stopPending || state.a?.busy || state.b?.busy || remote.queued > 0 || localControl ||
+  const busy = uploadingFirmware || !remote.online || state.ota?.active || state.stopPending || state.a?.busy || state.b?.busy || remote.queued > 0 || localControl ||
     ['preparing', 'running'].includes(state.operation?.state) || ['running', 'paused', 'uploading'].includes(state.program?.state);
   document.querySelectorAll('[data-action]').forEach(button => button.disabled = busy || !state.machineReady || (button.dataset.action !== 'home' && (state.a?.homed !== 63 || state.b?.homed !== 63)));
   $('stop').disabled = !remote.online;
   $('speed').disabled = busy; $('save-time').disabled = busy; $('local-time').disabled = busy;
+  $('install-firmware').disabled = busy || !state.ota?.supported;
+  const ota = state.ota;
+  const job = remote.update;
+  const progress = ota?.size ? ` · ${Math.min(100, Math.round(ota.done / ota.size * 100))}%` : '';
+  $('firmware-status').textContent = !ota?.supported ? 'Install the initial USB/SD update package before using remote updates.'
+    : job && job.id !== ota.id ? `Update ${job.state}${job.error ? ': ' + job.error : ''}`
+    : ota?.id ? `${ota.target} · ${ota.phase || ota.state}${ota.active ? progress : ''}${ota.error ? ': ' + ota.error : ''}`
+    : 'Ready for remote updates. Leave a microSD card in each Octopus.';
+  $('firmware-status').classList.toggle('error', ota?.state === 'failed' || ['failed', 'expired'].includes(job?.state));
   if (document.activeElement !== $('speed') && !pendingAction) {
     $('speed').value = state.speedPercent || 50; $('speed-value').textContent = $('speed').value + '%';
   }
@@ -69,9 +78,23 @@ $('speed').onchange = () => queue('set-speed', { percent: Number($('speed').valu
 $('time-form').onsubmit = event => {
   event.preventDefault(); queue('set-time', { localTime: $('local-time').value.length === 16 ? $('local-time').value + ':00' : $('local-time').value }).catch(error => say(error.message, true));
 };
+$('firmware-form').onsubmit = async event => {
+  event.preventDefault();
+  const file = $('firmware-file').files[0]; if (!file || uploadingFirmware) return;
+  const [target, kind] = $('firmware-target').value.split(':');
+  uploadingFirmware = true; $('install-firmware').disabled = true; say('Uploading and checking firmware…');
+  try {
+    const image = await api('/api/devices/' + config.deviceId + '/firmware', { method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-Timiac-Target': target, 'X-Timiac-Kind': kind }, body: file });
+    await api('/api/devices/' + config.deviceId + '/updates', { method: 'POST', body: JSON.stringify({ imageId: image.id }) });
+    say(`${target} update queued. Keep power connected; the clock will remain paused.`);
+    $('firmware-file').value = '';
+  } catch (error) { say(error.message, true); }
+  finally { uploadingFirmware = false; await refresh(); }
+};
 $('sign-out').onclick = async () => { try { await api('/api/logout', { method: 'POST' }); showLogin(); } catch (error) { say(error.message, true); } };
 document.addEventListener('keydown', event => {
-  if (event.key === 'Home' && !$('dashboard').hidden && !['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
+  if (event.key === 'Home' && !$('dashboard').hidden && !['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) {
     event.preventDefault(); const button = document.querySelector('[data-action="home"]'); if (!button.disabled) button.click();
   }
 });

@@ -22,8 +22,11 @@ static_assert(CURRENT_STEP_DOWN == 50, "Retain thermal current reduction");
 #if DISABLED(S_CURVE_ACCELERATION) || DISABLED(ENDSTOP_INTERRUPTS_FEATURE)
   #error "Lumiac motion and endstop behavior must be preserved"
 #endif
-#if ENABLED(CASE_LIGHT_ENABLE) || ENABLED(SDSUPPORT)
-  #error "Lumiac peripherals must not reuse Timiac's socket pins or run SD programs"
+#if ENABLED(CASE_LIGHT_ENABLE)
+  #error "Case light must not reuse Timiac's socket pins"
+#endif
+#if DISABLED(SDSUPPORT) || SDCARD_CONNECTION != ONBOARD || DISABLED(NO_SD_AUTOSTART)
+  #error "Remote firmware updates require onboard SD storage with autostart disabled"
 #endif
 
 static_assert(NUM_AXES == 6, "Timiac requires six axes per Octopus");

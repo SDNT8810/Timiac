@@ -7,6 +7,7 @@ String bridgeResetReason;
 uint32_t lastPeerRejection = 0;
 bool serialDiscard = false, stopRequested = false, systemLatched = false, stopPending = false;
 bool networkChanging = false;
+bool firmwareUpdating = false, firmwareUpdateCancel = false;
 String systemFault, stopToken, stopReason, acknowledgedStop;
 uint8_t stopRequired = 0, stopRecoveryRequired = 0;
 uint32_t lastStateTx = 0, reconnectAt = 0, reconnectDelay = 500, lastWifiRetry = 0;
@@ -27,6 +28,7 @@ struct RemoteBoard {
   uint32_t uptime = 0;
   bool driverReportAvailable = false;
   bool trajectorySupported = false;
+  bool otaSupported = false, sdOtaSupported = false, updating = false;
   uint32_t driverReportAt = 0;
   bool online = false, busy = false, latched = false, resetRequired = false;
   uint8_t homed = 0;
@@ -56,11 +58,19 @@ int armTimeMinutes = -1;
 int releaseClockMinute = -1; // Last automatic target; survives a proximity animation.
 bool releaseClockEnabled = false;
 bool releaseStartupPending = TIMIAC_MASTER && TIMIAC_RELEASE;
+#if TIMIAC_MASTER
 unsigned lastStruggleVariant = timiac::struggleVariantCount;
+#endif
 void trackManualClockAction(const char* action) {
 #if TIMIAC_RELEASE
   releaseClockEnabled = !systemLatched && !strcmp(action, "show-time");
   releaseClockMinute = -1;
+#if defined(ARDUINO_ARCH_ESP32)
+  if (releaseClockEnabled) {
+    Preferences settings;
+    if (settings.begin("timiac-ota", false)) { settings.putBool("park", false); settings.end(); }
+  }
+#endif
 #endif
 }
 struct Program {

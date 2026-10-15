@@ -33,11 +33,20 @@ Phone(s) -- Wi-Fi --> Master ESP32 (192.168.4.1)
                     XYZABC (1)       XYZABC (2)
 ~~~
 
-Only the master creates the access point and HTTP server. Both bridges are
-stations. Protocol v6 checks the generated machine identity and identifies board 1/2 explicitly with a shared pairing key,
+The master creates the access point and dashboard HTTP server. Both bridges are
+stations; each also runs an authenticated maintenance receiver on port 3232.
+Protocol v7 checks the generated machine identity and identifies board 1/2 explicitly with a shared pairing key,
 boot identity, and master session. Connection order and IP address do not
 determine axis routing. Duplicate board IDs are refused. The pairing key
 separates bridge traffic from ordinary clients; it is not transport encryption.
+
+Remote updates use the cloud's authenticated upload/queue and the master's outbound
+HTTPS connection. ESP images use the existing flash update APIs; Octopus images
+are SHA-256 verified on the bridge and transferred to a temporary SD file through
+the same UART. A complete CRC/readback check precedes activation by the preserved
+SD bootloader. Update jobs are bound to one session, never replayed, and fence
+new motion. The parked state survives master reboots until Start clock is used.
+See [remote-updates.md](remote-updates.md).
 
 ## G-code and jobs
 

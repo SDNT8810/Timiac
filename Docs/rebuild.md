@@ -1,9 +1,15 @@
-# Master package - 2026-10-15.4
+# Remote update package - 2026-10-15.5
+
+Install all five boards once to enable [remote updates](remote-updates.md).
+The existing bootloaders are retained, and both Octopus cards stay installed.
+`python remote_update.py --target all` performs later updates through the cloud.
+ESP application/filesystem hashes, bridge HMAC authentication, and staged SD
+CRC/readback checks protect activation. No physical OTA test has been performed here.
 
 The master now uses a Heschen E3F-DS30B2 NPN NC hand sensor on GPIO27 with the
 three-resistor 24 V interface. Preserve the existing 3.3 V converter and leave
 the old GPIO18/19 PCB traces unused. See [the complete master wiring](master-wiring.md).
-Only the master needs flashing. Struggle now randomly selects one of seven
+The animation behavior is unchanged. Struggle randomly selects one of seven
 insect patterns from both the button and hand input; see [the preview guide](struggle-patterns.md).
 
 Running and microswitch homing current is 1,000 mA RMS on all twelve motors.
@@ -23,8 +29,8 @@ still needs commissioning on the installed mechanism.
 
 Every job restores normal acceleration (25 mm/s?) before movement, including
 after cancellation. Trajectory capability is version 2. The new matched package
-remains **TIMIAC2-03b3b6e145e4**, protocol 7. Only the ESP32 master needs reflashing
-for this animation update; installed matching bridges and Octopus boards are unchanged.
+remains **TIMIAC2-03b3b6e145e4**, protocol 7. Remote-update setup requires the
+new receiver firmware on all five boards; subsequent updates can target one board.
 Use `python run.py master_release --port COM10` with the master's actual USB port.
 Keep the planned 24 V / 400 W supply and active cooling.
 

@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { generateKeyPair, SignJWT, jwtVerify } from 'jose';
 import { createGateway } from '../cloudflare/worker.js';
+import { firmwareCrc32, validateFirmware } from '../cloudflare/firmware.js';
 
 const { privateKey, publicKey } = await generateKeyPair('RS256');
 const issuer = 'https://securetoken.google.com/test-project';
@@ -19,9 +20,10 @@ function fixture(t) {
   t.after(() => sql.close());
   const DB = { prepare(query) {
     let args = [];
-    return { bind(...values) { args = values; return this; },
+    return { bind(...values) { args = values.map(value => value instanceof ArrayBuffer ? new Uint8Array(value) : value); return this; },
       async first() { return sql.prepare(query).get(...args) || null; },
       async run() { const result = sql.prepare(query).run(...args); return { meta: { changes: Number(result.changes) } }; },
+      async all() { return { results: sql.prepare(query).all(...args) }; },
     };
   }};
   let now = Date.now();
@@ -46,7 +48,7 @@ function fixture(t) {
   const state = { session: 'boot-one', machineReady: true, operation: { state: 'complete' }, a: { homed: 63 }, b: { homed: 63 } };
   const sync = status => call('/device/v1/devices/clock-01/sync', { status: status || state }, device);
   const action = (type, values = {}) => call('/api/devices/clock-01/actions', { type, ...values }, admin);
-  return { call, admin, device, sync, action, state, sql, advance: ms => { now += ms; } };
+  return { call, admin, device, sync, action, state, sql, env, gateway, advance: ms => { now += ms; } };
 }
 
 test('hardware status and commands require an authenticated administrator', async t => {
@@ -161,4 +163,102 @@ test('static pages have a restrictive policy and API responses are never cached'
   assert.ok(page.headers.get('Content-Security-Policy').includes("frame-ancestors 'none'"));
   assert.equal((await f.call('/api/config')).headers.get('Cache-Control'), 'no-store');
   assert.equal((await f.call('/api/not-found')).status, 404);
+});
+
+function otaFixture(t) {
+  const f = fixture(t);
+  f.state.firmware = 'TIMIAC2-03b3b6e145e4';
+  f.state.ota = { supported: true, active: false };
+  f.state.a.otaSupported = f.state.b.otaSupported = true;
+  f.state.a.bridgeConnected = f.state.b.bridgeConnected = true;
+  f.state.a.sdOtaSupported = f.state.b.sdOtaSupported = true;
+  f.upload = (bytes, target = 'master', kind = 'app', headers = f.admin) => f.gateway.fetch(new Request('https://control.timiac.it/api/devices/clock-01/firmware', {
+    method: 'POST', headers: { Origin: f.env.TIMIAC_PUBLIC_ORIGIN, 'Content-Type': 'application/octet-stream',
+      'X-Timiac-Target': target, 'X-Timiac-Kind': kind, ...headers }, body: bytes,
+  }), f.env);
+  f.install = imageId => f.call('/api/devices/clock-01/updates', { imageId }, f.admin);
+  f.download = (id, headers = f.device) => f.gateway.fetch(new Request('https://control.timiac.it/device/v1/devices/clock-01/firmware/' + id, { headers }), f.env);
+  return f;
+}
+function firmwareImage(role = 'master', size = 4096) {
+  const bytes = new Uint8Array(size); bytes[0] = 0xE9;
+  if (role === 'octopus') {
+    const view = new DataView(bytes.buffer); view.setUint32(0, 0x20020000, true); view.setUint32(4, 0x08008101, true);
+  }
+  bytes.set(new TextEncoder().encode([`TIMIAC_OTA_ROLE:${role}`, 'TIMIAC2-03b3b6e145e4', '2026-10-15.5'].join('\0')), 64);
+  return bytes;
+}
+test('firmware upload is admin-only, role checked, immutable, and downloads require the hardware key', async t => {
+  const f = otaFixture(t), bytes = firmwareImage('master', 150000);
+  assert.equal((await f.upload(bytes, 'master', 'app', {})).status, 401);
+  assert.equal((await f.upload(bytes, 'master', 'app', { ...f.admin, Origin: 'https://evil.invalid' })).status, 403);
+  assert.equal((await f.upload(bytes, 'esp1')).status, 400);
+  const uploaded = await f.upload(bytes); assert.equal(uploaded.status, 201);
+  const image = await uploaded.json(); assert.equal(image.revision, '2026-10-15.5');
+  assert.equal((await f.download(image.id, f.admin)).status, 401);
+  const download = await f.download(image.id);
+  assert.equal(download.status, 200); assert.deepEqual(new Uint8Array(await download.arrayBuffer()), bytes);
+  assert.equal(download.headers.get('Content-Length'), '150000');
+  assert.match(download.headers.get('Cache-Control'), /no-store/);
+  const listing = await f.call('/api/devices/clock-01/firmware', undefined, f.admin);
+  assert.equal((await listing.json()).images.length, 1);
+});
+test('Octopus images preserve the bootloader and use a standard CRC32', () => {
+  assert.equal(firmwareCrc32(new TextEncoder().encode('123456789')), 0xCBF43926);
+  const image = firmwareImage('octopus');
+  assert.equal(validateFirmware(image, 'octopus1', 'octopus').revision, '2026-10-15.5');
+  new DataView(image.buffer).setUint32(4, 0x08000101, true);
+  assert.throws(() => validateFirmware(image, 'octopus1', 'octopus'), /bootloader/);
+  assert.throws(() => validateFirmware(firmwareImage('master'), 'master', 'filesystem'), /size/);
+});
+test('firmware updates require the initial installation and are bound to one idle controller session', async t => {
+  const f = otaFixture(t), image = await (await f.upload(firmwareImage())).json();
+  assert.equal((await f.install(image.id)).status, 409);
+  await f.sync({ ...f.state, ota: undefined });
+  assert.match((await (await f.install(image.id)).json()).error, /USB/);
+  await f.sync({ ...f.state, a: { ...f.state.a, busy: true } });
+  assert.equal((await f.install(image.id)).status, 409);
+  await f.sync();
+  const queued = await (await f.install(image.id)).json(); assert.equal(queued.state, 'queued');
+  assert.equal((await f.install(image.id)).status, 409);
+  assert.equal((await f.action('home')).status, 409);
+  const delivered = await (await f.sync()).json();
+  assert.equal(delivered.update.id, queued.id); assert.equal(delivered.update.imageId, image.id);
+  assert.equal(delivered.update.target, 'master'); assert.equal(delivered.update.size, 4096);
+  assert.equal((await (await f.sync()).json()).update, undefined);
+  await f.sync({ ...f.state, ota: { ...f.state.ota, id: queued.id, sha256: image.sha256, state: 'complete' } });
+  assert.equal(f.sql.prepare('SELECT state FROM ota_jobs WHERE id=?').get(queued.id).state, 'complete');
+  assert.equal((await f.action('home')).status, 202);
+});
+test('Stop cancels queued firmware, active updates block motion, and old sessions are never retried', async t => {
+  const f = otaFixture(t), image = await (await f.upload(firmwareImage())).json();
+  await f.sync(); let queued = await (await f.install(image.id)).json();
+  assert.equal((await f.action('stop')).status, 202);
+  let reply = await (await f.sync()).json(); assert.equal(reply.action.type, 'stop'); assert.equal(reply.update, undefined);
+  assert.equal(f.sql.prepare('SELECT state FROM ota_jobs WHERE id=?').get(queued.id).state, 'cancelled');
+  queued = await (await f.install(image.id)).json();
+  await f.sync({ ...f.state, session: 'new-boot' });
+  assert.equal(f.sql.prepare('SELECT state FROM ota_jobs WHERE id=?').get(queued.id).state, 'expired');
+  await f.sync({ ...f.state, ota: { supported: true, active: true, state: 'downloading' } });
+  assert.equal((await f.action('home')).status, 409); assert.equal((await f.install(image.id)).status, 409);
+  assert.equal((await f.action('stop')).status, 202);
+});
+test('a remote Octopus update requires its bridge capability and initial SD receiver firmware', async t => {
+  const f = otaFixture(t), image = await (await f.upload(firmwareImage('octopus'), 'octopus2', 'octopus')).json();
+  await f.sync({ ...f.state, b: { ...f.state.b, sdOtaSupported: false } });
+  assert.match((await (await f.install(image.id)).json()).error, /initial Octopus SD/);
+  await f.sync(); assert.equal((await f.install(image.id)).status, 202);
+  const { update } = await (await f.sync()).json();
+  assert.equal(update.target, 'octopus2'); assert.equal(update.crc32, firmwareCrc32(firmwareImage('octopus')));
+});
+test('old unused firmware is pruned while an active update image is retained', async t => {
+  const f = otaFixture(t), first = await (await f.upload(firmwareImage())).json();
+  f.advance(8 * 86400000);
+  await f.sync(); assert.equal((await f.install(first.id)).status, 202);
+  await f.upload(firmwareImage('esp1'), 'esp1', 'app');
+  assert.equal((await f.download(first.id)).status, 200); // An old image is kept while its new job is pending.
+  await f.action('stop'); await f.sync(); f.advance(8 * 86400000);
+  await f.upload(firmwareImage('esp2'), 'esp2', 'app');
+  assert.equal((await f.download(first.id)).status, 404);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS count FROM ota_chunks WHERE image_id=?').get(first.id).count, 0);
 });

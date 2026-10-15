@@ -14,6 +14,8 @@ struct UartBridge {
   String lastReply;
   uint32_t lastReplyAt = 0;
   bool halted = false, job = false;
+  bool sdOtaSupported = false;
+  String octopusSoftware;
   uint32_t monitorAt = 0, seenFailures = 0, seenCompletions = 0;
   bool online() const { return session.online(millis()); }
   bool healthy() const { return session.healthy(millis()); }
@@ -73,6 +75,9 @@ struct UartBridge {
     sync();
   }
   void receive(const String& line) {
+    if (line == "start") { sdOtaSupported = false; octopusSoftware = ""; }
+    if (line == "Cap:TIMIAC_SD_OTA:1") sdOtaSupported = true;
+    if (line.startsWith("TIMIAC_FW_VERSION:")) octopusSoftware = line.substring(18);
     if (line == "start") logMessage("Octopus startup banner received (actual restart)");
     if (!line.isEmpty()) { lastReply = line.substring(0, 100); lastReplyAt = millis(); }
     if (session.running() || line.indexOf("FIRMWARE_NAME:") >= 0 || line.indexOf("Error:") >= 0 || line.startsWith("echo:Bad "))

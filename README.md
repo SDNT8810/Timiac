@@ -1,4 +1,4 @@
-**Current master (2026-10-15.4):** Struggle and the GPIO27 hand sensor randomly select one of seven asymmetric insect patterns, with openings limited to 20 mm before returning to the time display. Preview each pattern in the [simulator](Simulator/README.md), or see [the pattern guide](Docs/struggle-patterns.md). Next Hour, current (1,000 mA RMS), and the [master wiring](Docs/master-wiring.md) are unchanged. Only the master needs flashing.
+**Current package (2026-10-15.5):** remote firmware updates now support the master, both ESP bridges and both Octopus boards through `control.timiac.it`. Install all five images once and leave FAT32 microSD cards in the Octopus boards; see [remote update setup](Docs/remote-updates.md). Future updates can use `python remote_update.py --target all`. The seven 0–20 mm [Struggle patterns](Docs/struggle-patterns.md), Next Hour, current and [master wiring](Docs/master-wiring.md) are unchanged.
 
 
 # Timiac: twelve motors, three ESP modules
@@ -127,8 +127,9 @@ DIAG jumpers, and reconnect the NC endstop switches before homing.
 The master ESP32 owns all clock poses, animation sequences, and uploaded G-code.
 The bridges relay validated commands; Octopus executes the motor steps and
 endstop checks. The Octopus SD card is used **only to install firmware**.
-After `firmware.bin` becomes `FIRMWARE.CUR`, power off, remove the card, and
-power on again. No G-code files are copied to the card or read at runtime.
+After `firmware.bin` becomes `FIRMWARE.CUR`, power off and leave the card inserted
+for future remote firmware updates. No motion G-code files are copied to the card
+or read for animation playback. Cards now provide firmware-update storage.
 
 From the `Timiac` directory, install developer mode:
 

@@ -154,6 +154,8 @@ Check the ESP-12S module's built-in resistors and actual Octopus socket
 orientation. The pin table identifies electrical signals, not breakout dimensions.
 
 All ESP builds assume 4 MB flash. Use UART at 115200, 8N1.
+Remote firmware updates use the same wires, plus a FAT32 microSD card left in
+each Octopus. See [the initial setup and remote update guide](remote-updates.md).
 Do not connect two TX outputs together. Disconnect the Octopus UART when
 flashing a bridge with a USB-UART adapter. Pull GPIO0 low during reset to
 enter flashing mode, then release it for normal operation.

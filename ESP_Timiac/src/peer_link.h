@@ -5,7 +5,7 @@ Peer* boardPeer(unsigned board) {
   return nullptr;
 }
 bool boardOnline(unsigned b) {
-  return boardPeer(b) && boards[b].online && !timiac::expired(millis(), boards[b].stateAt, kPeerTimeout);
+  return boardPeer(b) && boards[b].online && !boards[b].updating && !timiac::expired(millis(), boards[b].stateAt, kPeerTimeout);
 }
 bool bothOnline() { return boardOnline(0) && boardOnline(1); }
 bool boardStatesHealthy(uint8_t mask) {
@@ -16,7 +16,7 @@ bool boardStatesHealthy(uint8_t mask) {
   return true;
 }
 bool boardsHealthy(uint8_t mask) {
-  return !systemLatched && !stopRequested && !stopPending && !networkChanging && boardStatesHealthy(mask);
+  return !firmwareUpdating && !systemLatched && !stopRequested && !stopPending && !networkChanging && boardStatesHealthy(mask);
 }
 bool bothHealthy() { return boardsHealthy(3); }
 bool workRequiresBoard(unsigned b) {
@@ -62,7 +62,7 @@ void writeBoard(JsonObject board, unsigned index) {
   board["online"] = online;
   board["bridgeConnected"] = TIMIAC_MASTER ? boardPeer(index) != nullptr && !timiac::expired(millis(), remote.stateAt, kPeerTimeout) : peers[0].paired;
   board["octopusConnected"] = online;
-  board["ready"] = online && (TIMIAC_MASTER ? remote.drivers.good() && remote.fault.isEmpty() && !remote.latched : uart.healthy()) && !systemLatched;
+  board["ready"] = online && (TIMIAC_MASTER ? remote.drivers.good() && remote.fault.isEmpty() && !remote.latched : uart.healthy()) && !systemLatched && !firmwareUpdating;
   board["manualReady"] = TIMIAC_MASTER && !TIMIAC_RELEASE && boardsHealthy(1U << index);
   board["busy"] = online && (TIMIAC_MASTER ? remote.busy : uart.job);
   board["fault"] = TIMIAC_MASTER ? remote.fault : (uart.fault.isEmpty() ? systemFault : uart.fault);
@@ -72,6 +72,9 @@ void writeBoard(JsonObject board, unsigned index) {
   board["homingMode"] = online ? "switch" : "unknown";
   board["firmware"] = TIMIAC_MASTER ? remote.firmware : (uart.session.identity ? timiac::machineId : "");
   board["software"] = TIMIAC_MASTER ? remote.software.c_str() : kSoftwareRevision;
+  board["otaSupported"] = TIMIAC_MASTER ? remote.otaSupported : true;
+  board["sdOtaSupported"] = TIMIAC_MASTER ? remote.sdOtaSupported : uart.sdOtaSupported;
+  board["updating"] = TIMIAC_MASTER ? remote.updating : firmwareUpdating;
   board["diagnostic"] = TIMIAC_MASTER ? remote.diagnostic : uart.diagnostic();
   board["bridgeUptimeMs"] = TIMIAC_MASTER ? remote.uptime : millis();
   if (TIMIAC_MASTER) {
@@ -123,6 +126,7 @@ void sendState() {
   sendPeer(peers[0], doc); lastStateTx = millis();
 }
 void stopAll(const String& reason) {
+  if (firmwareUpdating) firmwareUpdateCancel = true;
   releaseClockMinute = -1;
   releaseStartupPending = false;
   releaseClockEnabled = false;
@@ -256,6 +260,9 @@ void processPeer(Peer& p, const String& line) {
     board.latched = doc["latched"] | false; board.stopAck = doc["stopAck"].as<String>();
     board.resetRequired = doc["board"]["resetRequired"] | false;
     board.firmware = doc["board"]["firmware"] | "";
+    board.otaSupported = doc["board"]["otaSupported"] | false;
+    board.sdOtaSupported = doc["board"]["sdOtaSupported"] | false;
+    board.updating = doc["board"]["updating"] | false;
     board.diagnostic = doc["board"]["diagnostic"] | "";
     board.uptime = doc["board"]["bridgeUptimeMs"] | 0U;
     const JsonObject checks = doc["board"]["drivers"];
@@ -300,6 +307,7 @@ void processPeer(Peer& p, const String& line) {
       else if (phase == "done") { operation.barrier.done(1U << p.board); recordReceipt(); }
     }
   } else if (!TIMIAC_MASTER && type == "stop") {
+    if (firmwareUpdating) firmwareUpdateCancel = true;
     String token = doc["token"] | "";
     if (token.isEmpty()) { p.socket.stop(); return; }
     if (token != acknowledgedStop) uart.abort(doc["reason"] | "Master stop");
@@ -317,7 +325,7 @@ void processPeer(Peer& p, const String& line) {
       sendState(); return;
     }
     bool stale = false; for (auto& r : receipts) if (r.id == id) stale = true;
-    if (stale || id.isEmpty() || id.length() > 96 || !doc["speedPercent"].is<unsigned>() || !timiac::validSpeedPercent(speedPercent) || !validLines(doc["lines"], trajectory) || !uart.healthy() ||
+    if (firmwareUpdating || stale || id.isEmpty() || id.length() > 96 || !doc["speedPercent"].is<unsigned>() || !timiac::validSpeedPercent(speedPercent) || !validLines(doc["lines"], trajectory) || !uart.healthy() ||
         systemLatched || operation.barrier.active()) {
       stopAll("Preparation rejected: unavailable board, unhomed axis, stale or invalid command"); return;
     }
