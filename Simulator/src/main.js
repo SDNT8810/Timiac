@@ -1,16 +1,25 @@
 import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
+import optimerBold from 'three/examples/fonts/optimer_bold.typeface.json';
 import { cadPose, LINK_TOPOLOGY, outputFoldAngle, toMechanism3D } from './mechanism.js';
-import { AXES, clockPoseValues, generateHourMovement, generateStruggle, chooseStruggleVariant, STRUGGLE_PATTERNS, FIXED_SPEED } from './clock-motion.js';
 import breatheCode from '../gcodes/breathing.gcode?raw';
 import curiousCode from '../gcodes/curious-creature.gcode?raw';
 import rippleCode from '../gcodes/tidal-ripple.gcode?raw';
 import scuttleCode from '../gcodes/scuttle.gcode?raw';
 import hourMovementCode from '../gcodes/hour-movement.gcode?raw';
 
-// F is reserved for feed rate. These names address arms 1 through 12 clockwise.
+// F is reserved for feed rate. Arms 1–12 advance clockwise.
+import { AXES, clockPoseValues, generateHourMovement, generateStruggle, chooseStruggleVariant, STRUGGLE_PATTERNS, FIXED_SPEED } from './clock-motion.js';
 const INITIAL_FEED = 900;
+const DIAL_FONT = new FontLoader().parse(optimerBold);
+const DIAL_NUMBER_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0x46514d,
+  metalness: 0.62,
+  roughness: 0.3,
+});
 
 const presets = [
   { id: 'hour-movement', name: 'Hour movement', note: 'all open, then directly to time; 30% slower', code: hourMovementCode, glyph: 'H' },
@@ -23,30 +32,23 @@ const presets = [
 
 document.querySelector('#app').innerHTML = `
   <header class="topbar">
-    <a class="brand" href="#" aria-label="Dodeca Motion Lab home">
+    <a class="brand" href="#" aria-label="Timiac home">
       <span class="brand-mark"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-      <span><strong>DODECA</strong><small>MOTION LAB / 01</small></span>
+      <span><strong>TIMIAC</strong><small>KINETIC CLOCK STUDIO</small></span>
     </a>
     <div class="topbar-copy">
-      <span>12 ARM KINETIC CLOCK</span>
+      <span>12-ARM MECHANISM</span>
       <span class="topbar-divider"></span>
-      <span>G-CODE MOTION COMPOSER</span>
+      <span>G-CODE MOTION LAB</span>
     </div>
-    <div class="connection"><i></i> SIMULATOR READY</div>
+    <div class="connection"><i></i> SIMULATION ONLINE</div>
   </header>
 
   <main class="workspace">
     <aside class="panel panel-left">
-      <section>
-        <div class="section-heading"><span>01</span><h2>Sequences</h2></div>
-        <label class="struggle-label" for="struggle-pattern">STRUGGLE STUDIES · 0–20 MM</label>
-        <div class="struggle-preview">
-          <select id="struggle-pattern" aria-label="Struggle pattern">
-            ${STRUGGLE_PATTERNS.map((pattern, index) => `<option value="${index}">${index + 1}. ${pattern.name}</option>`).join('')}
-          </select>
-          <button id="preview-struggle" type="button">PREVIEW</button>
-        </div>
-        <p id="struggle-description" class="struggle-description">${STRUGGLE_PATTERNS[0].note}. Then return to time.</p>
+      <section id="mobile-motion" class="mobile-sheet temporarily-hidden" data-mobile-sheet="motion" aria-labelledby="mobile-motion-title" hidden>
+        <button class="mobile-sheet-close" type="button" aria-label="Close motion panel">CLOSE ×</button>
+        <div class="section-heading"><span>01</span><h2 id="mobile-motion-title">Motion studies</h2></div>
         <div class="preset-list">
           ${presets.map((preset, index) => `
             <button class="preset ${index === 0 ? 'active' : ''}" data-preset="${preset.id}">
@@ -58,45 +60,63 @@ document.querySelector('#app').innerHTML = `
         </div>
       </section>
 
-      <section class="time-composer">
-        <div class="section-heading"><span>02</span><h2>Time pose</h2></div>
-        <p>One arm marks the hour; the longer arm marks five-minute steps.</p>
+      <section id="mobile-time" class="time-composer mobile-sheet" data-mobile-sheet="time" aria-labelledby="mobile-time-title">
+        <button class="mobile-sheet-close" type="button" aria-label="Close time panel">CLOSE ×</button>
+        <div class="section-heading"><span>02</span><h2 id="mobile-time-title">Clock pose</h2></div>
+        <p>Set a time or follow the system clock.</p>
         <div class="time-row">
           <input id="time-input" type="time" aria-label="Clock time" />
-          <button id="compose-time" class="square-button" title="Show selected time">↗</button>
+          <button id="compose-time" class="square-button" title="Set clock pose">SET</button>
         </div>
-        <div class="clock-actions">
-          <button id="live-clock" type="button">LIVE CLOCK</button>
-          <button id="struggle" type="button">STRUGGLE <kbd>S</kbd></button>
+        <div class="clock-actions clock-actions--single">
+          <button id="live-clock" type="button">LIVE TIME</button>
         </div>
         <div class="clock-step-actions">
-          <button id="next-five" type="button">NEXT 5 MIN <kbd>5</kbd></button>
-          <button id="next-hour" type="button">NEXT HOUR <kbd>H</kbd></button>
-          <button id="open-arms" type="button">OPEN <kbd>Home</kbd></button>
+          <button id="next-five" type="button">+5 MIN <kbd>5</kbd></button>
+          <button id="next-hour" type="button">+1 HOUR <kbd>H</kbd></button>
+        </div>
+        <label class="struggle-label" for="struggle-pattern">STRUGGLE STUDIES · 0–20 MM</label>
+        <div class="struggle-preview">
+          <select id="struggle-pattern" aria-label="Struggle pattern">
+            ${STRUGGLE_PATTERNS.map((pattern, index) => `<option value="${index}">${index + 1}. ${pattern.name}</option>`).join('')}
+          </select>
+          <button id="preview-struggle" type="button">PREVIEW</button>
+        </div>
+        <p id="struggle-description" class="struggle-description">${STRUGGLE_PATTERNS[0].note}. Then return to time.</p>
+        <div class="clock-actions clock-actions--single">
+          <button id="struggle" type="button">RANDOM STRUGGLE <kbd>S</kbd></button>
         </div>
         <div class="clock-mode"><i></i><span id="clock-mode">LIVE · HOURLY MOVEMENT ARMED</span></div>
       </section>
 
-      <section class="axis-monitor-section">
-        <div class="section-heading"><span>03</span><h2>Actuator stroke</h2></div>
+      <section id="mobile-arms" class="axis-monitor-section mobile-sheet" data-mobile-sheet="arms" aria-labelledby="mobile-arms-title">
+        <button class="mobile-sheet-close" type="button" aria-label="Close arms panel">CLOSE ×</button>
+        <div class="section-heading"><span>03</span><h2 id="mobile-arms-title">Arm positions</h2></div>
+        <p class="axis-intro">0–100% of the physical 50 mm stroke.</p>
+        <div class="pose-actions" role="group" aria-label="Set all arm positions">
+          <button id="fold-all" type="button">FOLD ALL</button>
+          <button id="half-all" type="button">HALF</button>
+          <button id="extend-all" type="button">EXTEND ALL</button>
+        </div>
         <div class="axis-monitor" id="axis-monitor"></div>
-        <div class="travel-key"><span>RETRACTED</span><span>100%</span></div>
+        <div class="travel-key"><span>0% · FOLDED</span><span>100% · EXTENDED</span></div>
       </section>
     </aside>
 
     <section class="viewport-shell">
       <div class="viewport-meta">
-        <div><span class="eyebrow">MOTION VIEWPORT</span><strong id="sequence-name">CURIOUS CREATURE</strong></div>
+        <div><span class="eyebrow">3D MECHANISM</span><strong id="sequence-name">CURIOUS REACH</strong></div>
         <div class="viewport-readout"><span id="active-axis">A01</span><small>LEAD ARM</small></div>
       </div>
 
       <div class="stage view-3d" id="stage">
-        <div class="view-switch" role="group" aria-label="Simulator view">
-          <button data-view="front">FRONT</button>
-          <button data-view="3d" class="active">3D</button>
+        <div class="stage-corner top-left">12 RADIAL ARMS<br>50 MM STROKE · 0–100%</div>
+        <div class="stage-corner top-right">DRAG TO ORBIT<br>SCROLL TO ZOOM</div>
+        <div class="clock-quick-actions" role="group" aria-label="Clock pose quick actions">
+          <button id="quick-live-clock" type="button" aria-label="Actual time">ACTUAL TIME</button>
+          <button id="quick-next-hour" type="button" aria-label="+1 hr">+1 HR</button>
+          <button id="quick-next-five" type="button" aria-label="+5 min">+5 MIN</button>
         </div>
-        <div class="stage-corner top-left">X 0.000<br>Y 0.000</div>
-        <div class="stage-corner top-right">50 MM STROKE<br>0—100%</div>
         <canvas id="clock-3d" aria-label="Orbitable three-dimensional view of the twelve folding arm mechanisms"></canvas>
         <svg id="clock" viewBox="0 0 700 700" role="img" aria-label="Twelve arm kinetic clock simulator">
           <defs>
@@ -179,7 +199,7 @@ document.querySelector('#app').innerHTML = `
           </svg>
           <div class="side-view-key"><span>SELECTED ARM</span><span>3 REFERENCE ANGLES</span></div>
         </div>
-        <div class="stage-scale"><span>Ø 620 MM</span><i></i><span>FRONT + SIDE PROJECTION</span></div>
+        <div class="stage-scale"><span>Ø 620 MM</span><i></i><span>LIVE KINEMATIC MODEL</span></div>
       </div>
 
       <div class="transport">
@@ -192,20 +212,22 @@ document.querySelector('#app').innerHTML = `
           <div class="timeline-labels"><span id="current-time">00:00.0</span><span id="total-time">00:00.0</span></div>
           <input id="timeline" type="range" min="0" max="1000" value="0" aria-label="Timeline" />
         </div>
+        <label class="speed-control">SPEED <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1.0×</option><option value="1.5">1.5×</option><option value="2">2.0×</option></select></label>
         <label class="loop-control"><input id="loop" type="checkbox" checked><span></span>LOOP</label>
       </div>
     </section>
 
-    <aside class="panel panel-right">
+    <aside id="mobile-code" class="panel panel-right mobile-sheet" data-mobile-sheet="code" aria-labelledby="mobile-code-title">
+      <button class="mobile-sheet-close" type="button" aria-label="Close code panel">CLOSE ×</button>
       <div class="editor-heading">
-        <div class="section-heading"><span>04</span><h2>G-code source</h2></div>
+        <div class="section-heading"><span>04</span><h2 id="mobile-code-title">Motion program</h2></div>
         <span class="file-name" id="file-name">curious-creature.gcode</span>
       </div>
       <div class="editor-toolbar">
-        <span><i></i><b id="parse-state">VALID PROGRAM</b></span>
+        <span><i></i><b id="parse-state">VALID G-CODE</b></span>
         <div>
           <button id="copy-code" title="Copy G-code">COPY</button>
-          <button id="download-code" title="Download G-code">SAVE</button>
+          <button id="download-code" title="Download G-code">EXPORT</button>
         </div>
       </div>
       <div class="code-editor">
@@ -214,23 +236,78 @@ document.querySelector('#app').innerHTML = `
         <div class="active-line-marker" id="active-line-marker"></div>
       </div>
       <div class="code-status">
-        <div><span>COMMAND</span><strong id="command-count">—</strong></div>
+        <div><span>COMMANDS</span><strong id="command-count">—</strong></div>
         <div><span>LINE</span><strong id="line-number">—</strong></div>
-        <div><span>FEED</span><strong id="feed-rate">—</strong></div>
+        <div><span>FEED %/MIN</span><strong id="feed-rate">—</strong></div>
       </div>
       <div class="dialect-note">
         <span>AXIS MAP</span>
-        <p><b>A B C D E H I J K L U V</b> map clockwise from 12 o’clock. <b>F</b> is feed rate. Values are percentages of the <b>50 mm</b> stroke; <b>0</b> is folded, <b>100</b> is fully unfolded.</p>
-        <p><b>G1</b> move · <b>G4 P</b> dwell · <b>G90/G91</b> absolute/relative · <b>G28</b> home</p>
+        <p><b>A B C D E H I J K L U V</b> run clockwise from 12 o'clock. <b>F</b> is feed rate. <b>0–100%</b> spans the physical <b>50 mm</b> stroke: folded to fully extended.</p>
+        <p><b>G1</b> move · <b>G4</b> dwell · <b>G90/G91</b> absolute/relative · <b>G28</b> fold all</p>
       </div>
     </aside>
   </main>
 
+  <div class="mobile-sheet-backdrop" aria-hidden="true"></div>
+  <nav class="mobile-dock mobile-dock--motion-hidden" aria-label="Mobile control panels">
+    <button class="temporarily-hidden" type="button" data-mobile-open="motion" aria-label="Motion" aria-controls="mobile-motion" aria-expanded="false" hidden><span>01</span>MOTION</button>
+    <button type="button" data-mobile-open="time" aria-label="Time" aria-controls="mobile-time" aria-expanded="false"><span>02</span>TIME</button>
+    <button type="button" data-mobile-open="arms" aria-label="Arms" aria-controls="mobile-arms" aria-expanded="false"><span>03</span>ARMS</button>
+    <button type="button" data-mobile-open="code" aria-label="G-code" aria-controls="mobile-code" aria-expanded="false"><span>04</span>G-CODE</button>
+    <button type="button" data-mobile-open="about" aria-label="About" aria-controls="credits-dialog"><span>05</span>ABOUT</button>
+  </nav>
+
   <footer>
-    <span>DODECA SIMULATOR / BUILD 01</span>
-    <span>SPACE — PLAY/PAUSE&nbsp;&nbsp;&nbsp; R — REWIND&nbsp;&nbsp;&nbsp; S — STRUGGLE</span>
-    <span>OCTOPUS MOTION STUDY · MM / MIN</span>
+    <a class="footer-studio" href="https://andreamancuso.com/" target="_blank" rel="noopener noreferrer">CLOCK DESIGN © ANDREA MANCUSO STUDIO ↗</a>
+    <button id="credits-open" type="button">ABOUT · CREDITS & RIGHTS</button>
+    <span>SIMULATION & WEBSITE © 2026 DAVOUD NIKKHOUY</span>
   </footer>
+
+  <dialog class="credits-dialog" id="credits-dialog" aria-labelledby="credits-title">
+    <div class="credits-shell">
+      <div class="credits-topline">
+        <span>CREDITS · ATTRIBUTION · RIGHTS</span>
+        <button class="credits-close" id="credits-close" type="button" aria-label="Close credits and rights">CLOSE ×</button>
+      </div>
+
+      <header class="credits-hero">
+        <span class="credits-index">TIMIAC / 2026</span>
+        <h2 id="credits-title">The clock and this simulator have different authors.</h2>
+        <p>Andrea Mancuso designed TIMIAC. Davoud Nikkhouy built this website to simulate its movement.</p>
+      </header>
+
+      <div class="credits-grid">
+        <section class="credit-card credit-clock">
+          <span class="credit-kicker">01 · PHYSICAL CLOCK</span>
+          <h3>Andrea Mancuso</h3>
+          <p><strong>TIMIAC is a robotic clock designed by Andrea Mancuso and being built by him in his studio.</strong> The clock concept, physical object, artistic and industrial design, and associated studio work are not authored by the creator of this website.</p>
+          <div class="credit-links" aria-label="Andrea Mancuso Studio links">
+            <a href="https://andreamancuso.com/" target="_blank" rel="noopener noreferrer">OFFICIAL STUDIO ↗</a>
+            <a href="https://andreamancuso.com/about" target="_blank" rel="noopener noreferrer">ABOUT ANDREA ↗</a>
+            <a href="https://www.instagram.com/andreamancuso_studio/" target="_blank" rel="noopener noreferrer">INSTAGRAM ↗</a>
+          </div>
+        </section>
+
+        <section class="credit-card credit-simulator">
+          <span class="credit-kicker">02 · DIGITAL SIMULATION</span>
+          <h3>Davoud Nikkhouy</h3>
+          <p><strong>This independent interactive website and motion simulator were designed and developed by Davoud Nikkhouy</strong> to visualize and study the movement of TIMIAC's twelve-arm mechanism.</p>
+          <p class="copyright-line">Website interface and simulation code © 2026 Davoud Nikkhouy, except third-party software, typefaces, assets, and materials credited to their respective rights holders.</p>
+        </section>
+      </div>
+
+      <section class="rights-note">
+        <span class="credit-kicker">RIGHTS & RELATIONSHIP NOTICE</span>
+        <p>All rights in the TIMIAC physical clock, its design, related imagery, and Andrea Mancuso Studio materials remain with their respective rights holders. This simulator does not claim ownership of the physical clock design and does not grant any licence to reproduce or manufacture it.</p>
+        <p>This is an independent visualization, not Andrea Mancuso Studio's official website. No endorsement, partnership, sponsorship, or licence is implied unless separately confirmed in writing by the studio. External links are provided for attribution and to promote Andrea Mancuso Studio.</p>
+      </section>
+
+      <a class="studio-cta" href="https://andreamancuso.com/" target="_blank" rel="noopener noreferrer">
+        <span><small>DISCOVER THE DESIGNER</small><strong>Visit Andrea Mancuso Studio</strong></span>
+        <b>↗</b>
+      </a>
+    </div>
+  </dialog>
 `;
 
 const els = {
@@ -245,6 +322,7 @@ const els = {
   timeline: document.querySelector('#timeline'),
   currentTime: document.querySelector('#current-time'),
   totalTime: document.querySelector('#total-time'),
+  speed: document.querySelector('#speed'),
   loop: document.querySelector('#loop'),
   parseState: document.querySelector('#parse-state'),
   commandCount: document.querySelector('#command-count'),
@@ -262,11 +340,121 @@ const els = {
   strugglePattern: document.querySelector('#struggle-pattern'),
   previewStruggle: document.querySelector('#preview-struggle'),
   struggleDescription: document.querySelector('#struggle-description'),
+  openArms: document.querySelector('#extend-all'),
   nextFive: document.querySelector('#next-five'),
   nextHour: document.querySelector('#next-hour'),
-  openArms: document.querySelector('#open-arms'),
   clockMode: document.querySelector('#clock-mode'),
+  creditsOpen: document.querySelector('#credits-open'),
+  creditsClose: document.querySelector('#credits-close'),
+  creditsDialog: document.querySelector('#credits-dialog'),
+  mobileBackdrop: document.querySelector('.mobile-sheet-backdrop'),
+  mobileDock: document.querySelector('.mobile-dock'),
+  topbar: document.querySelector('.topbar'),
+  viewportShell: document.querySelector('.viewport-shell'),
 };
+
+els.creditsOpen.addEventListener('click', () => els.creditsDialog.showModal());
+els.creditsClose.addEventListener('click', () => els.creditsDialog.close());
+els.creditsDialog.addEventListener('click', event => {
+  if (event.target === els.creditsDialog) els.creditsDialog.close();
+});
+
+const mobileLayoutQuery = window.matchMedia('(max-width: 979px), (max-height: 520px) and (pointer: coarse)');
+const mobileSheets = new Map(
+  [...document.querySelectorAll('.mobile-sheet')].map(item => [item.dataset.mobileSheet, item]),
+);
+const mobileDockButtons = [...document.querySelectorAll('[data-mobile-open]')];
+let activeMobileSheet = '';
+let activeMobileTrigger = null;
+let creditsMobileTrigger = null;
+
+function setMobileBackgroundInert(inert) {
+  [els.topbar, els.viewportShell, els.mobileDock].forEach(item => {
+    item.inert = inert;
+    if (inert) item.setAttribute('inert', '');
+    else item.removeAttribute('inert');
+  });
+}
+
+function closeMobileSheet({ restoreFocus = true } = {}) {
+  const trigger = activeMobileTrigger;
+  mobileSheets.forEach(item => {
+    item.classList.remove('is-mobile-open');
+    item.removeAttribute('role');
+    item.removeAttribute('aria-modal');
+    if (mobileLayoutQuery.matches) item.setAttribute('aria-hidden', 'true');
+    else item.removeAttribute('aria-hidden');
+  });
+  mobileDockButtons.forEach(button => button.setAttribute('aria-expanded', 'false'));
+  setMobileBackgroundInert(false);
+  document.body.classList.remove('mobile-sheet-active');
+  els.mobileBackdrop.setAttribute('aria-hidden', 'true');
+  activeMobileSheet = '';
+  activeMobileTrigger = null;
+  if (restoreFocus && trigger && mobileLayoutQuery.matches) trigger.focus({ preventScroll: true });
+}
+
+function openMobileSheet(name, trigger) {
+  if (name === 'about') {
+    closeMobileSheet({ restoreFocus: false });
+    creditsMobileTrigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
+    els.creditsDialog.showModal();
+    return;
+  }
+  if (activeMobileSheet === name) {
+    closeMobileSheet();
+    return;
+  }
+  closeMobileSheet({ restoreFocus: false });
+  const target = mobileSheets.get(name);
+  if (!target) return;
+  activeMobileSheet = name;
+  activeMobileTrigger = trigger;
+  target.classList.add('is-mobile-open');
+  target.removeAttribute('aria-hidden');
+  target.setAttribute('role', 'dialog');
+  target.setAttribute('aria-modal', 'true');
+  trigger.setAttribute('aria-expanded', 'true');
+  setMobileBackgroundInert(true);
+  document.body.classList.add('mobile-sheet-active');
+  els.mobileBackdrop.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => target.querySelector('.mobile-sheet-close')?.focus({ preventScroll: true }));
+}
+
+mobileDockButtons.forEach(button => {
+  button.addEventListener('click', () => openMobileSheet(button.dataset.mobileOpen, button));
+});
+els.creditsDialog.addEventListener('close', () => {
+  if (!creditsMobileTrigger) return;
+  const trigger = creditsMobileTrigger;
+  creditsMobileTrigger = null;
+  trigger.setAttribute('aria-expanded', 'false');
+  if (mobileLayoutQuery.matches) trigger.focus({ preventScroll: true });
+});
+document.querySelectorAll('.mobile-sheet-close').forEach(button => button.addEventListener('click', () => closeMobileSheet()));
+els.mobileBackdrop.addEventListener('click', () => closeMobileSheet());
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && activeMobileSheet) {
+    closeMobileSheet();
+    return;
+  }
+  if (event.key !== 'Tab' || !activeMobileSheet) return;
+  const target = mobileSheets.get(activeMobileSheet);
+  const focusable = [...target.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+    .filter(item => item.getClientRects().length > 0);
+  if (!focusable.length) return;
+  const currentIndex = focusable.indexOf(document.activeElement);
+  const nextIndex = event.shiftKey
+    ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+    : (currentIndex < 0 || currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+  event.preventDefault();
+  focusable[nextIndex].focus({ preventScroll: true });
+});
+mobileLayoutQuery.addEventListener('change', event => {
+  closeMobileSheet({ restoreFocus: false });
+});
+closeMobileSheet({ restoreFocus: false });
 
 function armMarkup(axis, index) {
   const rotation = index * 30 - 90;
@@ -302,12 +490,13 @@ document.querySelector('#side-fingers').innerHTML = AXES.map((axis, index) => `
     <circle class="side-tip" cx="125" cy="126" r="4" />
   </g>
 `).join('');
+const ARM_CLOCK_LABELS = ['12', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
 els.monitor.innerHTML = AXES.map((axis, i) => `
-  <div class="axis-row" data-axis-row="${axis}">
-    <span><b>${String(i + 1).padStart(2, '0')}</b>${axis}</span>
-    <div><i></i></div>
-    <output>0</output>
-  </div>
+  <label class="axis-row" data-axis-row="${axis}">
+    <span class="axis-id"><b>${axis}</b><small>${ARM_CLOCK_LABELS[i]} O'CLOCK</small></span>
+    <input class="axis-slider" data-axis-index="${i}" type="range" min="0" max="100" step="1" value="0" aria-label="Arm ${axis}, ${ARM_CLOCK_LABELS[i]} o'clock, stroke in percent" />
+    <span class="axis-value"><input class="axis-number" data-axis-index="${i}" type="number" min="0" max="100" step="1" value="0" aria-label="Arm ${axis} stroke in percent" /><small>%</small></span>
+  </label>
 `).join('');
 
 const armElements = AXES.map(axis => {
@@ -367,6 +556,27 @@ function mechanismPoint3D(point, stroke) {
   return new THREE.Vector3(mapped.radial, 0, mapped.depth);
 }
 
+function createDialNumber(label) {
+  const geometry = new TextGeometry(label, {
+    font: DIAL_FONT,
+    size: 24,
+    depth: 2.2,
+    curveSegments: 8,
+    bevelEnabled: true,
+    bevelThickness: 0.42,
+    bevelSize: 0.28,
+    bevelSegments: 3,
+  });
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  geometry.translate(
+    -(bounds.min.x + bounds.max.x) / 2,
+    -(bounds.min.y + bounds.max.y) / 2,
+    0,
+  );
+  return new THREE.Mesh(geometry, DIAL_NUMBER_MATERIAL);
+}
+
 function initThreeView() {
   const renderer = new THREE.WebGLRenderer({ canvas: els.canvas3d, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -375,16 +585,22 @@ function initThreeView() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(37, 1, 1, 1400);
-  camera.position.set(0, 0, 650);
+  const camera = new THREE.PerspectiveCamera(37, 1, 1, 2400);
+  camera.position.set(0, 0, 720);
   camera.lookAt(0, 0, 0);
 
   const controls = new OrbitControls(camera, els.canvas3d);
   controls.enableDamping = true;
   controls.dampingFactor = 0.07;
   controls.minDistance = 260;
-  controls.maxDistance = 850;
+  controls.maxDistance = 1800;
   controls.target.set(0, 0, 0);
+  const publishCameraDistance = () => {
+    els.canvas3d.dataset.cameraDistance = camera.position.distanceTo(controls.target).toFixed(2);
+  };
+  controls.addEventListener('change', publishCameraDistance);
+  let responsiveMode = null;
+  let responsiveWidth = null;
 
   scene.add(new THREE.HemisphereLight(0xf7f7f1, 0x27302e, 2.1));
   const keyLight = new THREE.DirectionalLight(0xffffff, 4.5);
@@ -409,6 +625,17 @@ function initThreeView() {
   );
   scene.add(ring);
 
+  const dialRadius = 225;
+  AXES.forEach((axis, index) => {
+    const label = index === 0 ? '12' : String(index);
+    const angle = Math.PI / 2 - index * Math.PI / 6;
+    const number = createDialNumber(label);
+    number.name = `dial-number-${label}`;
+    number.position.set(Math.cos(angle) * dialRadius, Math.sin(angle) * dialRadius, -13.4);
+    number.userData.axis = axis;
+    scene.add(number);
+  });
+
   const hub = new THREE.Mesh(
     new THREE.CylinderGeometry(51, 51, 24, 48),
     new THREE.MeshStandardMaterial({ color: 0x3c4543, metalness: 0.92, roughness: 0.17 }),
@@ -420,7 +647,7 @@ function initThreeView() {
 
   const mechanisms = AXES.map((axis, index) => {
     const mechanism = createThreeMechanism();
-    // Clock axes advance clockwise: A=12, D=3, G=6, J=9.
+    // Clock axes advance clockwise: A=12, D=3, I=6, L=9.
     mechanism.group.rotation.z = Math.PI / 2 - index * Math.PI / 6;
     mechanism.group.userData.axis = axis;
     scene.add(mechanism.group);
@@ -433,8 +660,29 @@ function initThreeView() {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+
+    const mobileLayout = mobileLayoutQuery.matches;
+    const nextMode = mobileLayout ? `mobile-${width >= height ? 'landscape' : 'portrait'}` : 'desktop';
+    // Width changes need a new fit; browser-chrome height changes must not reset orbit/zoom.
+    if (nextMode !== responsiveMode || (mobileLayout && width !== responsiveWidth)) {
+      responsiveMode = nextMode;
+      responsiveWidth = width;
+      let distance = 720;
+      if (mobileLayout) {
+        const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+        const limitingAspect = Math.min(1, camera.aspect);
+        const fitDistance = (300 / (Math.tan(verticalFov / 2) * limitingAspect)) * 1.08;
+        distance = Math.max(720, fitDistance);
+      }
+      controls.target.set(0, 0, 0);
+      camera.position.set(0, 0, distance);
+      controls.update();
+    }
+    publishCameraDistance();
   };
-  new ResizeObserver(resize).observe(els.stage);
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(els.stage);
+  mobileLayoutQuery.addEventListener('change', resize);
   resize();
 
   const animate = () => {
@@ -461,14 +709,6 @@ function renderThreeArms(values, leadIndex) {
     mechanism.materials.jointMaterial.color.setHex(active ? 0xff8a54 : 0xd9ff59);
   });
 }
-
-document.querySelectorAll('.view-switch button').forEach(button => {
-  button.addEventListener('click', () => {
-    const view = button.dataset.view;
-    els.stage.classList.toggle('view-3d', view === '3d');
-    document.querySelectorAll('.view-switch button').forEach(item => item.classList.toggle('active', item === button));
-  });
-});
 
 function stripComments(line) {
   return line.replace(/\([^)]*\)/g, '').replace(/;.*$/, '').trim();
@@ -654,10 +894,13 @@ function actuatorKinematics(value) {
   return { angle, sliderX: targetSlider, hingeX, hingeY, attachRadius };
 }
 
+let displayedValues = Array(12).fill(0);
+
 function renderArms(values) {
+  displayedValues = values.map(value => Math.max(0, Math.min(100, Number(value) || 0)));
   let maxValue = -1;
   let maxIndex = 0;
-  values.forEach((value, index) => {
+  displayedValues.forEach((value, index) => {
     const pose = cadPose(value);
     const foldAngle = outputFoldAngle(pose);
     const openFactor = Math.pow(Math.max(0, Math.cos(foldAngle)), 0.72);
@@ -696,12 +939,14 @@ function renderArms(values) {
     root.style.setProperty('--extension', value.toFixed(2));
     root.classList.toggle('reaching', value > 55);
     root.style.opacity = 0.7 + value * 0.003;
-    monitor.querySelector('i').style.width = `${value}%`;
-    monitor.querySelector('output').textContent = Math.round(value);
+    const slider = monitor.querySelector('.axis-slider');
+    const number = monitor.querySelector('.axis-number');
+    if (document.activeElement !== slider) slider.value = Math.round(value);
+    if (document.activeElement !== number) number.value = Math.round(value);
     if (value > maxValue) { maxValue = value; maxIndex = index; }
   });
-  renderThreeArms(values, maxIndex);
-  els.activeAxis.textContent = `A${String(maxIndex + 1).padStart(2, '0')}`;
+  renderThreeArms(displayedValues, maxIndex);
+  els.activeAxis.textContent = `${AXES[maxIndex]}${String(maxIndex + 1).padStart(2, '0')}`;
   armElements.forEach((arm, index) => {
     const isLead = index === maxIndex && maxValue > 12;
     arm.root.classList.toggle('lead', isLead);
@@ -709,6 +954,52 @@ function renderArms(values) {
     arm.side.classList.toggle('side-selected', index === maxIndex);
   });
 }
+
+function applyManualPose(nextValues, changedAxis = '') {
+  const initialState = [...displayedValues];
+  const values = nextValues.map(value => Math.max(0, Math.min(100, Number(value) || 0)));
+  setPlaying(false);
+  player.onComplete = null;
+  clockState.live = false;
+  clockState.struggling = false;
+  clockState.displayTime = '';
+  document.body.classList.remove('is-struggling');
+  document.querySelectorAll('.preset').forEach(button => button.classList.remove('active'));
+  els.editor.value = `; TIMIAC / MANUAL ARM POSE\n; Linear actuator stroke in percent of the physical 50 mm stroke. 0 = folded, 100 = extended.\nG90\nG1 ${AXES.map((axis, index) => `${axis}${Math.round(values[index])}`).join(' ')} F900`;
+  els.sequenceName.textContent = changedAxis ? `MANUAL POSE / ARM ${changedAxis}` : 'MANUAL ARM POSE';
+  els.fileName.textContent = 'manual-pose.gcode';
+  els.clockMode.textContent = 'MANUAL CONTROL · LIVE TIME PAUSED';
+  els.loop.checked = false;
+  rebuildProgram({ initialState });
+  player.position = player.parsed.duration;
+  renderPosition();
+}
+
+els.monitor.addEventListener('input', event => {
+  if (!event.target.matches('.axis-slider, .axis-number') || event.target.value === '') return;
+  const value = Number(event.target.value);
+  if (!Number.isFinite(value)) return;
+  const index = Number(event.target.dataset.axisIndex);
+  const next = [...displayedValues];
+  next[index] = value;
+  applyManualPose(next, AXES[index]);
+});
+
+function normalizeManualNumber(event) {
+  if (!event.target.matches('.axis-number')) return;
+  const index = Number(event.target.dataset.axisIndex);
+  // Rendering preserves focused text; commits restore the actual pose, even after an empty edit.
+  const value = String(Math.round(displayedValues[index]));
+  event.target.value = value;
+  armElements[index].monitor.querySelector('.axis-slider').value = value;
+}
+
+els.monitor.addEventListener('change', normalizeManualNumber);
+els.monitor.addEventListener('focusout', normalizeManualNumber);
+
+document.querySelector('#fold-all').addEventListener('click', () => applyManualPose(Array(12).fill(0)));
+document.querySelector('#half-all').addEventListener('click', () => applyManualPose(Array(12).fill(50)));
+document.querySelector('#extend-all').addEventListener('click', () => applyManualPose(Array(12).fill(100)));
 
 function formatTime(seconds) {
   const minutes = Math.floor(seconds / 60);
@@ -728,12 +1019,16 @@ function updateActiveLine(line) {
   els.activeLineMarker.style.transform = `translateY(${top}px)`;
 }
 
+function playbackSpeed() {
+  return FIXED_SPEED * (Number(els.speed.value) || 1);
+}
+
 function renderPosition() {
   const { values, segment } = stateAt(player.position);
   renderArms(values);
   const duration = player.parsed.duration || 0;
   els.timeline.value = duration ? Math.round(player.position / duration * 1000) : 0;
-  els.currentTime.textContent = formatTime(player.position / FIXED_SPEED);
+  els.currentTime.textContent = formatTime(player.position / playbackSpeed());
   els.lineNumber.textContent = segment ? String(segment.line).padStart(2, '0') : '—';
   els.feedRate.textContent = segment ? `${Math.round(segment.feed)}` : '—';
   updateActiveLine(segment?.line);
@@ -757,7 +1052,7 @@ function tick(now) {
   if (!player.playing) return;
   const delta = Math.min(0.08, (now - player.lastFrame) / 1000);
   player.lastFrame = now;
-  player.position += delta * FIXED_SPEED;
+  player.position += delta * playbackSpeed();
   let completed = false;
   if (player.position >= player.parsed.duration) {
     if (els.loop.checked && player.parsed.duration > 0) {
@@ -788,7 +1083,7 @@ function rebuildProgram({ reset = true, initialState = null } = {}) {
   els.parseState.textContent = player.parsed.errors.length ? player.parsed.errors[0] : 'VALID PROGRAM';
   els.parseState.parentElement.classList.toggle('has-error', player.parsed.errors.length > 0);
   els.commandCount.textContent = String(player.parsed.segments.length).padStart(2, '0');
-  els.totalTime.textContent = formatTime(player.parsed.duration / FIXED_SPEED);
+  els.totalTime.textContent = formatTime(player.parsed.duration / playbackSpeed());
   updateLineNumbers();
   renderPosition();
   if (wasPlaying && player.parsed.segments.length) setPlaying(true);
@@ -991,6 +1286,11 @@ els.step.addEventListener('click', () => {
   renderPosition();
 });
 
+els.speed.addEventListener('change', () => {
+  els.totalTime.textContent = formatTime(player.parsed.duration / playbackSpeed());
+  renderPosition();
+});
+
 els.timeline.addEventListener('input', () => {
   player.position = Number(els.timeline.value) / 1000 * player.parsed.duration;
   renderPosition();
@@ -1014,7 +1314,8 @@ els.editor.addEventListener('scroll', () => {
   updateActiveLine(segment?.line);
 });
 els.editor.addEventListener('keydown', event => {
-  if (event.key === 'Tab') {
+  const mobileDialogNavigation = mobileLayoutQuery.matches && activeMobileSheet === 'code';
+  if (event.key === 'Tab' && !mobileDialogNavigation) {
     event.preventDefault();
     const start = els.editor.selectionStart;
     els.editor.setRangeText('  ', start, els.editor.selectionEnd, 'end');
@@ -1039,7 +1340,10 @@ els.strugglePattern.addEventListener('change', () => {
 });
 els.nextFive.addEventListener('click', () => stepClock({ nextFive: true }));
 els.nextHour.addEventListener('click', () => stepClock({ hours: 1, runHourMovement: true }));
-els.openArms.addEventListener('click', openArms);
+
+document.querySelector('#quick-live-clock').addEventListener('click', () => els.liveClock.click());
+document.querySelector('#quick-next-hour').addEventListener('click', () => els.nextHour.click());
+document.querySelector('#quick-next-five').addEventListener('click', () => els.nextFive.click());
 
 document.querySelector('#copy-code').addEventListener('click', async event => {
   await navigator.clipboard.writeText(els.editor.value);
@@ -1058,13 +1362,14 @@ document.querySelector('#download-code').addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', event => {
+  if (activeMobileSheet || els.creditsDialog.open) return;
   if (event.target.matches('textarea, input, select')) return;
   if (event.code === 'Space') {
     event.preventDefault();
     els.play.click();
   }
   if (event.key.toLowerCase() === 'r') els.stop.click();
-  if (event.key.toLowerCase() === 's') startStruggle();
+  if (event.key.toLowerCase() === 's' && !els.struggle.hidden) startStruggle();
   if (event.key === '5') els.nextFive.click();
   if (event.key.toLowerCase() === 'h') els.nextHour.click();
   if (event.key === 'Home') { event.preventDefault(); els.openArms.click(); }

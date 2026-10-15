@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 4000",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4000"
+    "preview": "vite preview --host 0.0.0.0 --port 4000",
+    "test:motion": "node --test ../tests/simulator-motion.test.mjs ../tests/simulator-shell.test.mjs",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "three": "^0.178.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "vite": "^7.0.4"
   }
 }
