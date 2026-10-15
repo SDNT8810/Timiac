@@ -43,28 +43,29 @@ int main(int argc, char** argv) {
   assert(!clockHourDue(-1, 120)); // Startup/resume establishes a pose first.
   assert(!clockHourDue(120, 120) && !clockHourDue(120, 125));
   assert(!clockHourDue(120, 119) && !clockHourDue(115, 240));
-  assert(sonarMillimetres(0) == -1);
-  assert(sonarMillimetres(1159) == -2);
-  assert(sonarMillimetres(1160) == 200);
-  assert(sonarMillimetres(2900) == 500);
-  assert(sonarMillimetres(46401) == -2);
   ProximityGate gate;
-  for (int i = 0; i < 20; ++i) assert(!gate.sample(300, true)); // No approach at boot.
-  assert(!gate.sample(700, true)); assert(!gate.sample(700, true)); assert(!gate.armed);
-  assert(!gate.sample(700, true)); assert(gate.armed);
-  assert(!gate.sample(300, true)); assert(!gate.sample(-2, true)); // Reject a noisy echo.
-  assert(!gate.sample(499, true)); assert(!gate.sample(499, true)); assert(gate.sample(499, true));
-  for (int i = 0; i < 20; ++i) assert(!gate.sample(300, true)); // Held hand does not repeat.
-  for (int i = 0; i < 20; ++i) assert(!gate.sample(550, true)); // Hysteresis.
+  for (unsigned now = 0; now < 2000; now += 20) assert(!gate.sample(true, true, now)); // No boot trigger, even unplugged/HIGH.
   assert(!gate.armed);
-  for (int i = 0; i < 9; ++i) assert(!gate.sample(-1, true));
-  assert(!gate.armed); assert(!gate.sample(-1, true)); assert(gate.armed);
-  for (int i = 0; i < 20; ++i) assert(!gate.sample(500, true)); // Strictly below 50 cm.
-  assert(!gate.sample(300, true)); assert(!gate.sample(300, true));
-  assert(!gate.sample(300, false)); assert(!gate.armed); // Work/fault cancels pending gesture.
-  for (int i = 0; i < 20; ++i) assert(!gate.sample(300, true));
-  for (int i = 0; i < 3; ++i) assert(!gate.sample(650, true));
-  assert(!gate.sample(200, true)); assert(!gate.sample(200, true)); assert(gate.sample(200, true));
+  assert(!gate.sample(false, true, 2000));
+  assert(!gate.sample(false, true, 2499)); assert(!gate.armed);
+  assert(!gate.sample(false, true, 2500)); assert(gate.armed);
+  assert(!gate.sample(true, true, 2520)); assert(!gate.sample(true, true, 2719));
+  assert(gate.sample(true, true, 2720));
+  for (unsigned now = 2740; now < 4000; now += 20) assert(!gate.sample(true, true, now)); // Held hand cannot repeat.
+  assert(!gate.sample(false, true, 4000)); assert(!gate.sample(false, true, 4500)); assert(gate.armed);
+  assert(!gate.sample(true, true, 4520));
+  assert(!gate.sample(false, true, 4600)); // A short electrical/optical glitch does not trigger.
+  assert(!gate.sample(true, true, 4620)); assert(!gate.sample(true, true, 4819));
+  assert(gate.sample(true, true, 4820));
+  assert(!gate.sample(false, true, 5000)); assert(!gate.sample(false, true, 5500)); assert(gate.armed);
+  assert(!gate.sample(true, true, 5520)); assert(!gate.sample(true, false, 5600)); // Busy/Stop discards pending detection.
+  assert(!gate.armed);
+  for (unsigned now = 5620; now < 7000; now += 20) assert(!gate.sample(true, true, now));
+  gate.reset();
+  assert(!gate.sample(false, true, 0xfffffff0U));
+  assert(!gate.sample(false, true, 0xfffffff0U + 500U)); assert(gate.armed); // millis wrap.
+  assert(!gate.sample(true, true, 0xfffffff0U + 520U));
+  assert(gate.sample(true, true, 0xfffffff0U + 720U));
   for (Preset preset : {Preset::Struggle, Preset::Hour, Preset::Curious}) {
     unsigned moves = 0, dwells = 0;
     float positions[12] = {};

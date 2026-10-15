@@ -1,4 +1,9 @@
-# Motion package - 2026-10-15.2
+# Master package - 2026-10-15.3
+
+The master now uses a Heschen E3F-DS30B2 NPN NC hand sensor on GPIO27 with the
+three-resistor 24 V interface. Preserve the existing 3.3 V converter and leave
+the old GPIO18/19 PCB traces unused. See [the complete master wiring](master-wiring.md).
+Only the master needs flashing for this sensor change; the motion behavior below is unchanged.
 
 Running and microswitch homing current is 1,000 mA RMS on all twelve motors.
 Holding current remains 50% (approximately 500 mA). Struggle retains 20 mm/s²

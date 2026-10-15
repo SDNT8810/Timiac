@@ -1,4 +1,4 @@
-**Updated animations (2026-10-15.2):** Next Hour runs 30% slower and opens all arms, then closes directly into the selected time. Struggle moves all arms to 30 mm open, then 10 mm, then 30 mm, and closes directly into the current time. The simulator uses the same movements. Only the master needs flashing for this update; current remains 1,000 mA RMS.
+**Current master (2026-10-15.3):** the hand input now uses the Heschen NPN NC infrared switch on GPIO27 through a three-resistor 24 V interface. Existing GPIO18/19 traces remain unused. See the [complete master wiring diagram](Docs/master-wiring.md). Animations remain 30/10/30 mm then time for Struggle, and 30% slower open-then-time for Next Hour. Only the master needs flashing; current remains 1,000 mA RMS.
 
 
 # Timiac: twelve motors, three ESP modules
@@ -426,34 +426,30 @@ Flashing either mode replaces the master's web filesystem and stored program
 file. The RTC and the two bridge/Octopus firmwares do not need reflashing when
 switching dashboard modes.
 
-## Hand proximity: AJ-SR04M
+## Hand proximity: Heschen E3F-DS30B2 NPN NC
 
-In both master modes, an approaching hand at **20-49 cm** starts
-`Simulator/gcodes/curious-creature.gcode`, with the same twelve-axis mapping,
-50 mm stroke scaling and hardware feed limits as the other animations.
-The converted manual example is `gcodes/curious-creature.gcode`.
+The new infrared switch uses **GPIO27** through a **4.7 kΩ / 68 kΩ / 10 kΩ**
+interface for the existing regulated 24 V supply. Keep the current 24 V → 3.3 V
+converter for the ESP32 and RTC. Brown sensor wire goes to 24 V, blue to common
+ground, and black to the resistor interface. Never connect black directly to
+GPIO27. Old ultrasonic GPIO18/19 PCB traces stay unused. See the complete
+[diagram, wire table and voltage checks](Docs/master-wiring.md).
 
-Both dashboards show **Hand distance** in centimetres below the clock,
-refreshing about once per second, including before homing and during movement.
-Readings below 50 cm show **Near**; others show **Clear**. Missing or invalid
-readings show **No valid echo**, and disconnecting clears the displayed value.
+This is an on/off photoelectric switch, not LiDAR. Its advertised sensing
+range is adjustable around 10–30 cm, but it has no software beam-angle control
+or measured-distance output. Both dashboards show **Detected / Clear** instead
+of centimetres. Check the optical path and sensitivity with an actual hand.
 
-Use **GPIO18 for TRIG/RX**, **GPIO19 for ECHO/TX**, **3V3 for VCC**, and **GND**.
-The sensor must use **Mode 1 (R19 open)**. For the RTC, SDA remains **GPIO21**
-and SCL remains **GPIO22**. See the full [wiring guide](Docs/wiring.md), including
-the ECHO level divider required if the ultrasonic module is powered from 5 V.
+After homing, clear the sensor for 500 ms, then present a hand for 200 ms to run
+`curious-creature.gcode` once. Withdrawing the hand after completion rearms it.
+Motion, Stop, faults and missing motor boards discard pending gestures. In
+release mode, gestures require the clock to be running; manual Home keeps it
+parked. Dev mode also supports gestures when idle/homed. The sensor does not
+recognize gesture direction or shape, and NC wire/power failure can mimic a hand.
 
-Home all axes, clear the sensor beyond 60 cm (or wait about 1.2 seconds with no
-echo), then bring the hand within 50 cm. Three consecutive near readings trigger
-one animation. It needs no phone or RTC. Withdraw the hand after completion
-before triggering again; an object held close does not repeatedly start it.
-Gestures during other movement or a fault are ignored. Stop remains available.
-The AJ-SR04M's documented 20 cm blind zone means sensing closer than 20 cm
-cannot be relied on.
-
-Automatic gestures are enabled in dev, and while the release clock is running. Configure
-`TIMIAC_PROXIMITY_ENABLED`, `TIMIAC_SONAR_TRIG`, and `TIMIAC_SONAR_ECHO` in
-`ESP_Timiac/include/config.local.h` and rebuild to override these defaults.
+The defaults are `TIMIAC_PROXIMITY_ENABLED=1`, `TIMIAC_PROXIMITY_PIN=27`, and
+`TIMIAC_PROXIMITY_ACTIVE_HIGH=1`. The divider requires an ordinary GPIO input
+without an internal pull-up. Rebuild after changing configuration.
 
 ## Prepare an Octopus card
 

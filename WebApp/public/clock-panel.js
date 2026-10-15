@@ -8,11 +8,16 @@ export function clockActionNeedsRtc(action, state) {
 }
 export function renderClockReadouts(state, connected, element) {
   const sensor = state?.proximity;
+  const digital = sensor?.type === 'photoelectric';
   const hasDistance = connected && sensor?.enabled && Number.isFinite(sensor.distanceCm) && sensor.distanceCm >= 0;
-  const near = hasDistance && sensor.distanceCm < (sensor.thresholdCm ?? 50);
-  element('sensor-distance').textContent = hasDistance ? `${sensor.distanceCm.toFixed(1)} cm` : '—';
+  const hasPresence = connected && sensor?.enabled && typeof sensor.detected === 'boolean';
+  const near = digital ? hasPresence && sensor.detected : hasDistance && sensor.distanceCm < (sensor.thresholdCm ?? 50);
+  element('sensor-distance').textContent = digital ? hasPresence ? sensor.detected ? 'Detected' : 'Clear' : '—'
+    : hasDistance ? `${sensor.distanceCm.toFixed(1)} cm` : '—';
   element('sensor-distance').classList.toggle('near', Boolean(near));
-  element('sensor-status').textContent = !connected ? 'Disconnected' : !sensor?.enabled ? 'Disabled' : !hasDistance ? 'No valid echo' : near ? 'Near' : 'Clear';
+  element('sensor-status').textContent = !connected ? 'Disconnected' : !sensor?.enabled ? 'Disabled'
+    : digital ? !hasPresence ? 'Waiting for input' : near ? 'Withdraw hand' : sensor.armed ? 'Armed' : sensor.ready ? 'Clearing…' : 'Gesture paused'
+    : !hasDistance ? 'No valid echo' : near ? 'Near' : 'Clear';
   const time = connected && state?.clock?.valid ? state.clock.localTime : '';
   element('clock').textContent = time ? time.slice(11) : '--:--:--';
   element('date').textContent = time ? new Date(time).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'Clock time unavailable';

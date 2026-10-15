@@ -16,6 +16,7 @@
 #include "../shared/endstops.h"
 #include "../shared/driver_report.h"
 #include "../shared/presets.h"
+#include "../shared/proximity.h"
 WiFiServer listener;
 #include "../ESP_Timiac/src/runtime.h"
 struct Preferences {
@@ -37,6 +38,11 @@ struct TestRtc {
   unsigned minute() const { return m; }
 } rtcTime;
 #include "../ESP_Timiac/src/release_clock.h"
+constexpr unsigned INPUT = 0, HIGH = 1;
+unsigned photoelectricLevel = HIGH;
+void pinMode(unsigned pin, unsigned mode) { assert(pin == 27 && mode == INPUT); }
+unsigned digitalRead(unsigned pin) { assert(pin == 27); return photoelectricLevel; }
+#include "../ESP_Timiac/src/proximity_sensor.h"
 
 void resetMaster() {
   hostNow = 1000; bootId = "master-boot"; stopToken = stopReason = systemFault = "";
@@ -46,6 +52,7 @@ void resetMaster() {
   releaseStartupPending = TIMIAC_MASTER && TIMIAC_RELEASE;
   motionSpeedPercent = timiac::defaultSpeedPercent;
   rtcValid = true; rtcTime.h = 13; rtcTime.m = 45;
+  configureProximity(); proximityTriggers = 0; photoelectricLevel = HIGH;
   for (auto& r : receipts) r = Receipt();
   for (unsigned b = 0; b < 2; ++b) { peers[b] = Peer(); boards[b] = RemoteBoard(); lastBoardBoot[b] = ""; }
 }
@@ -600,5 +607,46 @@ int main() {
   connectBoard(0); assert(!boardsHealthy(1));
   hostNow += 251; networkTick(); assert(lastType(0) == "stop");
   boards[0].stopAck = stopToken; report(0, "idle"); assert(boardsHealthy(1));
-  std::cout << "Production coordinator: independent boards, coordinated jobs, fault isolation, Stop and no replay passed\n";
+  // Exercise the production GPIO adapter and gesture path, not just the gate.
+  // The old ultrasonic pins must never be configured/read by this driver.
+  resetMaster(); connectBoard(0); connectBoard(1);
+  releaseStartupPending = false; releaseClockEnabled = true;
+  for (auto& board : boards) board.homed = 63;
+  auto sensorFor = [&](unsigned level, unsigned duration) {
+    photoelectricLevel = level;
+    for (unsigned elapsed = 0; elapsed < duration; elapsed += 20) {
+      hostNow += 20;
+      for (unsigned b = 0; b < 2; ++b) { boards[b].stateAt = hostNow; peers[b].rx = hostNow; }
+      proximityTick();
+    }
+  };
+  sensorFor(HIGH, 600); assert(!proximityTriggers && !proximityGate.armed); // Held at boot / unconnected.
+  sensorFor(0, 600); assert(proximityGate.armed);
+  {
+    DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
+    assert(status["type"] == "photoelectric" && status["pin"] == 27);
+    assert(status["detected"] == false && status["rawHigh"] == false && status["distanceCm"].isNull());
+  }
+  sensorFor(HIGH, 180); assert(!proximityTriggers);
+  sensorFor(HIGH, 60); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Curious);
+  sensorFor(HIGH, 600); assert(proximityTriggers == 1 && !proximityGate.armed);
+  program = Program(); operation = Operation();
+  sensorFor(HIGH, 600); assert(proximityTriggers == 1); // No replay after movement.
+  sensorFor(0, 600); assert(proximityGate.armed);
+  stopRequested = true; sensorFor(HIGH, 300); assert(proximityTriggers == 1 && !proximityGate.armed);
+  stopRequested = false; sensorFor(HIGH, 300); assert(proximityTriggers == 1);
+  boards[0].homed = 0; sensorFor(0, 600); assert(!proximityGate.armed);
+  {
+    DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
+    assert(status["detected"] == false && status["ready"] == false); // Still visible before home.
+    hostNow += 1001; status.clear(); writeProximityStatus(status.to<JsonObject>());
+    assert(status["detected"].isNull()); // Stale samples do not look current.
+  }
+  boards[0].homed = 63; sensorFor(0, 600); assert(proximityGate.armed);
+  hostNow += 1000; sensorFor(HIGH, 20); assert(!proximityGate.armed && proximityTriggers == 1);
+  sensorFor(HIGH, 300); assert(proximityTriggers == 1); // Long sampling gap discards pending eligibility.
+#if TIMIAC_RELEASE
+  releaseClockEnabled = false; sensorFor(0, 600); assert(!proximityGate.armed); // Manual Home/paused clock.
+#endif
+  std::cout << "Production coordinator: independent boards, jobs, Stop, and photoelectric GPIO/gesture checks passed\n";
 }

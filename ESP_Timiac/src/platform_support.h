@@ -1,6 +1,7 @@
 #pragma once
 
-// Master uses I2C for the DS3231 and GPIO18/19 for optional AJ-SR04M sensing.
+// Master uses I2C for the DS3231 and GPIO27 for the divided photoelectric input.
+// Existing ultrasonic PCB traces on GPIO18/19 are left unused.
 // It has no Octopus UART connection.
 // ESP-12S bridges alone initialize the Octopus control UART.
 #if TIMIAC_MASTER && !defined(ARDUINO_ARCH_ESP32)

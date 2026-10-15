@@ -18,11 +18,12 @@
 #ifndef TIMIAC_PROXIMITY_ENABLED
 #define TIMIAC_PROXIMITY_ENABLED 1
 #endif
-#ifndef TIMIAC_SONAR_TRIG
-#define TIMIAC_SONAR_TRIG 18
+#ifndef TIMIAC_PROXIMITY_PIN
+#define TIMIAC_PROXIMITY_PIN 27
 #endif
-#ifndef TIMIAC_SONAR_ECHO
-#define TIMIAC_SONAR_ECHO 19
+// NPN NC through the documented 24 V resistor interface: clear LOW, detected HIGH.
+#ifndef TIMIAC_PROXIMITY_ACTIVE_HIGH
+#define TIMIAC_PROXIMITY_ACTIVE_HIGH 1
 #endif
 #ifndef TIMIAC_WIFI_SSID
 #define TIMIAC_WIFI_SSID "Timiac"
@@ -67,7 +68,7 @@
 #endif
 constexpr unsigned long kBaud = 115200;
 // Application revision is separate from the hardware identity shared with Marlin.
-constexpr char kSoftwareRevision[] = "2026-10-15.2";
+constexpr char kSoftwareRevision[] = "2026-10-15.3";
 // Checked against the compiled animation call chains before exporting a master.
 constexpr unsigned kMasterLoopStackBytes = 8192;
 // Wi-Fi/serial telemetry can be delayed while every axis is homing. These are

@@ -205,7 +205,7 @@ test('release page exposes clock controls without development actions', async ()
 
 test('hand distance stays visible before homing and during animation, and clears on lost connection', async () => {
   const { context, element, state } = dashboard(); await flush();
-  state.proximity = { enabled: true, armed: true, distanceCm: 73.2 };
+  state.proximity = { enabled: true, ready: true, armed: true, distanceCm: 73.2 };
   vm.runInContext('render()', context);
   assert.equal(element('sensor-distance').textContent, '73.2 cm');
   assert.equal(element('sensor-status').textContent, 'Clear');
@@ -225,6 +225,26 @@ test('hand distance stays visible before homing and during animation, and clears
   assert.equal(element('sensor-distance').textContent, '34.5 cm');
   assert.equal(element('sensor-status').textContent, 'Near');
   assert.equal(element('home').disabled, true); assert.equal(element('stop').disabled, false);
+  vm.runInContext('connected = false; render()', context);
+  assert.equal(element('sensor-distance').textContent, '—');
+  assert.equal(element('sensor-status').textContent, 'Disconnected');
+});
+
+test('photoelectric sensor reports detected/clear without inventing distance, even before home or during movement', async () => {
+  const { context, element, state } = dashboard(); await flush();
+  state.proximity = { type: 'photoelectric', enabled: true, ready: true, armed: true, detected: false, distanceCm: null };
+  state.a.homed = 0; vm.runInContext('render()', context);
+  assert.equal(element('sensor-distance').textContent, 'Clear');
+  assert.equal(element('sensor-status').textContent, 'Armed');
+  state.a.homed = 63; state.program = { state: 'running', name: 'Curious creature', completed: 2, total: 18 };
+  state.proximity.detected = true; state.proximity.armed = false;
+  vm.runInContext('render()', context);
+  assert.equal(element('sensor-distance').textContent, 'Detected');
+  assert.equal(element('sensor-status').textContent, 'Withdraw hand');
+  assert.equal(element('stop').disabled, false);
+  state.proximity.detected = null; vm.runInContext('render()', context);
+  assert.equal(element('sensor-distance').textContent, '—');
+  assert.equal(element('sensor-status').textContent, 'Waiting for input');
   vm.runInContext('connected = false; render()', context);
   assert.equal(element('sensor-distance').textContent, '—');
   assert.equal(element('sensor-status').textContent, 'Disconnected');

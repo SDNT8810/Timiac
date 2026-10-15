@@ -34,7 +34,7 @@ function render(state = controller.status) {
     'Clock running. Arms follow the time every five minutes, even with this page closed.';
   $('machine-status').textContent = !connected ? 'Connection lost. Waiting for Timiac…' : state.fault || (otherOwner ? 'Another device has control. Please wait.' : moving ? 'Arms are moving…' : !state.machineReady ? 'Waiting for both motor boards…' : !homed ? 'Ready to home. Home all arms before moving.' : 'All 12 arms are ready.');
   if (connected && programBusy && !state.fault) $('machine-status').textContent = `${state.program.name || 'Movement'} · ${state.program.completed}/${state.program.total} steps`;
-  if (connected && !moving && !otherOwner && !state.fault && homed && state.machineReady && state.proximity?.enabled && !state.proximity.armed) {
+  if (connected && !moving && !otherOwner && !state.fault && homed && state.machineReady && state.proximity?.enabled && state.proximity.ready && !state.proximity.armed) {
     $('machine-status').textContent = 'All 12 arms ready. Move hand away to arm the sensor.';
   }
   renderSystemStatus(state, connected, $);

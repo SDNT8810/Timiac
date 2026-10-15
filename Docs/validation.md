@@ -1,4 +1,4 @@
-# Motion validation - 2026-10-15.2
+# Master validation - 2026-10-15.3
 
 Matched package **TIMIAC2-03b3b6e145e4**, protocol 7, trajectory capability 2.
 All twelve axes request 1,000 mA RMS for running/homing and retain 50% holding.
@@ -7,7 +7,7 @@ Validation completed:
 
 - Shared Octopus, both bridges, dev/release masters and both web filesystems
   build successfully. `python run.py verify` validates all package images.
-- 21 Python tests and 51 dashboard/control/simulator tests pass. Host firmware, both
+- 21 Python tests and 53 dashboard/control/simulator tests pass. Host firmware, both
   production coordinator modes and bridge tests pass, including a simulated
   24-hour clock cycle and all 720 homing switch orders.
 - Motion checks test Hour and Struggle from fully open, halfway and fully closed
@@ -28,6 +28,13 @@ Validation completed:
   reset, legacy current rejection and specific thermal warning/derating faults.
 - Simulator production build passes. Whitespace checks pass for this change;
   the independently edited Timiac_Prompt.md is excluded from that check.
+- GPIO27 photoelectric input is tested in both production coordinator modes:
+  held-at-boot, 500 ms clear arming, 200 ms detection, noise rejection, held-hand
+  lockout, no replay after motion/Stop, stale status and sampling gaps. GPIO18/19
+  are not configured or read. Digital dashboard tests reject fabricated distance.
+- The 24 V resistor interface and complete master diagram are documented in
+  [master-wiring.md](master-wiring.md). GPIO voltages and the optical clearance
+  still need checking on the actual PCB and sensor before commissioning.
 
 No hardware was flashed. Temperature, missed steps, torque, physical timing and
 power draw still require commissioning. Thermal protection was retained: this

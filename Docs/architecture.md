@@ -11,6 +11,13 @@ Manual release Home disables automatic tracking and proximity animations.
 Start clock explicitly resumes tracking. Power-on startup still homes and
 starts the clock without a browser. Changing speed does not resume a parked clock.
 
+The hand input is an E3F-DS30B2 NPN NC photoelectric switch on GPIO27 through
+the three-resistor divider in [master-wiring.md](master-wiring.md). GPIO18/19
+stay unused. A clear interval of 500 ms arms detection; a stable 200 ms hand
+signal starts Curious creature once. Motion, Stop and faults reset eligibility,
+and sampling gaps over 250 ms restart the clear-first requirement. Status reports
+digital presence, not distance. A single NC signal cannot diagnose a broken wire.
+
 ~~~text
 Phone(s) -- Wi-Fi --> Master ESP32 (192.168.4.1)
                          |                |

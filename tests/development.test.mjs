@@ -184,6 +184,21 @@ test('development sensor stays live while moving and clears stale data on discon
   assert.equal(actions.home.disabled, true); assert.equal(element('save-time').disabled, true);
 });
 
+test('development photoelectric readout uses presence and clears when input is stale', async () => {
+  const { context, element, state } = await dashboard();
+  state.proximity = { type: 'photoelectric', enabled: true, ready: true, armed: false, detected: true, distanceCm: null };
+  vm.runInContext('render(api.status)', context);
+  assert.equal(element('sensor-distance').textContent, 'Detected');
+  assert.equal(element('sensor-status').textContent, 'Withdraw hand');
+  state.proximity.detected = false; state.proximity.armed = true;
+  vm.runInContext('render(api.status)', context);
+  assert.equal(element('sensor-distance').textContent, 'Clear');
+  assert.equal(element('sensor-status').textContent, 'Armed');
+  state.proximity.detected = null; vm.runInContext('render(api.status)', context);
+  assert.equal(element('sensor-distance').textContent, '—');
+  assert.equal(element('sensor-status').textContent, 'Waiting for input');
+});
+
 test('development Wi-Fi setup retains control fencing', async () => {
   const { context, element, state, calls } = await dashboard();
   assert.equal(element('wifi-save').disabled, true);

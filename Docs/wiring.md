@@ -1,73 +1,44 @@
 # Twelve-motor wiring and commissioning
 
-## Master ESP32-WROOM-32: RTC and hand sensor
+## Master ESP32-WROOM-32: RTC and new infrared hand sensor
 
-These are **GPIO numbers printed on the development board**, not header positions.
-Both modules connect to the master ESP32; neither connects to an Octopus bridge.
+Use the [complete master-board diagram and instructions](master-wiring.md):
 
-| Module pin | Master ESP32 connection |
+![Master ESP32 wiring](master-wiring.svg)
+
+Keep the current **24 V to 3.3 V converter**, ESP32 and DS3231 connections.
+The new Heschen E3F-DS30B2 is **NPN normally closed**, powered from **24 V**.
+It connects to **GPIO27** through the documented **4.7 kΩ / 68 kΩ / 10 kΩ**
+resistor interface. Brown = 24 V; blue = common ground; black = resistor input.
+Only the low-voltage divider junction connects to GPIO27. Do not connect black
+straight to an ESP32 pin. Remove/unplug the old ultrasonic module and leave
+its GPIO18 and GPIO19 PCB traces unused.
+
+| Module / signal | Master ESP32 connection |
 |---|---|
-| DS3231 VCC | 3V3 |
-| DS3231 GND | GND |
+| Converter 3.3 V output | 3V3 and DS3231 VCC |
+| Converter / PSU / sensor ground | GND and DS3231 GND |
 | DS3231 SDA | GPIO21 |
 | DS3231 SCL | GPIO22 |
-| AJ-SR04M VCC | 3V3 |
-| AJ-SR04M GND | GND (shared with the master and RTC) |
-| AJ-SR04M TRIG / RX | GPIO18 |
-| AJ-SR04M ECHO / TX | GPIO19 |
+| New photoelectric resistor-divider junction | GPIO27, ordinary INPUT (no pull-up) |
+| Existing ultrasonic GPIO18/19 | Unused |
 
-GPIO18/19 are normally on the same development-board header side as GPIO2/4
-and the RTC pins. Check the printed GPIO labels because board layouts vary.
-Avoid GPIO6-11: they connect to the module's flash. GPIO2/4 also support digital
-I/O, but GPIO2 is a boot-strapping pin that must be low for serial flashing;
-GPIO18/19 avoid this restriction. See the
-[ESP32-WROOM-32 pin and boot specifications](https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32_datasheet_en.pdf).
+These are GPIO labels, not development-board header positions. Leave RTC SQW
+and 32K unconnected. The DS3231 and its I²C pull-ups remain at 3.3 V. The master
+communicates with the motor bridges over Wi-Fi; it has no Octopus UART wiring.
 
-Leave the RTC SQW and 32K pins unconnected. Fit the appropriate RTC backup battery.
-The DS3231 supports 3.3 V operation: [manufacturer datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/ds3231.pdf).
+Check the new input voltage and NC polarity before connecting the GPIO, as
+shown in [master-wiring.md](master-wiring.md). The dashboard reports
+**Detected / Clear**, not centimetres. Clear for 500 ms, then present a hand for
+200 ms to trigger Curious creature once. Motion, Stop and faults discard hand
+arrivals. A held hand cannot repeat until withdrawn. Manual release Home keeps
+the arms parked; gestures require Start clock in release mode.
 
-If the clock is unavailable, keep the RTC at 3.3 V and open
-**http://192.168.4.1/api/rtc** after flashing the latest master image. This returns
-cached diagnostics without interrupting motor control. The bus is explicitly
-configured at 100 kHz. `stage: address_probe` with `i2cCode: 2` means address
-0x68 did not acknowledge; code 5 means a timeout. `present: true` with
-`stage: register_read` means the address responded but data could not be read;
-check `expectedBytes` versus `receivedBytes`. The response also identifies the
-actual SDA/SCL GPIOs and the sampled line levels after the transaction.
-`stage: validate_time` with a lost-power message means communication works and
-the date/time must be saved from the dashboard. These diagnostics do not by
-themselves identify whether a failure is in the module, bus, or connections.
-
-Configure the **AJ-SR04M in Mode 1, with R19 open/unpopulated**, for TRIG/ECHO
-operation. The module manual specifies a 3-5.5 V supply, so use 3V3 for this direct
-connection. It also specifies a **20 cm blind zone**; present the hand roughly
-**20-49 cm** in front of the probe. See the
-[AJ-SR04M manual](https://mantech.co.za/Datasheets/Products/AJ-SR04M-200925A.pdf).
-
-If you instead power the AJ-SR04M from **5 V**, level-shift ECHO before GPIO19.
-For example: `ECHO -- 10 kOhm -- GPIO19 -- 20 kOhm -- GND` divides a 5 V
-echo to about 3.33 V. Do not connect a 5 V ECHO signal directly to the ESP32.
-The [ESP32 electrical specifications](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf)
-limit the high input level to VDD + 0.3 V.
-
-The release firmware samples every 120 ms without blocking for the echo. After
-homing and while idle, clear the sensor first: three readings at least 60 cm away,
-or ten no-echo readings (about 1.2 seconds), arm the trigger. Three consecutive
-valid readings below 50 cm then run **curious-creature.gcode** once. This detects
-proximity, not the direction or shape of a hand gesture. Very close readings in
-the blind zone and invalid echoes are ignored.
-
-Gestures during homing, another movement, a pending uploaded program, a fault,
-or a disconnected board are discarded. They are never queued to run later.
-After the animation finishes, withdraw the hand to rearm. Stop cancels it through
-the normal board-stop mechanism. No RTC is required for this animation.
-The release dashboard shows the measured distance while idle and animation
-progress while running.
-
-Automatic proximity gestures are enabled by default in `master_release` and
-disabled in `master`. Override `TIMIAC_PROXIMITY_ENABLED` with 0 or 1 in
-`ESP_Timiac/include/config.local.h` to change this. Pin overrides are
-`TIMIAC_SONAR_TRIG` and `TIMIAC_SONAR_ECHO`; rebuild after changing them.
+RTC diagnostics remain available at **http://192.168.4.1/api/rtc**. The bus uses
+100 kHz, SDA GPIO21 and SCL GPIO22. `stage: address_probe` with `i2cCode: 2`
+means address 0x68 did not acknowledge; code 5 means a timeout. A lost-power
+message after successful communication requires setting the date/time.
+See the [DS3231 manufacturer datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/ds3231.pdf).
 
 ## Per-axis commissioning baseline
 
@@ -162,9 +133,10 @@ away from its sensor. `VALIDATE_HOMING_ENDSTOPS` stops on a missed switch;
 the 5 mm backoff. Neither check can establish that the physical direction
 or wiring is correct.
 
-## Three ESP-12S modules
+## ESP32 master and two ESP-12S bridges
 
-The master has **power only**; do not wire it to either Octopus serial port.
+The master connects to power, the RTC and the hand sensor as shown above;
+do not wire it to either Octopus serial port.
 Each bridge connects only to its own Octopus:
 
 | Bridge signal | Octopus signal |
