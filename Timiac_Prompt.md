@@ -189,5 +189,27 @@ let the required cridentials be pushed to github , so i can just pull this repo 
 
 -------------------------------------------------------------
 
+do some small modifications:
 
-change of mind ! make it "current_ma": 1200,
+1- reduce "next hour" animation speed 30 percent
+
+2- change "next hour" animation like this : all arms full open, then all arms close, except the onse that are showing current time. so dont close them all then show time ! close them while its shoing time (to reduce one step and decrease overal animation time)
+right now its like this: all open, all close , then open arms that are showing time ! merge that 2 last steps
+
+3- strugle is too short. make it do that movement two time. and make it more ! for example if its moving only 20 mm per arm, make it 40 mm. and do that two time without pause ! like a smooth strugle
+
+4- update simulation so i can see this new changes in simulation too
+
+
+-------------------------------------------------------------
+
+i want to change the dictance sensor. current sensore is measuring distance with sonar sensor (sound). but there are some mechanical parts in front of sensor, so it can't capture the hand gusture. i need a narrower sensor becouse there is not enouth open space in front of the clock.
+
+can we adjust the sensore wide of veiw ? i think we cant ! i checked!
+so let's use a lida beam
+i want to use this one:
+Heschen Interruttore di prossimità fotoelettrico a infrarossi a colonna M18, tipo di riflessione diffusa, E3F-DS30B2, distanza di rilevamento 10-30CM, 10-30VDC 200mA, NPN normalmente chiuso, 3 fili https://amzn.eu/d/0bsadsaG https://amzn.eu/d/0bsadsaG
+
+i have two tasks for you:
+1- give me new diagram for master board: all wires that we connect to master-esp board
+2- update the codes acourdingly
