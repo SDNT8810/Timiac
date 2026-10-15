@@ -213,3 +213,22 @@ Heschen Interruttore di prossimità fotoelettrico a infrarossi a colonna M18, ti
 i have two tasks for you:
 1- give me new diagram for master board: all wires that we connect to master-esp board
 2- update the codes acourdingly
+
+-------------------------------------------------------------
+
+
+lets have 7 different struggle moves and pick them randomely every time sensore detects hand shake or i pres struggle key:
+all must do something like this:
+
+open arms max 20 mm and close them
+but each motion, must be different
+i dont want symetric motion only ! they must be like struggling insects , 
+design some so i can see in simulation and tell you if i like them
+
+-------------------------------------------------------------
+
+
+also i like to be able to update the esp firmwares (or even octopus boards) over wifi remotely
+can we ?
+
+if yes , please prepair required bootloaders so when master esp is connected to wifi and hav internet access, i can update all firmwares from here
