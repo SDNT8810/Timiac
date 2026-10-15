@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0 --port 4000",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4000",
-    "test:motion": "node --test ../tests/simulator-motion.test.mjs ../tests/simulator-shell.test.mjs",
+    "test:motion": "node --test ../tests/simulator-motion.test.mjs ../tests/simulator-shell.test.mjs ../tests/simulator-quick-struggle.test.mjs",
     "test:ui": "playwright test"
   },
   "dependencies": {

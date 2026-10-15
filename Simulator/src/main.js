@@ -116,6 +116,7 @@ document.querySelector('#app').innerHTML = `
           <button id="quick-live-clock" type="button" aria-label="Actual time">ACTUAL TIME</button>
           <button id="quick-next-hour" type="button" aria-label="+1 hr">+1 HR</button>
           <button id="quick-next-five" type="button" aria-label="+5 min">+5 MIN</button>
+          <button id="quick-struggle" type="button" aria-label="Struggle">STRUGGLE</button>
         </div>
         <canvas id="clock-3d" aria-label="Orbitable three-dimensional view of the twelve folding arm mechanisms"></canvas>
         <svg id="clock" viewBox="0 0 700 700" role="img" aria-label="Twelve arm kinetic clock simulator">
@@ -1344,6 +1345,7 @@ els.nextHour.addEventListener('click', () => stepClock({ hours: 1, runHourMoveme
 document.querySelector('#quick-live-clock').addEventListener('click', () => els.liveClock.click());
 document.querySelector('#quick-next-hour').addEventListener('click', () => els.nextHour.click());
 document.querySelector('#quick-next-five').addEventListener('click', () => els.nextFive.click());
+document.querySelector('#quick-struggle').addEventListener('click', () => els.struggle.click());
 
 document.querySelector('#copy-code').addEventListener('click', async event => {
   await navigator.clipboard.writeText(els.editor.value);

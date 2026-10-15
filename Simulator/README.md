@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:4000>. Desktop keeps the large 3D clock, side controls and code editor. Phones open on the clock; **Time**, **Arms**, **G-code** and **About** open popup panels. The older Motion studies catalogue remains temporarily hidden.
+Open <http://localhost:4000>. Desktop keeps the large 3D clock, side controls and code editor. Phones open on the clock with **Actual time**, **+1 hr**, **+5 min** and **Struggle** shortcut buttons. **Struggle** starts a new random insect movement directly without opening a panel; **Time**, **Arms**, **G-code** and **About** open popup panels. The older Motion studies catalogue remains temporarily hidden.
 
 Build and run the focused movement tests:
 

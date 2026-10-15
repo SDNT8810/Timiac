@@ -98,6 +98,28 @@ test('manual number inputs normalize out-of-range and cleared entries when commi
 test.describe('clock-first mobile appearance', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
+  test('Struggle shortcut runs the new movement directly from the clock', async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.goto('/', { waitUntil: 'networkidle' });
+    const bar = page.getByRole('group', { name: 'Clock pose quick actions' });
+    const button = bar.getByRole('button', { name: 'Struggle', exact: true });
+    await expect(button).toBeVisible();
+    await expect(bar.getByRole('button')).toHaveCount(4);
+    for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      for (const control of await bar.getByRole('button').all()) {
+        const box = await control.boundingBox();
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+    await button.click();
+    await expect(page.locator('#sequence-name')).toHaveText(/^STRUGGLE [1-7]\/7/);
+    await expect(page.locator('#gcode')).toHaveValue(/; STRUGGLE [1-7]\/7/);
+    await expect(page.locator('#mobile-time')).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+
   test('opens on the clock and preserves functional modal controls', async ({ page }) => {
     const errors = watchErrors(page);
     await page.goto('/', { waitUntil: 'networkidle' });

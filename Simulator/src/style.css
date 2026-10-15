@@ -406,7 +406,7 @@ footer button:hover, footer button:focus-visible { color: #fff; background: #323
     left: 12px;
     height: 44px;
     display: grid;
-    grid-template-columns: 1.35fr 1fr 1fr;
+    grid-template-columns: 1.35fr 1fr 1fr 1fr;
     border: 1px solid rgba(126,132,127,.72);
     background: rgba(239,238,232,.94);
     box-shadow: 0 7px 22px rgba(35,42,39,.13);
