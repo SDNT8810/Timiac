@@ -9,7 +9,8 @@
     "start": "wrangler dev",
     "deploy": "wrangler deploy",
     "check": "node --check cloudflare/worker.js && node --check cloudflare/firmware.js && node --check public/app.js && node --check cloudflare/full-update.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "configure:secrets": "wrangler secret bulk project-secrets.json"
   },
   "dependencies": {
     "jose": "^6.2.12"

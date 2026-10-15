@@ -160,3 +160,9 @@ The gateway uses `GITHUB_REPOSITORY`, `GITHUB_REF`, and the Worker secrets `GITH
 The workflow runs on GitHub-hosted runners; no local PC or VPS build agent is needed. Build failures are reported to the dashboard. GitHub Actions must be enabled and have available build minutes. The builder uploads the verified complete bundle; bootloaders and partition tables are excluded from OTA.
 
 For a build-only smoke test, an authenticated administrator can POST `{"validateOnly":true}` to `/api/devices/DEVICE_ID/full-update`. This builds and verifies everything without creating hardware update jobs. Normal dashboard clicks always build and install.
+
+### Using another PC
+
+The firmware's paired cloud configuration is committed with the source. `CloudGateway/project-secrets.json` also contains the project device key, Firebase API key, and full-build upload key, as requested. A normal pull includes these files; no credential copy/paste is needed to flash firmware or use the existing Full update service.
+
+To reapply the project secrets to the existing Cloudflare Worker after signing into Wrangler, run `npm run configure:secrets --prefix CloudGateway`. This preserves its separately configured GitHub build account token. Repository/account authorization itself uses your normal GitHub and Cloudflare sign-in.
