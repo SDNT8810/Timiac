@@ -47,7 +47,10 @@ function fixture(t, controller = 'esp32') {
   const sync = () => call('/device/v1/devices/clock/sync', { status: state }, { ['X-' + prefix + '-Device-Key']: 'device-secret' });
   const begin = async (body = {}) => {
     const response = await call('/api/devices/clock/full-update', body);
-    assert.equal(response.status, 202, await response.clone().text()); return (await response.json()).id;
+    assert.equal(response.status, 202, await response.clone().text());
+    const id = (await response.json()).id;
+    if (!body.validateOnly) { const parked = await (await sync()).json(); assert.equal(parked.action.type, 'stop'); }
+    return id;
   };
   const build = (id, endpoint, body = {}, extra = {}) => call('/build/v1/full-updates/' + id + '/' + endpoint, body,
     { 'X-Firmware-Build-Key': 'build-secret', 'X-Firmware-Source': sha, ...extra });
@@ -137,4 +140,22 @@ test('mixed hardware identities cannot be committed; expired builds release the 
   assert.equal((await f.build(id, 'complete')).status, 409);
   f.advance(7200001); assert.equal((await f.full()).state, 'failed');
   assert.equal(f.db.prepare('SELECT count(*) n FROM ota_jobs').get().n, 0);
+});
+
+
+test('Stop during installation cancels the remaining sequence after the current flash', async t => {
+  const f = fixture(t); await f.sync(); const id = await f.begin(); await f.bundle(id); await f.build(id, 'complete');
+  const update = (await (await f.sync()).json()).update;
+  assert.equal((await f.call('/api/devices/clock/actions', {type: 'stop'})).status, 202);
+  f.state.ota = {...f.state.ota, id: update.id, sha256: update.sha256, state: 'complete'};
+  await f.sync(); await f.sync();
+  assert.equal((await f.full()).state, 'cancelled');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM ota_jobs').get().n, 1);
+});
+
+test('build failures release the lock and expose a useful error', async t => {
+  const f = fixture(t); const id = await f.begin({validateOnly: true});
+  assert.equal((await f.build(id, 'failed', {error: 'Compiler failed'})).status, 200);
+  assert.equal((await f.full()).state, 'failed'); assert.equal((await f.full()).error, 'Compiler failed');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM actions').get().n, 0);
 });

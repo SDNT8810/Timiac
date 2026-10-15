@@ -88,6 +88,10 @@ export async function fullUpdateApi(request, env, { administrator, checkOrigin, 
     const inserted = await env.DB.prepare(`INSERT INTO full_updates(id,device_id,state,error,source_sha,controller,validate_only,created_at,updated_at,expires_at) SELECT ?,?,'building','',?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM full_updates WHERE ${active}) AND NOT EXISTS(SELECT 1 FROM ota_jobs WHERE state IN ('queued','delivered') AND expires_at>?) AND NOT EXISTS(SELECT 1 FROM actions WHERE state='queued' AND expires_at>?)`)
       .bind(id, device(env), commit.sha, remote.status?.controller || 'master', validateOnly ? 1 : 0, now, now, now + 7200000, now, now).run();
     if (!inserted.meta.changes) throw fail('Another command or update is already queued', 409);
+    // Park the clock/loop while the build runs, so an automatic minute change
+    // cannot race the first flash. Build-only verification never sends Stop.
+    if (!validateOnly) await env.DB.prepare("INSERT INTO actions(id,device_id,type,session,requested_by,created_at,expires_at) SELECT ?,?,'stop',?,'full-update',?,? WHERE EXISTS(SELECT 1 FROM full_updates WHERE id=? AND state='building')")
+      .bind(crypto.randomUUID(), device(env), remote.status.session, now, now + 60000, id).run();
     try {
       await github(env, upstream, '/actions/workflows/full-update.yml/dispatches', { ref: env.GITHUB_REF, inputs: { update_id: id, source_sha: commit.sha } });
     } catch (error) {
