@@ -1,5 +1,14 @@
 # Timiac Marlin patches
 
+`legacy-working-tree.patch` archives all three local edits in the pinned Marlin
+checkout. It is stored with the original UTF-8 text and verified against that
+checkout. The production build uses clean upstream sources and the active
+profiles and patches below. To restore the archived edits in a clean checkout:
+
+```powershell
+git -C Marlin/marlin-2.1.2.7 apply ../patches/legacy-working-tree.patch
+```
+
 `motion-speed.patch` makes the operation's `M220 S20` through `S100` override
 apply to G28 too. G28 captures the percentage before disabling normal feed
 scaling, applies it through `homing_feedrate()` to concurrent release/seek and
