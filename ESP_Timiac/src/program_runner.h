@@ -18,7 +18,7 @@ void programTick() {
   const bool trajectory = program.builtin && (program.preset == timiac::Preset::Hour || program.preset == timiac::Preset::Struggle);
   DynamicJsonDocument doc(trajectory ? 8192 : 3072);
   if (trajectory) {
-    if (!writePresetTrajectory(program.preset, program.targetMinute, doc.to<JsonVariant>())) { stopAll("Continuous animation validation failed"); return; }
+    if (!writePresetTrajectory(program.preset, program.targetMinute, doc.to<JsonVariant>(), program.struggleVariant)) { stopAll("Continuous animation validation failed"); return; }
   } else if (program.builtin) {
     if (!writePresetFrame(program.preset, program.completed, program.targetMinute, doc.to<JsonVariant>())) {
       stopAll("Preset validation failed"); return;

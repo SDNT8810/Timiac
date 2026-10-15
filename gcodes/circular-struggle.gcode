@@ -1,9 +1,8 @@
-; Generated from Simulator/gcodes/circular-struggle.gcode
-; Hardware: 50 mm stroke, maximum 500 mm/min. Home all axes first.
-; Clockwise from 12: X1 C2 B2 A2 Z2 Y2 X2 C1 B1 A1 Z1 Y1
-; Inverted mechanism: 0 mm = fully open/home, 50 mm = closed.
+; Generated Scramble example; built-in Struggle selects from seven patterns.
+; Openings are 0-20 mm; the final time pose may open the time arms further.
+; Native coordinates: 0 mm = open/home, 50 mm = closed. Home first.
 G90
-G1 X1 20.000 C2 20.000 B2 20.000 A2 20.000 Z2 20.000 Y2 20.000 X2 20.000 C1 20.000 B1 20.000 A1 20.000 Z1 20.000 Y1 20.000 F400.000
-G1 X1 40.000 C2 40.000 B2 40.000 A2 40.000 Z2 40.000 Y2 40.000 X2 40.000 C1 40.000 B1 40.000 A1 40.000 Z1 40.000 Y1 40.000 F400.000
-G1 X1 20.000 C2 20.000 B2 20.000 A2 20.000 Z2 20.000 Y2 20.000 X2 20.000 C1 20.000 B1 20.000 A1 20.000 Z1 20.000 Y1 20.000 F400.000
+G1 X1 30.000 C2 47.000 B2 50.000 A2 40.000 Z2 50.000 Y2 45.000 X2 36.000 C1 50.000 B1 48.000 A1 50.000 Z1 42.000 Y1 50.000 F400.000
+G1 X1 43.000 C2 50.000 B2 38.000 A2 46.000 Z2 50.000 Y2 50.000 X2 47.000 C1 34.000 B1 50.000 A1 45.000 Z1 48.000 Y1 40.000 F400.000
+G1 X1 40.000 C2 47.000 B2 50.000 A2 36.000 Z2 48.000 Y2 41.000 X2 50.000 C1 50.000 B1 45.000 A1 37.000 Z1 50.000 Y1 50.000 F400.000
 G1 X1 0.000 C2 25.000 B2 50.000 A2 50.000 Z2 50.000 Y2 50.000 X2 50.000 C1 50.000 B1 50.000 A1 50.000 Z1 50.000 Y1 50.000 F400.000

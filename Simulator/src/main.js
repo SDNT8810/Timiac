@@ -2,14 +2,11 @@ import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { cadPose, LINK_TOPOLOGY, outputFoldAngle, toMechanism3D } from './mechanism.js';
-import { AXES, clockPoseValues, generateHourMovement, generateStruggle } from './clock-motion.js';
+import { AXES, clockPoseValues, generateHourMovement, generateStruggle, chooseStruggleVariant, STRUGGLE_PATTERNS } from './clock-motion.js';
 import breatheCode from '../gcodes/breathing.gcode?raw';
 import curiousCode from '../gcodes/curious-creature.gcode?raw';
 import rippleCode from '../gcodes/tidal-ripple.gcode?raw';
 import scuttleCode from '../gcodes/scuttle.gcode?raw';
-import circularStruggleCode from '../gcodes/circular-struggle.gcode?raw';
-import randomStruggleCode from '../gcodes/random-struggle.gcode?raw';
-import harmonicStruggleCode from '../gcodes/harmonic-struggle.gcode?raw';
 import hourMovementCode from '../gcodes/hour-movement.gcode?raw';
 
 // F is reserved for feed rate. These names address arms 1 through 12 clockwise.
@@ -17,9 +14,7 @@ const INITIAL_FEED = 900;
 
 const presets = [
   { id: 'hour-movement', name: 'Hour movement', note: 'all open, then directly to time; 30% slower', code: hourMovementCode, glyph: 'H' },
-  { id: 'circular-struggle', name: 'Circular struggle', note: '30 mm, 10 mm, 30 mm, then time', code: circularStruggleCode, glyph: 'O' },
-  { id: 'random-struggle', name: 'Feral random', note: 'irregular repeatable spasms', code: randomStruggleCode, glyph: '?' },
-  { id: 'harmonic-struggle', name: 'Harmonic struggle', note: 'phase-locked standing wave', code: harmonicStruggleCode, glyph: '~' },
+  { id: 'struggle', name: 'Struggle · random', note: '7 insect patterns · 0–20 mm', glyph: '?' },
   { id: 'curious', name: 'Curious creature', note: 'reach · recoil · inspect', code: curiousCode, glyph: '◒' },
   { id: 'breathe', name: 'Slow breathing', note: 'inhale · shiver · rest', code: breatheCode, glyph: '◌' },
   { id: 'ripple', name: 'Tidal ripple', note: 'clockwise pressure wave', code: rippleCode, glyph: '↻' },
@@ -44,6 +39,14 @@ document.querySelector('#app').innerHTML = `
     <aside class="panel panel-left">
       <section>
         <div class="section-heading"><span>01</span><h2>Sequences</h2></div>
+        <label class="struggle-label" for="struggle-pattern">STRUGGLE STUDIES · 0–20 MM</label>
+        <div class="struggle-preview">
+          <select id="struggle-pattern" aria-label="Struggle pattern">
+            ${STRUGGLE_PATTERNS.map((pattern, index) => `<option value="${index}">${index + 1}. ${pattern.name}</option>`).join('')}
+          </select>
+          <button id="preview-struggle" type="button">PREVIEW</button>
+        </div>
+        <p id="struggle-description" class="struggle-description">${STRUGGLE_PATTERNS[0].note}. Then return to time.</p>
         <div class="preset-list">
           ${presets.map((preset, index) => `
             <button class="preset ${index === 0 ? 'active' : ''}" data-preset="${preset.id}">
@@ -257,6 +260,9 @@ const els = {
   composeTime: document.querySelector('#compose-time'),
   liveClock: document.querySelector('#live-clock'),
   struggle: document.querySelector('#struggle'),
+  strugglePattern: document.querySelector('#struggle-pattern'),
+  previewStruggle: document.querySelector('#preview-struggle'),
+  struggleDescription: document.querySelector('#struggle-description'),
   nextFive: document.querySelector('#next-five'),
   nextHour: document.querySelector('#next-hour'),
   clockMode: document.querySelector('#clock-mode'),
@@ -579,6 +585,7 @@ const clockState = {
   struggling: false,
   displayTime: '',
   lastHourToken: '',
+  lastStruggleVariant: -1,
 };
 
 function stateAt(position) {
@@ -793,6 +800,7 @@ function updateLineNumbers() {
 }
 
 function loadPreset(preset, autoplay = false) {
+  if (preset.id === 'struggle') { startStruggle(); return; }
   const initialState = player.parsed ? stateAt(player.position).values : Array(12).fill(0);
   setPlaying(false);
   player.onComplete = null;
@@ -801,11 +809,11 @@ function loadPreset(preset, autoplay = false) {
   clockState.displayTime = '';
   document.body.classList.remove('is-struggling');
   document.querySelectorAll('.preset').forEach(button => button.classList.toggle('active', button.dataset.preset === preset.id));
-  els.editor.value = preset.id === 'circular-struggle' ? generateStruggle(initialState, formatClockTime()) : preset.code.trim();
+  els.editor.value = preset.code.trim();
   els.sequenceName.textContent = preset.name.toUpperCase();
   els.fileName.textContent = `${preset.id === 'breathe' ? 'breathing' : preset.id === 'ripple' ? 'tidal-ripple' : preset.id}.gcode`;
   els.clockMode.textContent = 'SEQUENCE MODE · LIVE CLOCK PAUSED';
-  els.loop.checked = !['circular-struggle', 'hour-movement'].includes(preset.id);
+  els.loop.checked = preset.id !== 'hour-movement';
   rebuildProgram({ initialState });
   if (autoplay) setPlaying(true);
 }
@@ -858,10 +866,13 @@ function showClockPose(time, { animate = false, live = true } = {}) {
   }
 }
 
-function startStruggle({ automatic = false } = {}) {
-  if (clockState.struggling) return;
+function startStruggle({ variant = null } = {}) {
+  if (clockState.struggling && variant === null) return;
+  const selected = variant ?? chooseStruggleVariant(clockState.lastStruggleVariant);
+  const pattern = STRUGGLE_PATTERNS[selected];
+  clockState.lastStruggleVariant = selected;
   const initialState = player.parsed ? stateAt(player.position).values : Array(12).fill(0);
-  const time = formatClockTime();
+  const time = els.timeInput.value || formatClockTime();
   setPlaying(false);
   player.onComplete = null;
   clockState.live = false;
@@ -870,10 +881,12 @@ function startStruggle({ automatic = false } = {}) {
   document.body.classList.add('is-struggling');
   document.querySelectorAll('.preset').forEach(button => button.classList.remove('active'));
   els.timeInput.value = time;
-  els.editor.value = generateStruggle(initialState, time);
-  els.sequenceName.textContent = `${automatic ? 'HOURLY ' : ''}SPIDER STRUGGLE`;
-  els.fileName.textContent = 'circular-struggle.gcode';
-  els.clockMode.textContent = '30 MM · 10 MM · 30 MM · THEN TIME';
+  els.strugglePattern.value = String(selected);
+  els.struggleDescription.textContent = `${pattern.note}. Then return to time.`;
+  els.editor.value = generateStruggle(initialState, time, selected);
+  els.sequenceName.textContent = `STRUGGLE ${selected + 1}/7 / ${pattern.name.toUpperCase()}`;
+  els.fileName.textContent = `struggle-${pattern.id}.gcode`;
+  els.clockMode.textContent = 'ASYMMETRIC · 0–20 MM · THEN TIME';
   els.loop.checked = false;
   rebuildProgram({ initialState });
   player.onComplete = () => {
@@ -1009,6 +1022,10 @@ els.liveClock.addEventListener('click', () => {
 });
 
 els.struggle.addEventListener('click', () => startStruggle());
+els.previewStruggle.addEventListener('click', () => startStruggle({ variant: Number(els.strugglePattern.value) }));
+els.strugglePattern.addEventListener('change', () => {
+  els.struggleDescription.textContent = `${STRUGGLE_PATTERNS[Number(els.strugglePattern.value)].note}. Then return to time.`;
+});
 els.nextFive.addEventListener('click', () => stepClock({ nextFive: true }));
 els.nextHour.addEventListener('click', () => stepClock({ hours: 1, runHourMovement: true }));
 

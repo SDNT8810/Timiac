@@ -1,4 +1,6 @@
 // Simulator positions are extension percentages; physical home/open is 0 mm.
+import { STRUGGLE_PATTERNS } from './struggle-patterns.generated.js';
+export { STRUGGLE_PATTERNS };
 export const AXES = 'ABCDEHIJKLUV'.split('');
 export const HOUR_FEED = 700;
 export const STRUGGLE_FEED = 800;
@@ -18,11 +20,20 @@ export function generateHourMovement(time) {
   ].join('\n');
 }
 
-export function generateStruggle(initialState, time = '01:00') {
+export function chooseStruggleVariant(previous = -1, random = Math.random()) {
+  if (!(random >= 0 && random < 1)) throw new RangeError('Random value must be in [0, 1)');
+  const avoid = Number.isInteger(previous) && previous >= 0 && previous < STRUGGLE_PATTERNS.length;
+  const choice = Math.floor(random * (STRUGGLE_PATTERNS.length - (avoid ? 1 : 0)));
+  return avoid && choice >= previous ? choice + 1 : choice;
+}
+
+export function generateStruggle(initialState, time = '01:00', variant = 0) {
+  const pattern = STRUGGLE_PATTERNS[variant];
+  if (!pattern) throw new RangeError('Unknown Struggle pattern');
   let previous = [...initialState];
-  const lines = [`; STRUGGLE: 30 mm open, 10 mm open, 30 mm open, then directly to ${time}.`, 'G90'];
-  const poses = [Array(12).fill(60), Array(12).fill(20), Array(12).fill(60), clockPoseValues(time)];
-  for (const target of poses) {
+  const lines = [`; STRUGGLE ${variant + 1}/7: ${pattern.name}. Opening 0-20 mm, then directly to ${time}.`, 'G90'];
+  const poses = [...pattern.frames, { positions: clockPoseValues(time), feed: STRUGGLE_FEED }];
+  for (const { positions: target, feed } of poses) {
     const delta = target.map((value, index) => value - previous[index]);
     const span = Math.max(...delta.map(Math.abs));
     if (span > 0) {
@@ -32,7 +43,7 @@ export function generateStruggle(initialState, time = '01:00') {
         const primary = Math.hypot(...board.slice(0, 3).map(index => delta[index]));
         return primary || Math.hypot(...board.slice(3).map(index => delta[index]));
       }));
-      lines.push(`G1 ${words(target)} F${(STRUGGLE_FEED * span / Math.max(distance, span)).toFixed(3)}`);
+      lines.push(`G1 ${words(target)} F${(Math.min(feed, STRUGGLE_FEED) * span / Math.max(distance, span)).toFixed(3)}`);
     }
     previous = target;
   }

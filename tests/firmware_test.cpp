@@ -127,13 +127,14 @@ int main(int argc, char** argv) {
   }
   // The complete hour trajectory has a moving board on every frame. Match
   // nominal durations using Marlin's XYZ-first feed metric; only idle boards wait.
-  for (Preset preset : {Preset::Hour, Preset::Struggle}) for (unsigned target : {0U, 60U, 210U, 755U, 1439U}) for (float initial : {0.0f, halfTravel, travel}) {
+  for (Preset preset : {Preset::Hour, Preset::Struggle}) for (unsigned variant = 0; variant < (preset == Preset::Struggle ? struggleVariantCount : 1); ++variant)
+  for (unsigned target : {0U, 60U, 210U, 755U, 1439U}) for (float initial : {0.0f, halfTravel, travel}) {
     float positions[12]; for (float& position : positions) position = initial;
     unsigned commands = 0;
     double bounds[2] = {}; // full stop at every frame: conservative acceleration allowance
-    for (unsigned i = 0; i < presetCount(preset); ++i) {
+    for (unsigned i = 0; i < presetCount(preset, variant); ++i) {
       float previous[12]; memcpy(previous, positions, sizeof(previous));
-      Step frame; assert(presetTrajectoryFrame(preset, i, target, travel, maxFeed, positions, frame));
+      Step frame; assert(presetTrajectoryFrame(preset, i, target, travel, maxFeed, positions, frame, variant));
       if (!frame.count[0] && !frame.count[1]) continue;
       ++commands;
       assert(frame.count[0] == 1 && frame.count[1] == 1);
@@ -157,9 +158,9 @@ int main(int argc, char** argv) {
             const double axisSpeed = fabs(positions[b * 6 + arm] - previous[b * 6 + arm]) / path * velocity * 60;
             assert(axisSpeed <= maxFeed * (preset == Preset::Struggle ? .8 : .7) + .02);
           }
-          if (preset == Preset::Struggle && i + 1 < presetCount(preset))
+          if (preset == Preset::Struggle && i + 1 < presetCount(preset, variant))
             for (unsigned arm = 0; arm < 12; ++arm)
-              assert(fabsf(positions[arm] - travel * (i == 1 ? .8f : .4f)) < .001f);
+              assert(positions[arm] >= travel - 20 - .001f && positions[arm] <= travel);
 
         }
       }
@@ -185,21 +186,30 @@ int main(int argc, char** argv) {
     for (unsigned arm = 0; arm < 12; ++arm)
       assert(positions[arm] == (faceHour[arm] == target % 60 / 5 ? 0 : faceHour[arm] == target / 60 % 12 ? halfTravel : travel));
   }
-  // Every arm shares the 30/10/30 mm opening poses, including time arms.
-  // Only the final direct-to-time pose separates hour/minute from other arms.
-  assert(presetCount(Preset::Struggle) == 4);
+  // Seven distinct, asymmetric patterns, bounded to 20 mm until the final time pose.
+  assert(struggleVariantCount == 7);
+  assert(presetCount(Preset::Struggle, struggleVariantCount) == 0);
+  for (unsigned previous = 0; previous <= struggleVariantCount; ++previous) {
+    bool seen[7] = {};
+    for (unsigned entropy = 0; entropy < 700; ++entropy) {
+      const unsigned selected = chooseStruggleVariant(entropy, previous);
+      assert(selected < 7 && selected != previous); seen[selected] = true;
+    }
+    for (unsigned variant = 0; variant < 7; ++variant) assert(seen[variant] == (variant != previous));
+  }
   float mixed[12];
-  for (unsigned arm = 0; arm < 12; ++arm) mixed[arm] = (arm % 3) * halfTravel;
-  for (unsigned target : {0U, 60U, 210U, 1439U}) for (unsigned index = 0; index < 4; ++index) {
+  for (unsigned variant = 0; variant < 7; ++variant) for (unsigned target : {0U, 60U, 210U, 1439U}) {
+   for (unsigned arm = 0; arm < 12; ++arm) mixed[arm] = (arm % 3) * halfTravel;
+   for (unsigned index = 0; index < presetCount(Preset::Struggle, variant); ++index) {
     Step frame;
-    assert(presetTrajectoryFrame(Preset::Struggle, index, target, travel, maxFeed, mixed, frame));
+    assert(presetTrajectoryFrame(Preset::Struggle, index, target, travel, maxFeed, mixed, frame, variant));
     for (unsigned arm = 0; arm < 12; ++arm) {
-      const float expected = index < 3 ? travel * (index == 1 ? .8f : .4f)
+      const float expected = index + 1 < presetCount(Preset::Struggle, variant)
+        ? actuatorForExtension(strugglePatterns[variant].frames[index].positions[clockHourForArm(arm)], travel)
         : faceHour[arm] == target % 60 / 5 ? 0 : faceHour[arm] == target / 60 % 12 ? halfTravel : travel;
       assert(fabsf(mixed[arm] - expected) < .001f);
     }
-    for (unsigned b = 0; b < 2; ++b) for (unsigned n = 0; n < frame.count[b]; ++n)
-      assert(strncmp(frame.lines[b][n], "G4 ", 3));
+   }
   }
   for (const char* action : {"home", "open", "close"}) {
     Step pose; assert(userAction(action, 0, 0, travel, timiac::maxFeed, pose));

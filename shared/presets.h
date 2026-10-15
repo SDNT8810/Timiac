@@ -6,21 +6,26 @@ namespace timiac {
 inline unsigned nextClockMinute(unsigned base, bool nextFive) {
   return (nextFive ? (base / 5 + 1) * 5 : base + 60) % 1440;
 }
-inline unsigned presetCount(Preset preset) {
+inline unsigned chooseStruggleVariant(uint32_t entropy, unsigned previous) {
+  if (previous >= struggleVariantCount) return entropy % struggleVariantCount;
+  const unsigned choice = entropy % (struggleVariantCount - 1);
+  return choice >= previous ? choice + 1 : choice;
+}
+inline unsigned presetCount(Preset preset, unsigned variant = 0) {
   switch (preset) {
-    case Preset::Struggle: return sizeof(struggleFrames) / sizeof(struggleFrames[0]);
+    case Preset::Struggle: return variant < struggleVariantCount ? strugglePatterns[variant].count : 0;
     case Preset::Hour: return sizeof(hourFrames) / sizeof(hourFrames[0]);
     case Preset::Curious: return sizeof(curiousFrames) / sizeof(curiousFrames[0]);
   }
   return 0;
 }
-inline bool presetStep(Preset preset, unsigned index, unsigned target, float travel, float maxFeed, Step& step) {
-  if (index >= presetCount(preset) || target >= 1440) return false;
+inline bool presetStep(Preset preset, unsigned index, unsigned target, float travel, float maxFeed, Step& step, unsigned variant = 0) {
+  if (index >= presetCount(preset, variant) || target >= 1440) return false;
   step.clear();
-  const auto& frame = preset == Preset::Hour ? hourFrames[index] : preset == Preset::Curious ? curiousFrames[index] : struggleFrames[index];
+  const auto& frame = preset == Preset::Hour ? hourFrames[index] : preset == Preset::Curious ? curiousFrames[index] : strugglePatterns[variant].frames[index];
   float feed = frame.feed * travel / 100;
   if (feed > maxFeed) feed = maxFeed;
-  if ((preset == Preset::Hour || preset == Preset::Struggle) && index + 1 == presetCount(preset))
+  if ((preset == Preset::Hour || preset == Preset::Struggle) && index + 1 == presetCount(preset, variant))
     return userAction("show-time", target / 60, target % 60, travel, feed, step);
   if (frame.dwell) {
     char line[24]; snprintf(line, sizeof(line), "G4 P%u", frame.dwell); step.both(line); return true;
@@ -43,9 +48,9 @@ inline bool presetStep(Preset preset, unsigned index, unsigned target, float tra
 // full-machine completion barrier between frames. Only a stationary board
 // dwells while the other moves. Marlin still owns acceleration and lookahead.
 inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target, float travel, float maxFeed,
-                                  float (&positions)[12], Step& step) {
+                                  float (&positions)[12], Step& step, unsigned variant = 0) {
   Step pose;
-  if (!presetStep(preset, index, target, travel, maxFeed, pose)) return false;
+  if (!presetStep(preset, index, target, travel, maxFeed, pose, variant)) return false;
   bool hasMove = false, hasDwell = false;
   for (unsigned b = 0; b < 2; ++b) for (unsigned n = 0; n < pose.count[b]; ++n) {
     hasMove |= !strncmp(pose.lines[b][n], "G1 ", 3);
@@ -68,7 +73,7 @@ inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target
   }
   // Struggle keeps the existing 80% vector-feed ceiling, including the final
   // move directly into the clock pose. Intermediate poses come from its frames.
-  if (preset == Preset::Struggle) feed = maxFeed * .8f;
+  if (preset == Preset::Struggle && feed > maxFeed * .8f) feed = maxFeed * .8f;
   float distance[2] = {}, span = 0;
   for (unsigned b = 0; b < 2; ++b) {
     float primary = 0, secondary = 0;

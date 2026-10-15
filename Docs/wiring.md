@@ -30,7 +30,8 @@ communicates with the motor bridges over Wi-Fi; it has no Octopus UART wiring.
 Check the new input voltage and NC polarity before connecting the GPIO, as
 shown in [master-wiring.md](master-wiring.md). The dashboard reports
 **Detected / Clear**, not centimetres. Clear for 500 ms, then present a hand for
-200 ms to trigger Curious creature once. Motion, Stop and faults discard hand
+200 ms to trigger one of seven random Struggle patterns once (valid RTC required).
+Motion, Stop and faults discard hand
 arrivals. A held hand cannot repeat until withdrawn. Manual release Home keeps
 the arms parked; gestures require Start clock in release mode.
 

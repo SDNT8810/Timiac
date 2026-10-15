@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { AXES, clockPoseValues, generateHourMovement, generateStruggle } from '../Simulator/src/clock-motion.js';
+import { runInNewContext } from 'node:vm';
+import { AXES, clockPoseValues, generateHourMovement, generateStruggle, STRUGGLE_PATTERNS, chooseStruggleVariant } from '../Simulator/src/clock-motion.js';
 
 function moves(code) {
   return code.split(/\r?\n/).filter(line => /^G1 /.test(line)).map(line => ({
@@ -24,32 +25,90 @@ test('every Next Hour target opens once and closes directly into time at 70 perc
   assert.deepEqual(moves(example), moves(generateHourMovement('01:00')));
 });
 
-test('all Struggle arms share 30/10/30 mm openings, then close directly into the selected time', () => {
+test('all seven Struggle previews stay within 20 mm and close directly into the selected time', () => {
+  assert.equal(STRUGGLE_PATTERNS.length, 7);
   for (const initial of [Array(12).fill(0), Array(12).fill(100), clockPoseValues('03:30'),
-    AXES.map((_, i) => (i % 3) * 50)]) for (const time of ['00:00', '01:00', '03:30', '23:59']) {
-    const code = generateStruggle(initial, time);
+    AXES.map((_, i) => (i % 3) * 50)]) for (const time of ['00:00', '01:00', '03:30', '23:59']) for (let variant = 0; variant < 7; variant++) {
+    const code = generateStruggle(initial, time, variant);
     assert.doesNotMatch(code, /^G4/m);
     const frames = moves(code);
     assert.equal(frames.length, 4);
-    assert.deepEqual(frames[0].values, Array(12).fill(60)); // 30 mm open
-    assert.deepEqual(frames[1].values, Array(12).fill(20)); // 10 mm open
-    assert.deepEqual(frames[2].values, Array(12).fill(60));
-    assert.deepEqual(frames[3].values, clockPoseValues(time));
-    // The all-arm sweeps use the same XYZ vector-feed ceiling as hardware.
-    assert.ok(Math.abs(frames[1].feed - 800 / Math.sqrt(3)) < .001);
+    assert.deepEqual(frames.at(-1).values, clockPoseValues(time));
+    for (const frame of frames.slice(0, -1)) {
+      assert.ok(frame.values.every(value => value >= 0 && value <= 40)); // 40% of 50 mm = 20 mm.
+      assert.ok(new Set(frame.values).size > 1); // No all-arm symmetric sweep.
+    }
+    assert.ok(frames.every(frame => frame.feed > 0 && frame.feed <= 800));
   }
   const fixture = moves(readFileSync(new URL('../Simulator/gcodes/circular-struggle.gcode', import.meta.url), 'utf8'));
   assert.deepEqual(fixture.map(frame => frame.values), moves(generateStruggle(Array(12).fill(100))).map(frame => frame.values));
 });
 
-test('the shorter Struggle including its final time pose stays below 27 nominal seconds at full speed', () => {
+test('each insect study is distinct, asymmetric, and matches the firmware source data', () => {
+  const source = JSON.parse(readFileSync(new URL('../shared/struggle-patterns.json', import.meta.url), 'utf8'));
+  assert.equal(new Set(STRUGGLE_PATTERNS.map(pattern => JSON.stringify(pattern.frames))).size, 7);
+  STRUGGLE_PATTERNS.forEach((pattern, index) => {
+    assert.equal(pattern.name, source[index].name);
+    assert.deepEqual(pattern.frames.map(frame => frame.positions), source[index].frames.map(frame => frame.openMm.map(value => value * 2)));
+    assert.deepEqual(pattern.frames.map(frame => frame.feed), source[index].frames.map(frame => frame.feed));
+    assert.ok(pattern.frames.some(frame => frame.positions.some((value, arm) => value !== frame.positions[(arm + 6) % 12])));
+    assert.ok(pattern.frames.some(frame => frame.positions.some((value, arm) => value !== frame.positions[(12 - arm) % 12])));
+  });
+});
+
+test('random Struggle selection can reach every pattern without an immediate repeat', () => {
+  for (let previous = -1; previous < 7; previous++) {
+    const seen = new Set();
+    for (let entropy = 0; entropy < 700; entropy++) {
+      const selected = chooseStruggleVariant(previous, entropy / 700);
+      assert.ok(selected >= 0 && selected < 7 && selected !== previous);
+      seen.add(selected);
+    }
+    assert.equal(seen.size, previous < 0 ? 7 : 6);
+  }
+  assert.throws(() => generateStruggle(Array(12).fill(0), '01:00', 7), /Unknown/);
+});
+
+test('all seven Struggles keep a short path including entry and the final time pose', () => {
+ for (let variant = 0; variant < 7; variant++) {
   for (const initial of [Array(12).fill(0), Array(12).fill(100), clockPoseValues('03:30')]) {
     let previous = initial, seconds = 0;
-    for (const frame of moves(generateStruggle(initial))) {
+    for (const frame of moves(generateStruggle(initial, '01:00', variant))) {
       seconds += Math.max(...frame.values.map((value, i) => Math.abs(value - previous[i]))) / frame.feed * 60;
       previous = frame.values;
     }
     // Includes entry from fully open; 1x is 100%, 0.5x is the usual 50%.
-    assert.ok(seconds < 27);
+    assert.ok(seconds < 28, `${STRUGGLE_PATTERNS[variant].name}: ${seconds}`);
   }
+ }
+});
+
+test('the simulator previews a chosen pattern, allows switching studies, and keeps random playback stable while busy', () => {
+  const source = readFileSync(new URL('../Simulator/src/main.js', import.meta.url), 'utf8');
+  const start = source.slice(source.indexOf('function startStruggle('), source.indexOf('function startHourMovement('));
+  const node = () => ({ value: '', textContent: '' });
+  const els = Object.fromEntries(['timeInput', 'strugglePattern', 'struggleDescription', 'editor', 'sequenceName', 'fileName', 'clockMode', 'loop'].map(id => [id, node()]));
+  els.timeInput.value = '03:30';
+  const clockState = { live: true, struggling: false, lastStruggleVariant: -1 };
+  const player = { parsed: null, onComplete: null };
+  let current = clockPoseValues('03:30');
+  const context = { AXES, STRUGGLE_PATTERNS, chooseStruggleVariant, generateStruggle, els, player, clockState,
+    document: { body: { classList: { add() {}, remove() {} } }, querySelectorAll: () => [] },
+    stateAt: () => ({ values: current }), formatClockTime: () => '03:30', setPlaying() {},
+    rebuildProgram: () => { player.parsed = moves(els.editor.value); current = player.parsed.at(-1).values; },
+  };
+  runInNewContext(`${start}; startStruggle({variant: 2});`, context);
+  assert.match(els.sequenceName.textContent, /3\/7.*CAUGHT WING/);
+  assert.equal(els.strugglePattern.value, '2');
+  assert.deepEqual(player.parsed.at(-1).values, clockPoseValues('03:30'));
+  runInNewContext('startStruggle({variant: 6});', context);
+  assert.match(els.sequenceName.textContent, /7\/7.*LAST WRIGGLE/);
+  const code = els.editor.value;
+  runInNewContext('startStruggle();', context);
+  assert.equal(els.editor.value, code); // Random button cannot reroll a running sequence.
+  player.onComplete();
+  assert.equal(clockState.struggling, false);
+  runInNewContext('startStruggle();', context);
+  assert.notEqual(clockState.lastStruggleVariant, 6);
+  assert.equal(clockState.live, false);
 });

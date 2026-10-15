@@ -83,6 +83,12 @@ button { color: inherit; }
 .section-heading h2 { margin: 0; text-transform: uppercase; font: 600 11px/1 Inter, sans-serif; letter-spacing: .15em; }
 
 .preset-list { display: grid; gap: 7px; }
+.struggle-label { display: block; margin-bottom: 8px; font: 8px var(--mono); letter-spacing: .06em; color: var(--muted); }
+.struggle-preview { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.struggle-preview select { min-width: 0; height: 34px; padding: 0 5px; border: 1px solid #aeb2ab; background: var(--paper); font-size: 11px; }
+.struggle-preview button { border: 0; padding: 0 8px; background: var(--ink); color: var(--acid); cursor: pointer; font: 8px var(--mono); }
+.struggle-preview button:hover { background: var(--orange); color: white; }
+.struggle-description { min-height: 32px; margin: 9px 0 16px; font-size: 10px; line-height: 1.5; color: var(--muted); }
 .preset {
   width: 100%; min-height: 58px; padding: 9px 10px;
   border: 1px solid transparent; background: transparent; cursor: pointer;

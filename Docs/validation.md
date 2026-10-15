@@ -1,4 +1,4 @@
-# Master validation - 2026-10-15.3
+# Master validation - 2026-10-15.4
 
 Matched package **TIMIAC2-03b3b6e145e4**, protocol 7, trajectory capability 2.
 All twelve axes request 1,000 mA RMS for running/homing and retain 50% holding.
@@ -7,7 +7,7 @@ Validation completed:
 
 - Shared Octopus, both bridges, dev/release masters and both web filesystems
   build successfully. `python run.py verify` validates all package images.
-- 21 Python tests and 53 dashboard/control/simulator tests pass. Host firmware, both
+- 21 Python tests and 56 dashboard/control/simulator tests pass. Host firmware, both
   production coordinator modes and bridge tests pass, including a simulated
   24-hour clock cycle and all 720 homing switch orders.
 - Motion checks test Hour and Struggle from fully open, halfway and fully closed
@@ -15,9 +15,11 @@ Validation completed:
   Both boards have matching nominal frame durations, all motor speeds remain
   bounded, and both animations' final poses match the requested time.
 - Struggle retains the 400 mm/min vector ceiling and 20 mm/s² acceleration.
-  All arms share 30/10/30 mm openings, then close directly into time, with no
-  dwell or intermediate completion barrier. Tests cover repeated mixed starting
-  poses, clock-arm overlap and the final minute arm's full opening. Conservative
+  All seven asymmetric patterns keep intermediate openings within 0–20 mm,
+  then close directly into time, with no dwell or intermediate completion barrier.
+  Tests cover all variants, mixed starting poses, clock-arm overlap, random
+  coverage/no consecutive repeats, a fixed variant from acceptance through
+  playback, and the final minute arm's full opening. Conservative
   software bounds are <=56 seconds at 50% and <=28 seconds at 100%, including
   entry, per-frame acceleration and 0.4 seconds of communication margin.
 - Hour uses two poses: all open, then directly to time. Both run 30% slower.
@@ -31,7 +33,12 @@ Validation completed:
 - GPIO27 photoelectric input is tested in both production coordinator modes:
   held-at-boot, 500 ms clear arming, 200 ms detection, noise rejection, held-hand
   lockout, no replay after motion/Stop, stale status and sampling gaps. GPIO18/19
-  are not configured or read. Digital dashboard tests reject fabricated distance.
+  are not configured or read. The sensor starts random Struggle and preserves
+  automatic tracking. Digital dashboard tests reject fabricated distance.
+- Simulator tests exercise explicit preview selection, switching patterns during
+  playback, random selection while idle, and the return to the selected time.
+  The interactive browser was unavailable in this session; no visual browser
+  verification or physical motion test was performed.
 - The 24 V resistor interface and complete master diagram are documented in
   [master-wiring.md](master-wiring.md). GPIO voltages and the optical clearance
   still need checking on the actual PCB and sensor before commissioning.

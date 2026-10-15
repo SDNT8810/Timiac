@@ -87,7 +87,8 @@ can affect this sensor; an optical sensing-angle specification was not provided.
 
 The firmware reads GPIO27 every 20 ms. After homing, and while the release clock
 is running, clear the sensor continuously for **500 ms**, then present a hand
-for **200 ms**. This starts **Curious creature** once. A held hand cannot repeat
+for **200 ms**. With a valid RTC this starts one of **seven random Struggle patterns**,
+with openings limited to 20 mm, then returns to the time display. A held hand cannot repeat
 it. Withdraw the hand after the animation to rearm. Hand arrivals during motion,
 Stop, faults, lost board connection, or a paused release clock are discarded.
 The development master also supports gestures while idle and homed.

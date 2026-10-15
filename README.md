@@ -1,4 +1,4 @@
-**Current master (2026-10-15.3):** the hand input now uses the Heschen NPN NC infrared switch on GPIO27 through a three-resistor 24 V interface. Existing GPIO18/19 traces remain unused. See the [complete master wiring diagram](Docs/master-wiring.md). Animations remain 30/10/30 mm then time for Struggle, and 30% slower open-then-time for Next Hour. Only the master needs flashing; current remains 1,000 mA RMS.
+**Current master (2026-10-15.4):** Struggle and the GPIO27 hand sensor randomly select one of seven asymmetric insect patterns, with openings limited to 20 mm before returning to the time display. Preview each pattern in the [simulator](Simulator/README.md), or see [the pattern guide](Docs/struggle-patterns.md). Next Hour, current (1,000 mA RMS), and the [master wiring](Docs/master-wiring.md) are unchanged. Only the master needs flashing.
 
 
 # Timiac: twelve motors, three ESP modules
@@ -158,7 +158,7 @@ diagnostics, and test animations, with microswitch homing.
 **Release:** Home, Close, Start clock, Next 5 min, Next hour, Struggle, Stop,
 time and Wi-Fi settings.
 Release starts with automatic Home all, then continuous RTC tracking. Manual
-Home also enables tracking once homing finishes. Start clock resumes
+Home parks the arms until another command. Start clock resumes
 tracking; Close, Next 5 min, Next hour, Struggle, Stop and faults pause it. Arms update at five-minute
 boundaries and return to current time after a hand gesture, with no phone or
 SD card required. Every release-master boot starts a fresh homing sequence;
@@ -315,9 +315,9 @@ enabled by the development master; the release dashboard has no switch panel.
   the fully open minute arm takes precedence. The physical mechanism is inverted
   relative to the simulator's extension coordinates. Dev moves once per press;
   release continues following the RTC.
-- **Struggle:** all twelve arms share the same opening targets: **30 mm, 10 mm,
-  30 mm, then current time**, without a programmed pause. The first three poses
-  correspond to native actuator coordinates 20, 40, 20 mm. In the final move,
+- **Struggle:** randomly selects one of [seven asymmetric insect patterns](Docs/struggle-patterns.md),
+  avoiding the previous selection. Arms open by **0–20 mm** in staggered groups,
+  with three movement beats and no programmed pause. In the final move,
   other arms close fully while the hour/minute arms take their clock positions.
   Vector feed remains capped at 400 mm/min and travel acceleration at 20 mm/s².
   Homing and a valid RTC are required. The current time is captured when the
@@ -358,7 +358,9 @@ actuator position as `stroke × (1 − extension / 100)`: 100% becomes 0 mm,
 Ready-to-run examples using the current 50 mm stroke and 500 mm/min limit are
 generated in `gcodes/circular-struggle.gcode`, `gcodes/hour-movement.gcode`, and
 `gcodes/curious-creature.gcode`.
-Edit the simulator source files and rebuild to change these animations.
+Edit `shared/struggle-patterns.json` for Struggle, or the simulator G-code source
+files for the other animations, and rebuild. `circular-struggle.gcode` is the
+standalone Scramble example; the built-in Struggle randomly selects all seven.
 
 Manual moves, board-qualified hardware G-code, bridge UART commands, and Octopus
 position reports all remain millimetres from the existing home endstop. They
@@ -440,8 +442,10 @@ range is adjustable around 10–30 cm, but it has no software beam-angle control
 or measured-distance output. Both dashboards show **Detected / Clear** instead
 of centimetres. Check the optical path and sensitivity with an actual hand.
 
-After homing, clear the sensor for 500 ms, then present a hand for 200 ms to run
-`curious-creature.gcode` once. Withdrawing the hand after completion rearms it.
+After homing, with a valid RTC, clear the sensor for 500 ms, then present a hand
+for 200 ms to run a random Struggle once, returning to the captured current time.
+Withdrawing the hand after completion rearms it. The sensor and Struggle button
+share the same random selector, which avoids consecutive repeats.
 Motion, Stop, faults and missing motor boards discard pending gestures. In
 release mode, gestures require the clock to be running; manual Home keeps it
 parked. Dev mode also supports gestures when idle/homed. The sensor does not

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "scramble", "name": "Scramble", "note": "Scattered legs kick in changing groups",
+    "frames": [
+      {"openMm": [20,3,0,10,0,5,14,0,2,0,8,0], "feed": 800},
+      {"openMm": [7,0,12,4,0,0,3,16,0,5,2,10], "feed": 800},
+      {"openMm": [10,3,0,14,2,9,0,0,5,13,0,0], "feed": 800}
+    ]
+  },
+  {
+    "id": "limping-scuttle", "name": "Limping scuttle", "note": "An uneven crawl with one dragging leg",
+    "frames": [
+      {"openMm": [17,8,2,0,0,3,0,0,0,4,0,1], "feed": 800},
+      {"openMm": [0,3,18,9,2,4,0,0,5,0,0,0], "feed": 800},
+      {"openMm": [0,0,5,20,12,3,0,4,0,0,2,0], "feed": 800}
+    ]
+  },
+  {
+    "id": "caught-wing", "name": "Caught wing", "note": "One side flutters while the others twitch",
+    "frames": [
+      {"openMm": [2,0,3,15,20,11,0,2,0,0,4,0], "feed": 800},
+      {"openMm": [0,3,0,4,7,2,0,0,5,0,1,0], "feed": 800},
+      {"openMm": [4,0,0,19,12,16,2,0,0,3,0,0], "feed": 800}
+    ]
+  },
+  {
+    "id": "kick-and-recoil", "name": "Kick and recoil", "note": "Two uneven kicks with scattered answering twitches",
+    "frames": [
+      {"openMm": [20,2,0,0,5,0,0,14,0,3,0,0], "feed": 800},
+      {"openMm": [4,0,3,0,0,2,0,3,0,0,5,0], "feed": 800},
+      {"openMm": [16,0,0,4,0,0,2,20,0,0,1,3], "feed": 800}
+    ]
+  },
+  {
+    "id": "body-shiver", "name": "Body shiver", "note": "Small irregular tremors break into one larger kick",
+    "frames": [
+      {"openMm": [7,2,10,4,0,8,3,11,1,6,0,4], "feed": 800},
+      {"openMm": [1,9,3,0,8,2,10,4,7,0,6,1], "feed": 800},
+      {"openMm": [5,0,4,1,20,2,6,0,3,9,0,5], "feed": 800}
+    ]
+  },
+  {
+    "id": "escape-crawl", "name": "Escape crawl", "note": "A broken wave changes direction and tries again",
+    "frames": [
+      {"openMm": [0,0,3,0,0,4,12,20,7,0,2,0], "feed": 800},
+      {"openMm": [0,2,0,0,3,0,4,9,18,11,0,0], "feed": 800},
+      {"openMm": [0,3,0,0,5,12,19,6,2,0,0,1], "feed": 800}
+    ]
+  },
+  {
+    "id": "last-wriggle", "name": "Last wriggle", "note": "A lopsided twist fades into smaller loose twitches",
+    "frames": [
+      {"openMm": [0,18,9,0,3,0,20,5,0,11,2,0], "feed": 800},
+      {"openMm": [13,4,0,7,0,16,6,0,8,1,0,10], "feed": 800},
+      {"openMm": [7,0,2,8,1,0,6,3,0,5,0,4], "feed": 750}
+    ]
+  }
+]

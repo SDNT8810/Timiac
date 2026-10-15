@@ -14,7 +14,11 @@ starts the clock without a browser. Changing speed does not resume a parked cloc
 The hand input is an E3F-DS30B2 NPN NC photoelectric switch on GPIO27 through
 the three-resistor divider in [master-wiring.md](master-wiring.md). GPIO18/19
 stay unused. A clear interval of 500 ms arms detection; a stable 200 ms hand
-signal starts Curious creature once. Motion, Stop and faults reset eligibility,
+signal starts a random Struggle once. The button and sensor share seven patterns,
+choose once on acceptance, and avoid the previous pattern. The chosen index is
+stored with the program, so validation and playback use identical frames.
+Struggle opens arms by 0–20 mm before its final time pose. A valid RTC is required.
+Motion, Stop and faults reset eligibility,
 and sampling gaps over 250 ms restart the clear-first requirement. Status reports
 digital presence, not distance. A single NC signal cannot diagnose a broken wire.
 
@@ -141,9 +145,12 @@ The master derives matching nominal frame durations from current positions using
 Marlin's XYZ-first linear feed metric and axis speed limits. Only a board with
 no movement in a frame dwells; the other keeps moving. Acceleration and network
 timing mean this is not an exact inter-board timing guarantee.
-Struggle sends all arms to the same 30/10/30 mm opening poses, then directly
-to the current time captured at acceptance. The hour and minute arms no longer
-run in the opposite phase; their only distinct target is the final clock pose.
+Struggle selects one of seven asymmetric patterns, with three poses bounded
+to 0–20 mm open, then moves directly to the current time captured at acceptance.
+The stored variant is reused for validation and playback. The sensor and button
+share the selector and exclude its previous result. Arm groups and directions
+vary intentionally within the insect movements; the final clock pose closes
+all non-time arms.
 The lower acceleration is bracketed by normal restores, and a valid RTC is required.
 Next Hour uses two poses at 70% of its former speed: all open, then directly to
 time. Trajectory version 2 allows only normal or 80%

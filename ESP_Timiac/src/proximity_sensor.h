@@ -6,7 +6,7 @@ uint32_t proximitySampleAt = 0, proximityTriggers = 0;
 timiac::ProximityGate proximityGate;
 
 bool proximityReady() {
-  return TIMIAC_PROXIMITY_ENABLED && (!TIMIAC_RELEASE || releaseClockEnabled) &&
+  return TIMIAC_PROXIMITY_ENABLED && rtcValid && (!TIMIAC_RELEASE || releaseClockEnabled) &&
     !systemLatched && !stopPending && !stopRequested && !networkChanging && bothHealthy() && !operation.barrier.active() && !program.reserved() &&
     program.state != "ready" && (boards[0].homed & kHomedMask) == kHomedMask && (boards[1].homed & kHomedMask) == kHomedMask;
 }
@@ -35,9 +35,10 @@ void proximityTick() {
   proximityDetected = proximityRawHigh == bool(TIMIAC_PROXIMITY_ACTIVE_HIGH);
   if (proximityGate.sample(proximityDetected, ready, now)) {
     String id = bootId + "-gesture-" + String(++sequence);
-    const char* error = startBuiltinPreset(timiac::Preset::Curious, 0, id, hashText("gesture:curious"));
+    const unsigned minute = rtcTime.hour() * 60 + rtcTime.minute();
+    const char* error = startBuiltinPreset(timiac::Preset::Struggle, minute, id, hashText("gesture:struggle"));
     if (error) logMessage("Gesture ignored: " + String(error));
-    else { ++proximityTriggers; logMessage("Photoelectric hand detected: curious creature"); }
+    else { ++proximityTriggers; logMessage("Photoelectric hand detected: " + program.name); }
   }
 #endif
 }

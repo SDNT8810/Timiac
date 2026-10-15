@@ -56,6 +56,7 @@ int armTimeMinutes = -1;
 int releaseClockMinute = -1; // Last automatic target; survives a proximity animation.
 bool releaseClockEnabled = false;
 bool releaseStartupPending = TIMIAC_MASTER && TIMIAC_RELEASE;
+unsigned lastStruggleVariant = timiac::struggleVariantCount;
 void trackManualClockAction(const char* action) {
 #if TIMIAC_RELEASE
   releaseClockEnabled = !systemLatched && !strcmp(action, "show-time");
@@ -71,6 +72,7 @@ struct Program {
   bool hasStep = false;
   bool builtin = false;
   timiac::Preset preset = timiac::Preset::Struggle;
+  unsigned struggleVariant = 0;
   unsigned targetMinute = 0;
   uint32_t actionHash = 0;
   bool reserved() const { return state == "uploading" || state == "running" || state == "paused"; }

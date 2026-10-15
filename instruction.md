@@ -85,11 +85,11 @@ firmware/two-motor/               (entire folder, including JSON files)
 ESP_Timiac/include/cloud_config.h  (included clock pairing defaults)
 ```
 
-For master update **2026-10-15.3**, install the new GPIO27 photoelectric sensor
+For master update **2026-10-15.4**, install the new GPIO27 photoelectric sensor
 interface first, following [the wiring diagram](Docs/master-wiring.md). Leave the
-old GPIO18/19 traces unused. Only the master needs reflashing. Struggle
-should move all arms to **30 mm open, 10 mm open, 30 mm open**, then close
-directly into the time display, with no pause between poses.
+old GPIO18/19 traces unused. Only the master needs reflashing. Struggle and the
+hand sensor choose one of **seven random insect movements**, opening by at most
+**20 mm**, then returning directly to the time display. A valid RTC is required.
 Next Hour should open all arms, then close directly into the time display,
 with both moves **30% slower**. Stop if steps are lost or overheating warnings
 appear. A thermal fault requires cooling and an Octopus reset before homing again.

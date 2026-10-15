@@ -47,6 +47,14 @@ def animation_stack_report(disassembly, release, stack_bytes):
     cloud = "(anonymous namespace)::cloudTick()"
     if "startBuiltinPreset(" in bodies.get(cloud, ""):
         paths["remote_animation"] = base + [cloud, "(anonymous namespace)::startBuiltinPreset("] + builders
+    # The hand sensor now prepares the same complete Struggle trajectory.
+    # Its tick is usually inlined into loop(), but account for a separate frame
+    # too if a compiler change stops inlining it.
+    gesture = "(anonymous namespace)::proximityTick()"
+    if gesture in functions:
+        paths["hand_animation"] = base + [gesture, "(anonymous namespace)::startBuiltinPreset("] + builders
+    elif "startBuiltinPreset(" in bodies.get("loop()", ""):
+        paths["hand_animation"] = base + ["(anonymous namespace)::startBuiltinPreset("] + builders
     report = {"loop_stack_bytes": stack_bytes, "reserve_bytes": RESERVE_BYTES, "paths": {}}
     for name, path in paths.items():
         frames = [frame_for(prefix) for prefix in path]

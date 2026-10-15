@@ -1,16 +1,17 @@
-# Master package - 2026-10-15.3
+# Master package - 2026-10-15.4
 
 The master now uses a Heschen E3F-DS30B2 NPN NC hand sensor on GPIO27 with the
 three-resistor 24 V interface. Preserve the existing 3.3 V converter and leave
 the old GPIO18/19 PCB traces unused. See [the complete master wiring](master-wiring.md).
-Only the master needs flashing for this sensor change; the motion behavior below is unchanged.
+Only the master needs flashing. Struggle now randomly selects one of seven
+insect patterns from both the button and hand input; see [the preview guide](struggle-patterns.md).
 
 Running and microswitch homing current is 1,000 mA RMS on all twelve motors.
 Holding current remains 50% (approximately 500 mA). Struggle retains 20 mm/s²
 travel acceleration (20% below normal) and a 400 mm/min vector-feed ceiling.
-All arms share four poses: 30 mm open, 10 mm open, 30 mm open, then directly
-to the current time. The first three native actuator positions are 20, 40,
-20 mm; the final move closes the non-time arms fully. A valid RTC is now
+Each pattern has three asymmetric movement poses bounded to 0–20 mm open,
+then moves directly to the current time. The final move closes the non-time
+arms fully and returns hour/minute arms to their normal positions. A valid RTC is
 required. All poses share one trajectory with no programmed pause.
 
 Next Hour and the automatic hourly animation use two poses: all fully open,

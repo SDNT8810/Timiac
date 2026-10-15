@@ -52,6 +52,7 @@ void resetMaster() {
   releaseStartupPending = TIMIAC_MASTER && TIMIAC_RELEASE;
   motionSpeedPercent = timiac::defaultSpeedPercent;
   rtcValid = true; rtcTime.h = 13; rtcTime.m = 45;
+  lastStruggleVariant = timiac::struggleVariantCount;
   configureProximity(); proximityTriggers = 0; photoelectricLevel = HIGH;
   for (auto& r : receipts) r = Receipt();
   for (unsigned b = 0; b < 2; ++b) { peers[b] = Peer(); boards[b] = RemoteBoard(); lastBoardBoot[b] = ""; }
@@ -453,16 +454,19 @@ int main() {
   // All Struggle poses, including the final time, share one queued operation.
   assert(!startBuiltinPreset(timiac::Preset::Struggle, 825, "struggle", 124)); programTick();
   assert(program.total == 1 && program.hasStep && operation.barrier.active());
-  bool stationary[2][6] = {};
+  const unsigned chosenStruggle = program.struggleVariant;
+  const unsigned struggleCommands = timiac::presetCount(timiac::Preset::Struggle, chosenStruggle) + 2;
+  assert(chosenStruggle < 7 && program.name.indexOf(timiac::strugglePatterns[chosenStruggle].name) >= 0);
+  bool stationary[2][timiac::maxTrajectoryCommands] = {};
   for (unsigned b = 0; b < 2; ++b) {
     // Larger Struggle packets span multiple normal network-loop writes.
     while (peers[b].outbox.pending()) assert(flushPeer(peers[b]));
     DynamicJsonDocument packet(4096);
     assert(!deserializeJson(packet, peers[b].socket.sent.back()));
     assert(packet["type"] == "prepare" && packet["trajectory"] == true);
-    assert(packet["lines"].size() == 6); // Four poses plus acceleration controls.
+    assert(packet["lines"].size() == struggleCommands);
     assert(packet["lines"][0] == "M204 T20.000");
-    assert(packet["lines"][5] == "M204 T25.000");
+    assert(packet["lines"][struggleCommands - 1] == "M204 T25.000");
     const char* lines[timiac::maxTrajectoryCommands]; unsigned count = 0;
     for (JsonVariant line : packet["lines"].as<JsonArray>()) {
       lines[count] = line.as<const char*>();
@@ -479,13 +483,16 @@ int main() {
       if (!strcmp(line, "M400")) ++drains;
       kernel.receive("ok", hostNow);
     }
-    assert(frames == 7 && drains == 1 && kernel.completions == 1); // includes stage acceleration reset
+    assert(frames == struggleCommands + 1 && drains == 1 && kernel.completions == 1); // includes stage acceleration reset
   }
-  for (unsigned i = 0; i < 6; ++i) assert(!stationary[0][i] || !stationary[1][i]);
+  for (unsigned i = 0; i < struggleCommands; ++i) assert(!stationary[0][i] || !stationary[1][i]);
   report(0, "preparing", true); operationTick(); programTick();
   report(1, "preparing", true); operationTick(); programTick();
   report(0, "done"); programTick(); assert(program.state == "running");
   report(1, "done"); programTick(); assert(program.state == "done" && armTimeMinutes == 825);
+  assert(!startBuiltinPreset(timiac::Preset::Struggle, 825, "struggle-2", 125));
+  assert(program.struggleVariant != chosenStruggle && program.struggleVariant < 7);
+  program = Program();
 
   assert(!startBuiltinPreset(timiac::Preset::Hour, 270, "hour-2", 124)); programTick();
   report(0, "preparing", true); report(1, "preparing", true); operationTick();
@@ -611,7 +618,10 @@ int main() {
   // The old ultrasonic pins must never be configured/read by this driver.
   resetMaster(); connectBoard(0); connectBoard(1);
   releaseStartupPending = false; releaseClockEnabled = true;
-  for (auto& board : boards) board.homed = 63;
+  for (auto& board : boards) {
+    board.homed = 63; board.trajectorySupported = true;
+    for (unsigned arm = 0; arm < 6; ++arm) { board.known[arm] = true; board.positions[arm] = kTravelMm; }
+  }
   auto sensorFor = [&](unsigned level, unsigned duration) {
     photoelectricLevel = level;
     for (unsigned elapsed = 0; elapsed < duration; elapsed += 20) {
@@ -628,7 +638,8 @@ int main() {
     assert(status["detected"] == false && status["rawHigh"] == false && status["distanceCm"].isNull());
   }
   sensorFor(HIGH, 180); assert(!proximityTriggers);
-  sensorFor(HIGH, 60); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Curious);
+  sensorFor(HIGH, 60); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Struggle);
+  assert(program.struggleVariant < 7 && program.targetMinute == 13 * 60 + 45 && releaseClockEnabled);
   sensorFor(HIGH, 600); assert(proximityTriggers == 1 && !proximityGate.armed);
   program = Program(); operation = Operation();
   sensorFor(HIGH, 600); assert(proximityTriggers == 1); // No replay after movement.
