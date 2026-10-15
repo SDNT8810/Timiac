@@ -20,7 +20,7 @@ inline bool presetStep(Preset preset, unsigned index, unsigned target, float tra
   const auto& frame = preset == Preset::Hour ? hourFrames[index] : preset == Preset::Curious ? curiousFrames[index] : struggleFrames[index];
   float feed = frame.feed * travel / 100;
   if (feed > maxFeed) feed = maxFeed;
-  if (preset == Preset::Hour && index + 1 == presetCount(preset))
+  if ((preset == Preset::Hour || preset == Preset::Struggle) && index + 1 == presetCount(preset))
     return userAction("show-time", target / 60, target % 60, travel, feed, step);
   if (frame.dwell) {
     char line[24]; snprintf(line, sizeof(line), "G4 P%u", frame.dwell); step.both(line); return true;
@@ -66,15 +66,9 @@ inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target
       if (const char* word = strchr(line, axes[a])) next[b * 6 + a] = strtof(word + 1, nullptr);
     if (const char* word = strchr(line, 'F')) feed = strtof(word + 1, nullptr);
   }
-  if (preset == Preset::Struggle) {
-    // Enter at the nearer 10/90% edge, then sweep to the opposite edge and
-    // back twice. All frames share one queued trajectory without dwell gaps.
-    // Keep the existing 80% vector-feed ceiling and acceleration reduction.
-    for (unsigned arm = 0; arm < 12; ++arm)
-      next[arm] = index == 0 ? travel * (positions[arm] <= travel * .5f ? .1f : .9f)
-                            : travel - positions[arm];
-    feed = maxFeed * .8f;
-  }
+  // Struggle keeps the existing 80% vector-feed ceiling, including the final
+  // move directly into the clock pose. Intermediate poses come from its frames.
+  if (preset == Preset::Struggle) feed = maxFeed * .8f;
   float distance[2] = {}, span = 0;
   for (unsigned b = 0; b < 2; ++b) {
     float primary = 0, secondary = 0;

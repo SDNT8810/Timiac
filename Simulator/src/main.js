@@ -17,7 +17,7 @@ const INITIAL_FEED = 900;
 
 const presets = [
   { id: 'hour-movement', name: 'Hour movement', note: 'all open, then directly to time; 30% slower', code: hourMovementCode, glyph: 'H' },
-  { id: 'circular-struggle', name: 'Circular struggle', note: 'two continuous 40 mm sweeps out and back', code: circularStruggleCode, glyph: 'O' },
+  { id: 'circular-struggle', name: 'Circular struggle', note: '30 mm, 10 mm, 30 mm, then time', code: circularStruggleCode, glyph: 'O' },
   { id: 'random-struggle', name: 'Feral random', note: 'irregular repeatable spasms', code: randomStruggleCode, glyph: '?' },
   { id: 'harmonic-struggle', name: 'Harmonic struggle', note: 'phase-locked standing wave', code: harmonicStruggleCode, glyph: '~' },
   { id: 'curious', name: 'Curious creature', note: 'reach · recoil · inspect', code: curiousCode, glyph: '◒' },
@@ -801,7 +801,7 @@ function loadPreset(preset, autoplay = false) {
   clockState.displayTime = '';
   document.body.classList.remove('is-struggling');
   document.querySelectorAll('.preset').forEach(button => button.classList.toggle('active', button.dataset.preset === preset.id));
-  els.editor.value = preset.id === 'circular-struggle' ? generateStruggle(initialState) : preset.code.trim();
+  els.editor.value = preset.id === 'circular-struggle' ? generateStruggle(initialState, formatClockTime()) : preset.code.trim();
   els.sequenceName.textContent = preset.name.toUpperCase();
   els.fileName.textContent = `${preset.id === 'breathe' ? 'breathing' : preset.id === 'ripple' ? 'tidal-ripple' : preset.id}.gcode`;
   els.clockMode.textContent = 'SEQUENCE MODE · LIVE CLOCK PAUSED';
@@ -870,16 +870,17 @@ function startStruggle({ automatic = false } = {}) {
   document.body.classList.add('is-struggling');
   document.querySelectorAll('.preset').forEach(button => button.classList.remove('active'));
   els.timeInput.value = time;
-  els.editor.value = generateStruggle(initialState);
+  els.editor.value = generateStruggle(initialState, time);
   els.sequenceName.textContent = `${automatic ? 'HOURLY ' : ''}SPIDER STRUGGLE`;
   els.fileName.textContent = 'circular-struggle.gcode';
-  els.clockMode.textContent = 'TWO STRUGGLE CYCLES · CLOCK PAUSED';
+  els.clockMode.textContent = '30 MM · 10 MM · 30 MM · THEN TIME';
   els.loop.checked = false;
   rebuildProgram({ initialState });
   player.onComplete = () => {
     clockState.struggling = false;
+    clockState.displayTime = time;
     document.body.classList.remove('is-struggling');
-    els.clockMode.textContent = 'STRUGGLE COMPLETE · CLOCK PAUSED';
+    els.clockMode.textContent = `STRUGGLE COMPLETE · ${time} · CLOCK PAUSED`;
   };
   setPlaying(true);
 }

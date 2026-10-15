@@ -24,26 +24,32 @@ test('every Next Hour target opens once and closes directly into time at 70 perc
   assert.deepEqual(moves(example), moves(generateHourMovement('01:00')));
 });
 
-test('Struggle makes two 40 mm out-and-back cycles from each actual arm position without dwells', () => {
+test('all Struggle arms share 30/10/30 mm openings, then close directly into the selected time', () => {
   for (const initial of [Array(12).fill(0), Array(12).fill(100), clockPoseValues('03:30'),
-    AXES.map((_, i) => (i % 3) * 50)]) {
-    const code = generateStruggle(initial);
+    AXES.map((_, i) => (i % 3) * 50)]) for (const time of ['00:00', '01:00', '03:30', '23:59']) {
+    const code = generateStruggle(initial, time);
     assert.doesNotMatch(code, /^G4/m);
     const frames = moves(code);
-    assert.equal(frames.length, 5);
-    const entry = initial.map(value => value >= 50 ? 90 : 10);
-    assert.deepEqual(frames[0].values, entry);
-    for (let i = 1; i < frames.length; i++) {
-      for (let arm = 0; arm < 12; arm++) {
-        assert.equal(Math.abs(frames[i].values[arm] - frames[i - 1].values[arm]) * .5, 40);
-        assert.ok(frames[i].values[arm] >= 10 && frames[i].values[arm] <= 90);
-      }
-    }
-    assert.deepEqual(frames[2].values, entry);
-    assert.deepEqual(frames[4].values, entry);
+    assert.equal(frames.length, 4);
+    assert.deepEqual(frames[0].values, Array(12).fill(60)); // 30 mm open
+    assert.deepEqual(frames[1].values, Array(12).fill(20)); // 10 mm open
+    assert.deepEqual(frames[2].values, Array(12).fill(60));
+    assert.deepEqual(frames[3].values, clockPoseValues(time));
     // The all-arm sweeps use the same XYZ vector-feed ceiling as hardware.
     assert.ok(Math.abs(frames[1].feed - 800 / Math.sqrt(3)) < .001);
   }
   const fixture = moves(readFileSync(new URL('../Simulator/gcodes/circular-struggle.gcode', import.meta.url), 'utf8'));
   assert.deepEqual(fixture.map(frame => frame.values), moves(generateStruggle(Array(12).fill(100))).map(frame => frame.values));
+});
+
+test('the shorter Struggle including its final time pose stays below 27 nominal seconds at full speed', () => {
+  for (const initial of [Array(12).fill(0), Array(12).fill(100), clockPoseValues('03:30')]) {
+    let previous = initial, seconds = 0;
+    for (const frame of moves(generateStruggle(initial))) {
+      seconds += Math.max(...frame.values.map((value, i) => Math.abs(value - previous[i]))) / frame.feed * 60;
+      previous = frame.values;
+    }
+    // Includes entry from fully open; 1x is 100%, 0.5x is the usual 50%.
+    assert.ok(seconds < 27);
+  }
 });

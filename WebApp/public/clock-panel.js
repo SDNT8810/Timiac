@@ -4,7 +4,7 @@ export function localDate(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 export function clockActionNeedsRtc(action, state) {
-  return action === 'show-time' || (['next-five', 'next-hour'].includes(action) && !(state?.clock?.armMinute >= 0));
+  return action === 'show-time' || action === 'struggle' || (['next-five', 'next-hour'].includes(action) && !(state?.clock?.armMinute >= 0));
 }
 export function renderClockReadouts(state, connected, element) {
   const sensor = state?.proximity;

@@ -1,4 +1,4 @@
-**Updated animations (2026-10-15.1):** Next Hour runs 30% slower and opens all arms, then closes directly into the selected time. Struggle makes two continuous out-and-back sweeps between 5 and 45 mm, retaining its reduced speed and acceleration. The simulator uses the same movements. Only the master needs flashing for this update; current remains 1,000 mA RMS.
+**Updated animations (2026-10-15.2):** Next Hour runs 30% slower and opens all arms, then closes directly into the selected time. Struggle moves all arms to 30 mm open, then 10 mm, then 30 mm, and closes directly into the current time. The simulator uses the same movements. Only the master needs flashing for this update; current remains 1,000 mA RMS.
 
 
 # Timiac: twelve motors, three ESP modules
@@ -315,12 +315,13 @@ enabled by the development master; the release dashboard has no switch panel.
   the fully open minute arm takes precedence. The physical mechanism is inverted
   relative to the simulator's extension coordinates. Dev moves once per press;
   release continues following the RTC.
-- **Struggle:** enters at each arm's nearer 5 or 45 mm edge, then makes two
-  complete 40 mm out-and-back sweeps without a programmed pause. Vector feed
-  remains capped at 400 mm/min and travel acceleration at 20 mm/s². The wider
-  double cycle takes longer than the former 15-second pulse; speed settings scale
-  the duration. It ends at the starting edge.
-  It requires homing but not an RTC.
+- **Struggle:** all twelve arms share the same opening targets: **30 mm, 10 mm,
+  30 mm, then current time**, without a programmed pause. The first three poses
+  correspond to native actuator coordinates 20, 40, 20 mm. In the final move,
+  other arms close fully while the hour/minute arms take their clock positions.
+  Vector feed remains capped at 400 mm/min and travel acceleration at 20 mm/s².
+  Homing and a valid RTC are required. The current time is captured when the
+  command is accepted, and the arms retain that final pose with tracking paused.
 - **Next 5 min:** advances the arm pose to the next five-minute boundary, just
   like the simulator's Next 5 min control (13:58 becomes 14:00).
 - **Next hour:** adds one hour, runs `Simulator/gcodes/hour-movement.gcode`, and

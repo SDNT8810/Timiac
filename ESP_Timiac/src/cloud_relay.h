@@ -53,9 +53,9 @@ const char* startCloudAction(const String& type, const String& requestId, JsonVa
   if (type != "home" && ((boards[0].homed & kHomedMask) != kHomedMask || (boards[1].homed & kHomedMask) != kHomedMask))
     return "Home all arms before moving";
   unsigned targetMinute = 0;
-  if (type == "show-time" || nextTime) {
+  if (type == "show-time" || type == "struggle" || nextTime) {
     rtcTick(true);
-    if ((type == "show-time" || armTimeMinutes < 0) && !rtcValid) return rtcError.c_str();
+    if ((type == "show-time" || type == "struggle" || armTimeMinutes < 0) && !rtcValid) return rtcError.c_str();
     targetMinute = nextTime && armTimeMinutes >= 0 ? armTimeMinutes : rtcTime.hour() * 60 + rtcTime.minute();
     if (nextTime) targetMinute = timiac::nextClockMinute(targetMinute, type == "next-five");
   }

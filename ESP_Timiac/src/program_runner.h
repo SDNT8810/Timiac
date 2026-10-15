@@ -8,7 +8,8 @@ void programTick() {
     program.hasStep = false; ++program.completed;
     if (program.completed == program.total) {
       program.state = "done"; program.file.close();
-      if (program.builtin && program.preset == timiac::Preset::Hour) armTimeMinutes = program.targetMinute;
+      if (program.builtin && (program.preset == timiac::Preset::Hour || program.preset == timiac::Preset::Struggle))
+        armTimeMinutes = program.targetMinute;
       recordProgramReceipt(); logMessage("Program complete");
     }
   }

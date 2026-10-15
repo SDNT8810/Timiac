@@ -18,12 +18,11 @@ export function generateHourMovement(time) {
   ].join('\n');
 }
 
-export function generateStruggle(initialState) {
+export function generateStruggle(initialState, time = '01:00') {
   let previous = [...initialState];
-  const edge = initialState.map(value => value >= 50 ? 90 : 10);
-  const lines = ['; STRUGGLE: two continuous 40 mm out-and-back cycles; 5-45 mm on hardware.', 'G90'];
-  for (let frame = 0; frame < 5; frame++) {
-    const target = frame % 2 ? edge.map(value => 100 - value) : [...edge];
+  const lines = [`; STRUGGLE: 30 mm open, 10 mm open, 30 mm open, then directly to ${time}.`, 'G90'];
+  const poses = [Array(12).fill(60), Array(12).fill(20), Array(12).fill(60), clockPoseValues(time)];
+  for (const target of poses) {
     const delta = target.map((value, index) => value - previous[index]);
     const span = Math.max(...delta.map(Math.abs));
     if (span > 0) {

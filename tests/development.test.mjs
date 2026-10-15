@@ -148,7 +148,7 @@ test('development clock controls use the same actions and require ownership, hom
   state.a.homed = 0; vm.runInContext('render(api.status)', context);
   assert.equal(actions.home.disabled, false);
   state.a.homed = 63; state.clock.valid = false; vm.runInContext('render(api.status)', context);
-  assert.equal(actions['show-time'].disabled, true); assert.equal(actions.struggle.disabled, false);
+  assert.equal(actions['show-time'].disabled, true); assert.equal(actions.struggle.disabled, true);
   assert.equal(actions['next-five'].disabled, true);
   state.clock.armMinute = 0; vm.runInContext('render(api.status)', context);
   assert.equal(actions['next-five'].disabled, false);

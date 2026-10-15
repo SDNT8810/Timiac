@@ -132,9 +132,9 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
       statusReply(request); return;
     }
     unsigned targetMinute = 0;
-    if (action == "show-time" || nextTime) {
+    if (action == "show-time" || action == "struggle" || nextTime) {
       rtcTick(true);
-      if ((action == "show-time" || armTimeMinutes < 0) && !rtcValid) { errorReply(request, 503, rtcError); return; }
+      if ((action == "show-time" || action == "struggle" || armTimeMinutes < 0) && !rtcValid) { errorReply(request, 503, rtcError); return; }
       targetMinute = nextTime && armTimeMinutes >= 0 ? armTimeMinutes : rtcTime.hour() * 60 + rtcTime.minute();
       if (nextTime) targetMinute = timiac::nextClockMinute(targetMinute, action == "next-five");
     }

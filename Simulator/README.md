@@ -12,9 +12,10 @@ npm run dev
 Open <http://localhost:4000>.
 
 **Next Hour** now opens all arms, then closes directly into the selected time,
-with both moves 30% slower. **Struggle** enters at each arm's nearer band edge,
-then makes two continuous 40 mm out-and-back sweeps. It stays between actuator
-positions 5 and 45 mm and ends at the starting edge, with the clock paused.
+with both moves 30% slower. **Struggle** moves all arms together to **30 mm open,
+10 mm open, 30 mm open**, then directly into the current time. Intermediate
+poses never open beyond 30 mm. Only the final time pose lets the minute arm
+fully open; all non-time arms close fully. The clock stays paused at that pose.
 Both buttons start from the visible arm pose without snapping to another pose.
 Choose **0.5×** playback to approximate the hardware's default 50% speed;
 **1.0×** represents 100%. Nominal Struggle timing follows the two boards' vector

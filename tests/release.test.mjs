@@ -101,6 +101,7 @@ test('dashboard shows RTC time and disables motion for missing home, RTC, connec
   state.a.homed = 0; vm.runInContext('render()', context);
   assert.equal(element('close').disabled, true); assert.equal(element('home').disabled, false);
   state.a.homed = 63; state.clock.valid = false; vm.runInContext('render()', context);
+  assert.equal(element('struggle').disabled, true); // Its final pose now needs the current time.
   assert.equal(element('show-time').disabled, true); assert.equal(element('close').disabled, false);
   state.control.owner = 'other'; vm.runInContext('render()', context);
   assert.equal(element('home').disabled, true); assert.equal(element('save-time').disabled, true);

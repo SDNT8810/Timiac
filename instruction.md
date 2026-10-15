@@ -85,8 +85,9 @@ firmware/two-motor/               (entire folder, including JSON files)
 ESP_Timiac/include/cloud_config.h  (included clock pairing defaults)
 ```
 
-For animation update **2026-10-15.1**, only the master needs reflashing. Struggle
-should sweep between **5 and 45 mm** and return **twice without a pause**.
+For animation update **2026-10-15.2**, only the master needs reflashing. Struggle
+should move all arms to **30 mm open, 10 mm open, 30 mm open**, then close
+directly into the time display, with no pause between poses.
 Next Hour should open all arms, then close directly into the time display,
 with both moves **30% slower**. Stop if steps are lost or overheating warnings
 appear. A thermal fault requires cooling and an Octopus reset before homing again.

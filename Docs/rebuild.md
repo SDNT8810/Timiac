@@ -1,11 +1,12 @@
-# Motion package - 2026-10-15.1
+# Motion package - 2026-10-15.2
 
 Running and microswitch homing current is 1,000 mA RMS on all twelve motors.
 Holding current remains 50% (approximately 500 mA). Struggle retains 20 mm/s²
 travel acceleration (20% below normal) and a 400 mm/min vector-feed ceiling.
-It enters at the nearer 5 or 45 mm edge, then sweeps across the 40 mm span and
-back twice. All five poses share one queued trajectory with no programmed
-pause. The wider double cycle replaces the former 15-second pulse.
+All arms share four poses: 30 mm open, 10 mm open, 30 mm open, then directly
+to the current time. The first three native actuator positions are 20, 40,
+20 mm; the final move closes the non-time arms fully. A valid RTC is now
+required. All poses share one trajectory with no programmed pause.
 
 Next Hour and the automatic hourly animation use two poses: all fully open,
 then directly to selected time. Both moves run 30% slower, at <=350 mm/min per motor.
