@@ -1,7 +1,7 @@
 {
   "Configuration.h": {
     "STRING_CONFIG_H_AUTHOR": "\"Timiac generation 2\"",
-    "CUSTOM_MACHINE_NAME": "\"TIMIAC2-03b3b6e145e4\"",
+    "CUSTOM_MACHINE_NAME": "\"TIMIAC2-f09aa035bf26\"",
     "MOTHERBOARD": "BOARD_BTT_OCTOPUS_V1_1",
     "SERIAL_PORT": "-1",
     "SERIAL_PORT_2": "3",
@@ -24,7 +24,7 @@
     "JUNCTION_DEVIATION_MM": "0.3",
     "S_CURVE_ACCELERATION": "",
     "ENDSTOP_INTERRUPTS_FEATURE": "",
-    "HOMING_FEEDRATE_MM_M": "{ 120, 120, 120, 120, 120, 120 }",
+    "HOMING_FEEDRATE_MM_M": "{ 240, 240, 240, 240, 240, 240 }",
     "X_BED_SIZE": "50",
     "Y_BED_SIZE": "50",
     "Z_HOMING_HEIGHT": "0",

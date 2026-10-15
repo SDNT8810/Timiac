@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { AXES, clockPoseValues, generateHourMovement, generateStruggle, STRUGGLE_PATTERNS, chooseStruggleVariant } from '../Simulator/src/clock-motion.js';
+import { AXES, clockPoseValues, generateHourMovement, generateStruggle, STRUGGLE_PATTERNS, chooseStruggleVariant, FIXED_SPEED } from '../Simulator/src/clock-motion.js';
 
 function moves(code) {
   return code.split(/\r?\n/).filter(line => /^G1 /.test(line)).map(line => ({
@@ -11,15 +11,23 @@ function moves(code) {
   }));
 }
 
-test('every Next Hour target opens once and closes directly into time at 70 percent of the former feed', () => {
+test('every Next Hour target opens, flutters within 37-48 mm for three seconds, then closes directly into time', () => {
   for (let minute = 0; minute < 1440; minute++) {
     const time = `${Math.floor(minute / 60)}:${minute % 60}`;
     const frames = moves(generateHourMovement(time));
-    assert.equal(frames.length, 2);
+    assert.equal(frames.length, 5);
     assert.deepEqual(frames[0].values, Array(12).fill(100));
-    assert.deepEqual(frames[1].values, clockPoseValues(time));
-    assert.equal(frames[1].values[Math.floor((minute % 60) / 5)], 100);
-    assert.ok(frames.every(frame => frame.feed === 700));
+    assert.deepEqual(frames.at(-1).values, clockPoseValues(time));
+    assert.equal(frames.at(-1).values[Math.floor((minute % 60) / 5)], 100);
+    assert.equal(frames[0].feed, 700); assert.equal(frames.at(-1).feed, 700);
+    let previous = frames[0].values, seconds = 0;
+    for (const frame of frames.slice(1, -1)) {
+      assert.ok(frame.values.every(value => value >= 74 && value <= 96));
+      assert.ok(new Set(frame.values).size > 1);
+      seconds += Math.max(...frame.values.map((value, i) => Math.abs(value - previous[i]))) / frame.feed * 60 / FIXED_SPEED;
+      previous = frame.values;
+    }
+    assert.ok(Math.abs(seconds - 3) < 0.001);
   }
   const example = readFileSync(new URL('../Simulator/gcodes/hour-movement.gcode', import.meta.url), 'utf8');
   assert.deepEqual(moves(example), moves(generateHourMovement('01:00')));
@@ -38,7 +46,7 @@ test('all seven Struggle previews stay within 20 mm and close directly into the 
       assert.ok(frame.values.every(value => value >= 0 && value <= 40)); // 40% of 50 mm = 20 mm.
       assert.ok(new Set(frame.values).size > 1); // No all-arm symmetric sweep.
     }
-    assert.ok(frames.every(frame => frame.feed > 0 && frame.feed <= 800));
+    assert.ok(frames.every(frame => frame.feed > 0 && frame.feed <= 1040));
   }
   const fixture = moves(readFileSync(new URL('../Simulator/gcodes/circular-struggle.gcode', import.meta.url), 'utf8'));
   assert.deepEqual(fixture.map(frame => frame.values), moves(generateStruggle(Array(12).fill(100))).map(frame => frame.values));
@@ -77,8 +85,7 @@ test('all seven Struggles keep a short path including entry and the final time p
       seconds += Math.max(...frame.values.map((value, i) => Math.abs(value - previous[i]))) / frame.feed * 60;
       previous = frame.values;
     }
-    // Includes entry from fully open; 1x is 100%, 0.5x is the usual 50%.
-    assert.ok(seconds < 28, `${STRUGGLE_PATTERNS[variant].name}: ${seconds}`);
+    assert.ok(seconds / FIXED_SPEED < 29, `${STRUGGLE_PATTERNS[variant].name}: ${seconds / FIXED_SPEED}`);
   }
  }
 });

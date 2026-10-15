@@ -136,7 +136,7 @@ export function createGateway({ verifyToken = verifyFirebaseToken, upstream = fe
             const body = await readJson(request, 2048);
             if (!actionTypes.has(body.type)) throw failure('Unsupported action');
             if (body.type === 'set-time' && (typeof body.localTime !== 'string' || !/^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d$/.test(body.localTime))) throw failure('Invalid local time');
-            if (body.type === 'set-speed' && (!Number.isInteger(body.percent) || body.percent < 20 || body.percent > 100)) throw failure('Speed must be a whole percentage from 20 to 100');
+            if (body.type === 'set-speed' && body.percent !== 75) throw failure('Movement speed is fixed at 75%');
             const remote = await deviceState(env, now);
             if (!remote.online || !remote.status?.session) throw failure('The master is offline. Reconnect it before sending a command', 409);
             const state = remote.status;

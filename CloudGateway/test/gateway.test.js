@@ -142,10 +142,10 @@ test('busy programs and local control refuse remote movement but allow Stop', as
     assert.equal((await f.action('stop')).status, 202);
   }
 });
-test('the speed range is validated and valid speed values reach the hardware unchanged', async t => {
+test('only the fixed 75 percent speed can reach the hardware', async t => {
   const f = fixture(t); await f.sync();
-  for (const percent of [19, 101, 50.5, '50', null]) assert.equal((await f.action('set-speed', { percent })).status, 400);
-  for (const percent of [20, 50, 100]) {
+  for (const percent of [19, 20, 50, 70, 100, 101, 75.5, '75', null]) assert.equal((await f.action('set-speed', { percent })).status, 400);
+  for (const percent of [75]) {
     assert.equal((await f.action('set-speed', { percent })).status, 202);
     assert.equal((await (await f.sync()).json()).action.percent, percent);
   }

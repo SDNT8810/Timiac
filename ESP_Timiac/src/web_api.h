@@ -112,14 +112,14 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
   if (path == "/api/action") {
     String action = doc["action"] | "";
 #if TIMIAC_RELEASE
-    if (action != "home" && action != "close" && action != "show-time" && action != "next-five" &&
+    if (action != "home" && action != "open" && action != "close" && action != "show-time" && action != "next-five" &&
         action != "next-hour" && action != "struggle") {
       errorReply(request, 404, "Development actions are unavailable in release mode"); return;
     }
 #endif
     bool animation = action == "struggle" || action == "next-hour";
     bool nextTime = action == "next-five" || action == "next-hour";
-    if (action != "home" && action != "close" && action != "show-time" && action != "next-five" && !animation) {
+    if (action != "home" && action != "open" && action != "close" && action != "show-time" && action != "next-five" && !animation) {
       errorReply(request, 400, "Unknown user action"); return;
     }
     String id = doc["id"] | "";

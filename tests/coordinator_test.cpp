@@ -185,22 +185,15 @@ int main() {
   assert(clockSoak(true) == 0);   // An entire day, no browser lease/manual wake-up.
   assert(clockSoak(true, true) == 0); // Manual Home holds for the full day too.
 #endif
-  resetMaster(); configureMotionSpeed(); assert(motionSpeedPercent == 50);
+  resetMaster(); configureMotionSpeed(); assert(motionSpeedPercent == 75);
   DynamicJsonDocument speedSetting(256);
-  for (const char* invalid : {"{}", "{\"percent\":19}", "{\"percent\":101}", "{\"percent\":-1}", "{\"percent\":20.5}", "{\"percent\":\"50\"}", "{\"percent\":true}"}) {
+  for (const char* invalid : {"{}", "{\"percent\":19}", "{\"percent\":20}", "{\"percent\":50}", "{\"percent\":100}", "{\"percent\":101}", "{\"percent\":-1}", "{\"percent\":75.5}", "{\"percent\":\"75\"}", "{\"percent\":true}"}) {
     deserializeJson(speedSetting, invalid);
-    assert(saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 50);
+    assert(saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 75);
   }
-  speedSetting.clear(); speedSetting["percent"] = 20;
-  operation.barrier.begin(hostNow);
-  assert(saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 50);
-  operation = Operation(); program.state = "paused";
-  assert(saveMotionSpeed(speedSetting.as<JsonVariant>())); program = Program();
-  motionPreferences.writable = false;
-  assert(saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 50);
-  motionPreferences.writable = true;
-  assert(!saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 20);
-  motionSpeedPercent = 50; configureMotionSpeed(); assert(motionSpeedPercent == 20);
+  speedSetting.clear(); speedSetting["percent"] = 75;
+  assert(!saveMotionSpeed(speedSetting.as<JsonVariant>()) && motionSpeedPercent == 75);
+  motionSpeedPercent = 20; configureMotionSpeed(); assert(motionSpeedPercent == 75);
   // Every entry point captures the same speed for both bridges. Changing a
   // later setting cannot alter an already prepared operation or its timeout.
   for (unsigned speed : {20U, 50U, 100U}) {

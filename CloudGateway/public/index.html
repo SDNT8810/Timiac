@@ -18,16 +18,16 @@
     <div class="time"><strong id="clock">--:--:--</strong><span id="date"></span><span id="clock-mode"></span></div>
     <div class="boards"><article><small>OCTOPUS 1</small><strong id="board-a">Unknown</strong></article><article><small>OCTOPUS 2</small><strong id="board-b">Unknown</strong></article></div>
     <div class="actions">
-      <button data-action="home">Home</button><button data-action="close">Close</button>
+      <button data-action="open">Open</button><button data-action="close">Close</button>
       <button data-action="show-time">Show time</button><button data-action="next-five">Next 5 minutes</button>
       <button data-action="next-hour">Next hour</button><button data-action="struggle">Struggle</button>
     </div>
-    <label class="speed-control">Movement speed <span id="speed-value">50%</span><input id="speed" type="range" min="20" max="100" step="1" value="50"></label>
     <form id="time-form"><label>Set local clock time <input id="local-time" type="datetime-local" step="1" required></label><button id="save-time">Save time</button></form>
     <button id="stop" class="stop">Stop</button><p id="message" role="status"></p>
+    <details><summary>Maintenance</summary><p>Establish the arm positions after a reset or firmware update.</p><button id="calibrate">Calibrate arms</button></details>
     <section class="firmware-panel" aria-labelledby="firmware-title">
       <h2 id="firmware-title">Firmware updates</h2>
-      <p>Updates pause the clock. Install one board at a time, then Home and Show time when finished.</p>
+      <p>Updates pause the clock. Install one board at a time, then Calibrate arms under Maintenance and Show time when finished.</p>
       <form id="firmware-form">
         <label>Board / image <select id="firmware-target">
           <option value="master:app">Master ESP32 — application</option>

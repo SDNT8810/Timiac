@@ -3,19 +3,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
-async function dashboard({ active = false, supported = true, uploadError = false } = {}) {
+async function dashboard({ active = false, supported = true, uploadError = false, statusPatch = {}, online = true, queued = 0 } = {}) {
   const nodes = new Map(), requests = [], listeners = {};
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', hidden: false, disabled: false, files: [],
       classList: { toggle() {} }, click() { if (!this.disabled) return this.onclick?.(); } });
     return nodes.get(id);
   };
-  const buttons = ['home', 'close'].map(action => ({ ...node('action-' + action), dataset: { action } }));
+  const buttons = ['open', 'close', 'show-time', 'next-five', 'next-hour', 'struggle'].map(action => ({ ...node('action-' + action), dataset: { action } }));
   node('firmware-target').value = 'master:app';
   const document = { getElementById: node, activeElement: null,
     querySelectorAll: () => buttons, querySelector: () => buttons[0], addEventListener: (name, fn) => { listeners[name] = fn; } };
-  const status = { online: true, queued: 0, status: { machineReady: true, a: { homed: 63 }, b: { homed: 63 },
-    ota: { supported, active, state: active ? 'downloading' : 'idle' } } };
+  const status = { online, queued, status: { machineReady: true, a: { homed: 63 }, b: { homed: 63 },
+    clock: { valid: true, localTime: '2026-10-15T18:15:42', armMinute: 1095 },
+    ota: { supported, active, state: active ? 'downloading' : 'idle' }, ...statusPatch } };
   const fetch = async (path, options = {}) => {
     requests.push({ path, options });
     if (path === '/api/session') return Response.json({ username: 'Andrea' });
@@ -54,7 +55,7 @@ test('a rejected firmware upload never queues a flash and returns a useful error
 test('an active firmware update disables movement and settings while Stop stays available', async () => {
   const f = await dashboard({ active: true });
   assert.ok(f.buttons.every(button => button.disabled));
-  for (const id of ['speed', 'save-time', 'local-time', 'install-firmware']) assert.equal(f.node(id).disabled, true);
+  for (const id of ['save-time', 'local-time', 'install-firmware', 'calibrate']) assert.equal(f.node(id).disabled, true);
   assert.equal(f.node('stop').disabled, false);
 });
 test('initial firmware is required and Home inside the target selector cannot command the motors', async () => {
@@ -63,4 +64,43 @@ test('initial firmware is required and Home inside the target selector cannot co
   assert.match(f.node('firmware-status').textContent, /initial USB\/SD/i);
   f.listeners.keydown({ key: 'Home', target: { tagName: 'SELECT' }, preventDefault() { throw new Error('Selector key must remain local'); } });
   assert.equal(f.requests.some(request => request.path.endsWith('/actions')), false);
+});
+
+test('older firmware without any OTA fields can still use every movement button', async () => {
+  const f = await dashboard({ statusPatch: { ota: undefined, operation: { state: 'done' }, program: { state: 'done' }, control: { owner: '' } } });
+  assert.ok(f.buttons.every(button => !button.disabled));
+  assert.equal(f.node('connection').textContent, 'Connected to Timiac');
+  assert.equal(f.node('install-firmware').disabled, true);
+});
+
+test('every global command lock has a visible reason and Stop remains available', async () => {
+  const cases = [
+    [{ control: { owner: 'local-phone' } }, /local dashboard.*15 seconds/],
+    [{ ota: { active: true } }, /Firmware update/],
+    [{ stopPending: true }, /Stop confirmation/],
+    [{ program: { state: 'paused' } }, /movement is in progress/],
+    [{ a: { homed: 0 } }, /Calibrate arms/],
+    [{ machineReady: false }, /motor boards/],
+  ];
+  for (const [statusPatch, reason] of cases) {
+    const f = await dashboard({ statusPatch });
+    assert.ok(f.buttons.every(button => button.disabled));
+    assert.match(f.node('connection').textContent, reason);
+    assert.equal(f.node('stop').disabled, false);
+  }
+  const f = await dashboard({ queued: 1 });
+  assert.ok(f.buttons.every(button => button.disabled));
+  assert.match(f.node('connection').textContent, /queued command/);
+});
+
+test('Home key invokes Open and the cloud page has no speed control', async () => {
+  const f = await dashboard();
+  f.listeners.keydown({ key: 'Home', target: { tagName: 'BODY' }, preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  const actions = f.requests.filter(request => request.path.endsWith('/actions'));
+  assert.equal(actions.length, 1);
+  assert.equal(JSON.parse(actions[0].options.body).type, 'open');
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(html, /data-action="open">Open/);
+  assert.doesNotMatch(html, /type="range"|id="speed"/);
 });

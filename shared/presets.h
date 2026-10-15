@@ -71,9 +71,10 @@ inline bool presetTrajectoryFrame(Preset preset, unsigned index, unsigned target
       if (const char* word = strchr(line, axes[a])) next[b * 6 + a] = strtof(word + 1, nullptr);
     if (const char* word = strchr(line, 'F')) feed = strtof(word + 1, nullptr);
   }
-  // Struggle keeps the existing 80% vector-feed ceiling, including the final
-  // move directly into the clock pose. Intermediate poses come from its frames.
-  if (preset == Preset::Struggle && feed > maxFeed * .8f) feed = maxFeed * .8f;
+  // Increase every Struggle segment by 30%, including the final time pose.
+  // At the fixed 75% override the 520 mm/min vector ceiling becomes 390,
+  // below the machine's 500 mm/min per-motor limit.
+  if (preset == Preset::Struggle) feed = fminf(feed, maxFeed * .8f) * 1.3f;
   float distance[2] = {}, span = 0;
   for (unsigned b = 0; b < 2; ++b) {
     float primary = 0, secondary = 0;

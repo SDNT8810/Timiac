@@ -5,7 +5,6 @@ const controller = new HardwareController();
 const $ = id => document.getElementById(id);
 let busy = false, connected = false, stopping = false, initializedInput = false;
 let stopGeneration = 0;
-let speedEditing = false;
 function message(text, error = false) { $('message').textContent = text; $('message').classList.toggle('error', error); }
 function render(state = controller.status) {
   const otherOwner = state?.control?.owner && !controller.ownsControl();
@@ -16,23 +15,19 @@ function render(state = controller.status) {
   const homed = state?.a?.homed === 63 && state?.b?.homed === 63;
   document.querySelectorAll('[data-action]').forEach(button => {
     const needsRtc = clockActionNeedsRtc(button.dataset.action, state);
-    button.disabled = Boolean(blocked || (button.dataset.action !== 'home' && !homed) || (needsRtc && !state?.clock?.valid));
+    button.disabled = Boolean(blocked || !homed || (needsRtc && !state?.clock?.valid));
   });
   $('save-time').disabled = Boolean(busy || !connected || otherOwner || !state?.clock?.present);
-  $('motion-speed').disabled = Boolean(busy || stopping || !connected || otherOwner || moving || state?.a?.busy || state?.b?.busy || state?.stopPending);
-  if (!speedEditing) {
-    $('motion-speed').value = String(state?.speedPercent ?? 50);
-    $('speed-value').textContent = `${$('motion-speed').value}%`;
-  }
+  $('calibrate').disabled = Boolean(blocked);
   for (const id of ['wifi-save', 'wifi-forget']) $(id).disabled = Boolean(busy || !connected || otherOwner);
   $('connection').textContent = connected ? 'Connected to Timiac' : 'Disconnected';
   $('running-status').textContent = !connected ? 'Waiting for clock status…' :
     startupPending ? 'Starting automatically: waiting for both motor boards, then homing all arms.' :
     moving && state.operation?.homing ? (state.clock?.running ? 'Homing all arms. The clock will start when homing finishes.' : 'Homing all arms. They will stay home until your next command.') :
-    !homed ? 'Home the arms to start the clock.' :
+    !homed ? 'Restart the master to home the arms before moving.' :
     !state.clock?.running ? 'Clock paused. Press Start clock to follow the time.' : !state.clock.valid ? 'Clock waiting for a valid time.' :
     'Clock running. Arms follow the time every five minutes, even with this page closed.';
-  $('machine-status').textContent = !connected ? 'Connection lost. Waiting for Timiac…' : state.fault || (otherOwner ? 'Another device has control. Please wait.' : moving ? 'Arms are moving…' : !state.machineReady ? 'Waiting for both motor boards…' : !homed ? 'Ready to home. Home all arms before moving.' : 'All 12 arms are ready.');
+  $('machine-status').textContent = !connected ? 'Connection lost. Waiting for Timiac…' : state.fault || (otherOwner ? 'Another device has control. Please wait.' : moving ? 'Arms are moving…' : !state.machineReady ? 'Waiting for both motor boards…' : !homed ? 'Homing required. Restart the master to home all arms.' : 'All 12 arms are ready.');
   if (connected && programBusy && !state.fault) $('machine-status').textContent = `${state.program.name || 'Movement'} · ${state.program.completed}/${state.program.total} steps`;
   if (connected && !moving && !otherOwner && !state.fault && homed && state.machineReady && state.proximity?.enabled && state.proximity.ready && !state.proximity.armed) {
     $('machine-status').textContent = 'All 12 arms ready. Move hand away to arm the sensor.';
@@ -58,20 +53,18 @@ document.querySelectorAll('[data-action]').forEach(button => button.addEventList
   if (stopping) return;
   message(`${button.querySelector('strong').textContent} in progress…`);
   await controller.action(button.dataset.action, render);
-  message(button.dataset.action === 'home' ? 'Arms are home. They will stay here until your next command.' : 'Movement complete.');
+  message(button.dataset.action === 'open' ? 'Arms are fully open. They will stay here until your next command.' : 'Movement complete.');
 })));
-$('motion-speed').addEventListener('input', () => {
-  speedEditing = true;
-  $('speed-value').textContent = `${$('motion-speed').value}%`;
-});
-$('motion-speed').addEventListener('change', async () => {
-  const percent = Number($('motion-speed').value);
-  try {
-    await perform(async () => {
-      await controller.post('/api/speed', { percent });
-      message(`Movement speed saved: ${percent}%.`);
-    });
-  } finally { speedEditing = false; render(); }
+$('calibrate').addEventListener('click', () => perform(async () => {
+  message('Calibrating arm positions…');
+  await controller.action('home', render);
+  message('Calibration complete. Press Start clock to resume.');
+}));
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Home' || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.target.isContentEditable) return;
+  event.preventDefault();
+  const button = document.querySelector('[data-action="open"]');
+  if (!button.disabled) button.click();
 });
 $('stop').addEventListener('click', async () => {
   ++stopGeneration;

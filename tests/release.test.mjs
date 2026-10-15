@@ -33,7 +33,7 @@ function dashboard() {
       querySelector() { return { textContent: id }; } });
     return nodes.get(id);
   }
-  const actions = ['home', 'close', 'show-time', 'next-five', 'next-hour', 'struggle'].map(action => {
+  const actions = ['open', 'close', 'show-time', 'next-five', 'next-hour', 'struggle'].map(action => {
     const button = element(action); button.dataset.action = action; return button;
   });
   const state = { session: 'boot', machineReady: true, machineState: 'ready', a: { homed: 63 }, b: { homed: 63 },
@@ -50,7 +50,7 @@ function dashboard() {
     async stop() { calls.push('stop'); }
   }
   const context = vm.createContext({ HardwareController: Controller, localDate, clockActionNeedsRtc, renderClockReadouts, renderSystemStatus, bindWifiSettings, Date, setTimeout() {},
-    document: { getElementById: element, querySelectorAll: () => actions } });
+    document: { getElementById: element, querySelectorAll: () => actions, querySelector: () => actions[0], addEventListener() {} } });
   const source = readFileSync(new URL('../WebApp/release/app.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '');
   vm.runInContext(source, context);
   return { context, element, state, calls };
@@ -99,12 +99,12 @@ test('dashboard shows RTC time and disables motion for missing home, RTC, connec
   assert.equal(element('clock').textContent, '13:45:12');
   assert.equal(element('show-time').disabled, false);
   state.a.homed = 0; vm.runInContext('render()', context);
-  assert.equal(element('close').disabled, true); assert.equal(element('home').disabled, false);
+  assert.equal(element('close').disabled, true); assert.equal(element('open').disabled, true); assert.equal(element('calibrate').disabled, false);
   state.a.homed = 63; state.clock.valid = false; vm.runInContext('render()', context);
   assert.equal(element('struggle').disabled, true); // Its final pose now needs the current time.
   assert.equal(element('show-time').disabled, true); assert.equal(element('close').disabled, false);
   state.control.owner = 'other'; vm.runInContext('render()', context);
-  assert.equal(element('home').disabled, true); assert.equal(element('save-time').disabled, true);
+  assert.equal(element('open').disabled, true); assert.equal(element('save-time').disabled, true);
   assert.equal(element('stop').disabled, false);
   vm.runInContext('connected = false; render()', context);
   assert.equal(element('clock').textContent, '--:--:--');
@@ -125,7 +125,7 @@ test('release dashboard reports automatic startup, homing, and waiting for valid
   state.a.homed = state.b.homed = 0;
   vm.runInContext('render()', context);
   assert.match(element('running-status').textContent, /Starting automatically/);
-  assert.equal(element('home').disabled, true);
+  assert.equal(element('open').disabled, true);
   assert.equal(element('stop').disabled, false);
   state.clock.startupPending = false; state.clock.running = true;
   state.operation = { state: 'running', homing: true };
@@ -147,26 +147,23 @@ test('Stop cancels an action waiting for control', async () => {
   assert.ok(calls.includes('stop')); assert.ok(!calls.includes('close'));
 });
 
-test('manual Home promises to stay parked and speed slider saves through the control lease', async () => {
+test('Open holds the full extension and no slider can change speed', async () => {
+  const { element, calls } = dashboard(); await flush();
+  await element('open').listeners.click();
+  assert.deepEqual(calls, ['claim', 'open']);
+  assert.match(element('message').textContent, /fully open.*stay here/);
+  const html = readFileSync(new URL('../WebApp/release/index.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /motion-speed|speed-value|type="range"/);
+});
+
+test('maintenance calibration remains available before arms are homed', async () => {
   const { context, element, state, calls } = dashboard(); await flush();
-  state.clock.running = false; state.operation = { state: 'running', homing: true };
+  state.a.homed = state.b.homed = 0;
   vm.runInContext('render()', context);
-  assert.match(element('running-status').textContent, /stay home/);
-  assert.equal(element('motion-speed').disabled, true);
-  state.operation.state = 'done'; vm.runInContext('render()', context);
-  assert.equal(element('motion-speed').value, '50');
-  assert.equal(element('motion-speed').disabled, false);
-  element('motion-speed').value = '20'; element('motion-speed').listeners.input();
-  vm.runInContext('render()', context); // Status polling must not move the thumb while dragging.
-  assert.equal(element('motion-speed').value, '20');
-  assert.equal(element('speed-value').textContent, '20%');
-  await element('motion-speed').listeners.change();
-  assert.equal(calls[0], 'claim');
-  assert.equal(calls[1].path, '/api/speed'); assert.equal(calls[1].data.percent, 20);
-  state.speedPercent = 100; vm.runInContext('render()', context);
-  assert.equal(element('motion-speed').value, '100');
-  state.control.owner = 'other'; vm.runInContext('render()', context);
-  assert.equal(element('motion-speed').disabled, true);
+  assert.equal(element('open').disabled, true);
+  assert.equal(element('calibrate').disabled, false);
+  await element('calibrate').listeners.click();
+  assert.deepEqual(calls, ['claim', 'home']);
 });
 
 test('animation waits for the whole program, even when a single step has finished', async () => {
@@ -189,7 +186,7 @@ test('animation waits for the whole program, even when a single step has finishe
 
 test('release page exposes clock controls without development actions', async () => {
   const html = readFileSync(new URL('../WebApp/release/index.html', import.meta.url), 'utf8');
-  assert.deepEqual([...html.matchAll(/data-action="([^"]+)"/g)].map(m => m[1]), ['home', 'close', 'show-time', 'next-five', 'next-hour', 'struggle']);
+  assert.deepEqual([...html.matchAll(/data-action="([^"]+)"/g)].map(m => m[1]), ['open', 'close', 'show-time', 'next-five', 'next-hour', 'struggle']);
   assert.doesNotMatch(html, /sensorless|terminal|data-command/);
   const { context, element, state } = dashboard(); await flush();
   state.clock.running = true; vm.runInContext('render()', context);
@@ -198,7 +195,7 @@ test('release page exposes clock controls without development actions', async ()
   assert.match(element('running-status').textContent, /Clock paused/);
   state.program = { state: 'running', name: 'Curious creature', completed: 3, total: 28 };
   state.operation.state = 'done'; vm.runInContext('render()', context);
-  for (const name of ['home', 'close', 'show-time', 'next-five', 'next-hour', 'struggle']) assert.equal(element(name).disabled, true);
+  for (const name of ['open', 'close', 'show-time', 'next-five', 'next-hour', 'struggle']) assert.equal(element(name).disabled, true);
   assert.equal(element('stop').disabled, false);
   assert.match(element('machine-status').textContent, /3\/28/);
 });
@@ -224,7 +221,7 @@ test('hand distance stays visible before homing and during animation, and clears
   assert.match(element('machine-status').textContent, /Curious creature.*2\/18/);
   assert.equal(element('sensor-distance').textContent, '34.5 cm');
   assert.equal(element('sensor-status').textContent, 'Near');
-  assert.equal(element('home').disabled, true); assert.equal(element('stop').disabled, false);
+  assert.equal(element('open').disabled, true); assert.equal(element('stop').disabled, false);
   vm.runInContext('connected = false; render()', context);
   assert.equal(element('sensor-distance').textContent, '—');
   assert.equal(element('sensor-status').textContent, 'Disconnected');

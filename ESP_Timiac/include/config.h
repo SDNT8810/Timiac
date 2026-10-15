@@ -68,7 +68,7 @@
 #endif
 constexpr unsigned long kBaud = 115200;
 // Application revision is separate from the hardware identity shared with Marlin.
-constexpr char kSoftwareRevision[] = "2026-10-15.5";
+constexpr char kSoftwareRevision[] = "2026-10-15.6";
 #if TIMIAC_MASTER
 constexpr char kOtaImageMarker[] = "TIMIAC_OTA_ROLE:master";
 #elif TIMIAC_BOARD_ID == 1

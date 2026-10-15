@@ -8,7 +8,7 @@
   "travel_mm": 50,
   "full_steps_per_mm": 180,
   "max_feed_mm_min": 500,
-  "homing_feed_mm_min": 120,
+  "homing_feed_mm_min": 240,
   "homing_mode": "microswitch",
   "homing_strategy": "concurrent-all",
   "acceleration_mm_s2": 25,

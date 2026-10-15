@@ -153,10 +153,10 @@ int main(int argc, char** argv) {
           const double velocity = strtod(strchr(line, 'F') + 1, nullptr) / 60;
           seconds[b] = path / velocity;
           largestVelocity = fmax(largestVelocity, velocity);
-          if (preset == Preset::Struggle) assert(velocity * 60 <= maxFeed * .8 + .001);
+          if (preset == Preset::Struggle) assert(velocity * 60 <= maxFeed * .8 * 1.3 + .001);
           for (unsigned arm = 0; arm < 6; ++arm) {
             const double axisSpeed = fabs(positions[b * 6 + arm] - previous[b * 6 + arm]) / path * velocity * 60;
-            assert(axisSpeed <= maxFeed * (preset == Preset::Struggle ? .8 : .7) + .02);
+            assert(axisSpeed <= maxFeed * (preset == Preset::Struggle ? 1.04 : (i > 0 && i + 1 < presetCount(preset) ? 1.0 : .7)) + .02);
           }
           if (preset == Preset::Struggle && i + 1 < presetCount(preset, variant))
             for (unsigned arm = 0; arm < 12; ++arm)
@@ -169,20 +169,24 @@ int main(int argc, char** argv) {
       bounds[0] += seconds[0] * 2 + largestVelocity * .5 / accel;
       bounds[1] += seconds[0] + largestVelocity / accel;
     }
-    assert(commands >= (preset == Preset::Struggle ? 3U : 1U) && commands <= (preset == Preset::Struggle ? 4U : 2U));
-    assert(bounds[0] + .4 <= (preset == Preset::Struggle ? 56 : 40));
-    assert(bounds[1] + .4 <= (preset == Preset::Struggle ? 28 : 20));
+    assert(commands >= (preset == Preset::Struggle ? 3U : 1U) && commands <= (preset == Preset::Struggle ? 4U : 5U));
+    assert(bounds[0] + .4 <= (preset == Preset::Struggle ? 56 : 52));
+    assert(bounds[1] + .4 <= (preset == Preset::Struggle ? 28 : 26));
     for (unsigned arm = 0; arm < 12; ++arm)
       assert(positions[arm] == (faceHour[arm] == target % 60 / 5 ? 0 : faceHour[arm] == target / 60 % 12 ? halfTravel : travel));
   }
-  // Next Hour has two poses, and never closes the minute hand before reopening.
-  assert(presetCount(Preset::Hour) == 2);
+  // Next Hour opens, flutters for nominal 3 seconds at 75%, then goes directly to time.
+  assert(presetCount(Preset::Hour) == 5);
   for (unsigned target : {0U, 60U, 210U, 1439U}) {
     float positions[12]; for (float& value : positions) value = travel;
     Step frame;
     assert(presetTrajectoryFrame(Preset::Hour, 0, target, travel, maxFeed, positions, frame));
     for (float value : positions) assert(value == 0);
-    assert(presetTrajectoryFrame(Preset::Hour, 1, target, travel, maxFeed, positions, frame));
+    for (unsigned i = 1; i < 4; ++i) {
+      assert(presetTrajectoryFrame(Preset::Hour, i, target, travel, maxFeed, positions, frame));
+      for (float value : positions) assert(value >= 2 && value <= 13); // 37-48 mm open.
+    }
+    assert(presetTrajectoryFrame(Preset::Hour, 4, target, travel, maxFeed, positions, frame));
     for (unsigned arm = 0; arm < 12; ++arm)
       assert(positions[arm] == (faceHour[arm] == target % 60 / 5 ? 0 : faceHour[arm] == target / 60 % 12 ? halfTravel : travel));
   }

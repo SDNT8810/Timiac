@@ -2,7 +2,7 @@
 #include <stdint.h>
 
 namespace timiac {
-constexpr unsigned defaultSpeedPercent = 50;
+constexpr unsigned defaultSpeedPercent = 75;
 constexpr unsigned minSpeedPercent = 20;
 constexpr unsigned maxSpeedPercent = 100;
 inline bool validSpeedPercent(unsigned percent) {

@@ -232,3 +232,15 @@ also i like to be able to update the esp firmwares (or even octopus boards) over
 can we ?
 
 if yes , please prepair required bootloaders so when master esp is connected to wifi and hav internet access, i can update all firmwares from here
+
+-------------------------------------------------------------
+
+some modifications please:
+1- increase homing speed 2x
+2- increase all struggle speeds 30 percent
+3- set defult slider speed at 75 percent and remove that from dashboard ! so user cant change it
+
+add a small struggle on "Next hour" animation middle :
+when they are all open, do struggle something between 37 - 48 mm for 3 secounds , then the rest of move (close)
+
+4- instead of "Home" i want "Open" key . and it must sent all arms to full open instead of running home command

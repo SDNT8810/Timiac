@@ -2,7 +2,7 @@ import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { cadPose, LINK_TOPOLOGY, outputFoldAngle, toMechanism3D } from './mechanism.js';
-import { AXES, clockPoseValues, generateHourMovement, generateStruggle, chooseStruggleVariant, STRUGGLE_PATTERNS } from './clock-motion.js';
+import { AXES, clockPoseValues, generateHourMovement, generateStruggle, chooseStruggleVariant, STRUGGLE_PATTERNS, FIXED_SPEED } from './clock-motion.js';
 import breatheCode from '../gcodes/breathing.gcode?raw';
 import curiousCode from '../gcodes/curious-creature.gcode?raw';
 import rippleCode from '../gcodes/tidal-ripple.gcode?raw';
@@ -72,6 +72,7 @@ document.querySelector('#app').innerHTML = `
         <div class="clock-step-actions">
           <button id="next-five" type="button">NEXT 5 MIN <kbd>5</kbd></button>
           <button id="next-hour" type="button">NEXT HOUR <kbd>H</kbd></button>
+          <button id="open-arms" type="button">OPEN <kbd>Home</kbd></button>
         </div>
         <div class="clock-mode"><i></i><span id="clock-mode">LIVE · HOURLY MOVEMENT ARMED</span></div>
       </section>
@@ -191,7 +192,6 @@ document.querySelector('#app').innerHTML = `
           <div class="timeline-labels"><span id="current-time">00:00.0</span><span id="total-time">00:00.0</span></div>
           <input id="timeline" type="range" min="0" max="1000" value="0" aria-label="Timeline" />
         </div>
-        <label class="speed-control">SPEED <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1.0×</option><option value="1.5">1.5×</option><option value="2">2.0×</option></select></label>
         <label class="loop-control"><input id="loop" type="checkbox" checked><span></span>LOOP</label>
       </div>
     </section>
@@ -245,7 +245,6 @@ const els = {
   timeline: document.querySelector('#timeline'),
   currentTime: document.querySelector('#current-time'),
   totalTime: document.querySelector('#total-time'),
-  speed: document.querySelector('#speed'),
   loop: document.querySelector('#loop'),
   parseState: document.querySelector('#parse-state'),
   commandCount: document.querySelector('#command-count'),
@@ -265,6 +264,7 @@ const els = {
   struggleDescription: document.querySelector('#struggle-description'),
   nextFive: document.querySelector('#next-five'),
   nextHour: document.querySelector('#next-hour'),
+  openArms: document.querySelector('#open-arms'),
   clockMode: document.querySelector('#clock-mode'),
 };
 
@@ -733,7 +733,7 @@ function renderPosition() {
   renderArms(values);
   const duration = player.parsed.duration || 0;
   els.timeline.value = duration ? Math.round(player.position / duration * 1000) : 0;
-  els.currentTime.textContent = formatTime(player.position);
+  els.currentTime.textContent = formatTime(player.position / FIXED_SPEED);
   els.lineNumber.textContent = segment ? String(segment.line).padStart(2, '0') : '—';
   els.feedRate.textContent = segment ? `${Math.round(segment.feed)}` : '—';
   updateActiveLine(segment?.line);
@@ -757,7 +757,7 @@ function tick(now) {
   if (!player.playing) return;
   const delta = Math.min(0.08, (now - player.lastFrame) / 1000);
   player.lastFrame = now;
-  player.position += delta * Number(els.speed.value);
+  player.position += delta * FIXED_SPEED;
   let completed = false;
   if (player.position >= player.parsed.duration) {
     if (els.loop.checked && player.parsed.duration > 0) {
@@ -788,7 +788,7 @@ function rebuildProgram({ reset = true, initialState = null } = {}) {
   els.parseState.textContent = player.parsed.errors.length ? player.parsed.errors[0] : 'VALID PROGRAM';
   els.parseState.parentElement.classList.toggle('has-error', player.parsed.errors.length > 0);
   els.commandCount.textContent = String(player.parsed.segments.length).padStart(2, '0');
-  els.totalTime.textContent = formatTime(player.parsed.duration);
+  els.totalTime.textContent = formatTime(player.parsed.duration / FIXED_SPEED);
   updateLineNumbers();
   renderPosition();
   if (wasPlaying && player.parsed.segments.length) setPlaying(true);
@@ -864,6 +864,17 @@ function showClockPose(time, { animate = false, live = true } = {}) {
     player.position = player.parsed.duration;
     renderPosition();
   }
+}
+
+function openArms() {
+  const initialState = player.parsed ? stateAt(player.position).values : Array(12).fill(0);
+  setPlaying(false); player.onComplete = null;
+  clockState.live = false; clockState.struggling = false; clockState.displayTime = '';
+  document.body.classList.remove('is-struggling');
+  els.editor.value = 'G90\nG1 ' + AXES.map(axis => `${axis}100`).join(' ') + ' F1000';
+  els.sequenceName.textContent = 'FULL OPEN'; els.fileName.textContent = 'open.gcode';
+  els.clockMode.textContent = 'FULL OPEN · CLOCK PAUSED'; els.loop.checked = false;
+  rebuildProgram({ initialState }); setPlaying(true);
 }
 
 function startStruggle({ variant = null } = {}) {
@@ -1028,6 +1039,7 @@ els.strugglePattern.addEventListener('change', () => {
 });
 els.nextFive.addEventListener('click', () => stepClock({ nextFive: true }));
 els.nextHour.addEventListener('click', () => stepClock({ hours: 1, runHourMovement: true }));
+els.openArms.addEventListener('click', openArms);
 
 document.querySelector('#copy-code').addEventListener('click', async event => {
   await navigator.clipboard.writeText(els.editor.value);
@@ -1055,6 +1067,7 @@ document.addEventListener('keydown', event => {
   if (event.key.toLowerCase() === 's') startStruggle();
   if (event.key === '5') els.nextFive.click();
   if (event.key.toLowerCase() === 'h') els.nextHour.click();
+  if (event.key === 'Home') { event.preventDefault(); els.openArms.click(); }
 });
 
 syncLiveClock({ initial: true });

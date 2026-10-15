@@ -20,19 +20,41 @@ async function api(path, options = {}) {
   return body;
 }
 function stateLabel(board) { if (!board?.bridgeConnected) return 'ESP offline'; if (board.updating) return 'Updating firmware'; if (!board.octopusConnected) return 'Octopus offline'; if (board.fault) return 'Stopped'; if (board.busy) return 'Moving'; return board.homed === 63 ? 'Ready' : 'Home required'; }
+function commandBlockReason(remote) {
+  const state = remote.status || {};
+  if (!remote.online) return 'Master is offline';
+  if (uploadingFirmware || state.ota?.active) return 'Firmware update in progress';
+  if (state.stopPending) return 'Waiting for Stop confirmation';
+  if (state.fault) return state.fault;
+  if (state.control?.owner && !state.control.owner.startsWith('cloud:'))
+    return 'A local dashboard has control. Close its tab and wait 15 seconds to use remote control.';
+  if (remote.queued > 0) return 'Waiting for the master to receive the queued command (up to one minute)';
+  if (state.a?.busy || state.b?.busy || ['preparing', 'running'].includes(state.operation?.state) ||
+      ['running', 'paused', 'uploading'].includes(state.program?.state)) return 'A movement is in progress. Stop is available.';
+  if (state.clock?.startupPending) return 'Waiting for automatic startup homing';
+  if (!state.machineReady) return state.a?.fault || state.b?.fault || 'Waiting for both motor boards';
+  return '';
+}
 function render(remote) {
   const state = remote.status || {};
-  $('connection').textContent = !remote.online ? 'Master is offline' : state.fault || state.operation?.error || (state.machineReady ? 'Connected to Timiac' : 'Waiting for motor boards');
+  const reason = commandBlockReason(remote);
+  const homed = state.a?.homed === 63 && state.b?.homed === 63;
+  $('connection').textContent = reason || (!homed ? 'Homing required. Use Calibrate arms under Maintenance.' : 'Connected to Timiac');
   $('clock').textContent = state.clock?.valid ? state.clock.localTime.slice(11) : '--:--:--';
   $('date').textContent = state.clock?.internetSync === 'synchronized' ? 'Internet-synchronized clock' : state.clock?.error || 'Local clock time';
   $('clock-mode').textContent = state.clock?.running ? 'Clock running' : 'Clock paused';
   $('board-a').textContent = stateLabel(state.a); $('board-b').textContent = stateLabel(state.b);
-  const localControl = state.control?.owner && !state.control.owner.startsWith('cloud:');
-  const busy = uploadingFirmware || !remote.online || state.ota?.active || state.stopPending || state.a?.busy || state.b?.busy || remote.queued > 0 || localControl ||
-    ['preparing', 'running'].includes(state.operation?.state) || ['running', 'paused', 'uploading'].includes(state.program?.state);
-  document.querySelectorAll('[data-action]').forEach(button => button.disabled = busy || !state.machineReady || (button.dataset.action !== 'home' && (state.a?.homed !== 63 || state.b?.homed !== 63)));
+  const busy = Boolean(reason);
+  document.querySelectorAll('[data-action]').forEach(button => {
+    const action = button.dataset.action;
+    const needsTime = action === 'show-time' || action === 'struggle' ||
+      (['next-five', 'next-hour'].includes(action) && !(state.clock?.armMinute >= 0));
+    const block = reason || (!homed ? 'Home all arms first' : needsTime && !state.clock?.valid ? 'Set the clock time first' : '');
+    button.disabled = Boolean(block); button.title = block;
+  });
   $('stop').disabled = !remote.online;
-  $('speed').disabled = busy; $('save-time').disabled = busy; $('local-time').disabled = busy;
+  $('save-time').disabled = busy; $('local-time').disabled = busy;
+  $('calibrate').disabled = busy;
   $('install-firmware').disabled = busy || !state.ota?.supported;
   const ota = state.ota;
   const job = remote.update;
@@ -42,9 +64,6 @@ function render(remote) {
     : ota?.id ? `${ota.target} · ${ota.phase || ota.state}${ota.active ? progress : ''}${ota.error ? ': ' + ota.error : ''}`
     : 'Ready for remote updates. Leave a microSD card in each Octopus.';
   $('firmware-status').classList.toggle('error', ota?.state === 'failed' || ['failed', 'expired'].includes(job?.state));
-  if (document.activeElement !== $('speed') && !pendingAction) {
-    $('speed').value = state.speedPercent || 50; $('speed-value').textContent = $('speed').value + '%';
-  }
   if (pendingAction && state.remoteAction?.id === pendingAction) {
     say(state.remoteAction.error || state.remoteAction.type + ' accepted by the master.', Boolean(state.remoteAction.error));
     pendingAction = '';
@@ -73,8 +92,7 @@ $('login-form').onsubmit = async event => {
 };
 document.querySelectorAll('[data-action]').forEach(button => button.onclick = () => queue(button.dataset.action).catch(error => say(error.message, true)));
 $('stop').onclick = () => queue('stop').catch(error => say(error.message, true));
-$('speed').oninput = () => { $('speed-value').textContent = $('speed').value + '%'; };
-$('speed').onchange = () => queue('set-speed', { percent: Number($('speed').value) }).catch(error => { pendingAction = ''; say(error.message, true); refresh(); });
+$('calibrate').onclick = () => queue('home').catch(error => say(error.message, true));
 $('time-form').onsubmit = event => {
   event.preventDefault(); queue('set-time', { localTime: $('local-time').value.length === 16 ? $('local-time').value + ':00' : $('local-time').value }).catch(error => say(error.message, true));
 };
@@ -95,7 +113,7 @@ $('firmware-form').onsubmit = async event => {
 $('sign-out').onclick = async () => { try { await api('/api/logout', { method: 'POST' }); showLogin(); } catch (error) { say(error.message, true); } };
 document.addEventListener('keydown', event => {
   if (event.key === 'Home' && !$('dashboard').hidden && !['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) {
-    event.preventDefault(); const button = document.querySelector('[data-action="home"]'); if (!button.disabled) button.click();
+    event.preventDefault(); const button = document.querySelector('[data-action="open"]'); if (!button.disabled) button.click();
   }
 });
 start().catch(error => showLogin(error.message === 'Please sign in' ? '' : error.message));

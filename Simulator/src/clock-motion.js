@@ -1,9 +1,11 @@
 // Simulator positions are extension percentages; physical home/open is 0 mm.
 import { STRUGGLE_PATTERNS } from './struggle-patterns.generated.js';
+import { HOUR_FRAMES } from './hour-pattern.generated.js';
 export { STRUGGLE_PATTERNS };
 export const AXES = 'ABCDEHIJKLUV'.split('');
 export const HOUR_FEED = 700;
 export const STRUGGLE_FEED = 800;
+export const FIXED_SPEED = 0.75;
 const words = values => AXES.map((axis, index) => `${axis}${values[index]}`).join(' ');
 
 export function clockPoseValues(time) {
@@ -13,10 +15,9 @@ export function clockPoseValues(time) {
 
 export function generateHourMovement(time) {
   return [
-    `; HOUR MOVEMENT TO ${time}: all open, then directly to time; 30% slower.`,
+    `; HOUR MOVEMENT TO ${time}: all open, 3-second struggle at 37-48 mm, then directly to time.`,
     'G90',
-    `G1 ${words(Array(12).fill(100))} F${HOUR_FEED}`,
-    `G1 ${words(clockPoseValues(time))} F${HOUR_FEED}`,
+    ...HOUR_FRAMES.map((frame, index) => `G1 ${words(index + 1 === HOUR_FRAMES.length ? clockPoseValues(time) : frame.positions)} F${frame.feed}`),
   ].join('\n');
 }
 
@@ -43,7 +44,7 @@ export function generateStruggle(initialState, time = '01:00', variant = 0) {
         const primary = Math.hypot(...board.slice(0, 3).map(index => delta[index]));
         return primary || Math.hypot(...board.slice(3).map(index => delta[index]));
       }));
-      lines.push(`G1 ${words(target)} F${(Math.min(feed, STRUGGLE_FEED) * span / Math.max(distance, span)).toFixed(3)}`);
+      lines.push(`G1 ${words(target)} F${(Math.min(feed, STRUGGLE_FEED) * 1.3 * span / Math.max(distance, span)).toFixed(3)}`);
     }
     previous = target;
   }
