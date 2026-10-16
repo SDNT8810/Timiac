@@ -63,6 +63,7 @@ void setup() {
   runtimeMutex = xSemaphoreCreateRecursiveMutex();
   configASSERT(runtimeMutex);
   RuntimeLock lock;
+  configureReliability();
   WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
   WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
@@ -73,7 +74,7 @@ void setup() {
   configureClock();
   rtcTick(true);
   configureProximity();
-  LittleFS.begin(); configureFirmwareUpdate(); configureHttp(); listener.begin();
+  LittleFS.begin(); configureFirmwareUpdate(); configureHttp(); listener.begin(); configureCloud();
 #else
   bridgeResetReason = ESP.getResetReason();
   WiFi.setSleepMode(WIFI_NONE_SLEEP);

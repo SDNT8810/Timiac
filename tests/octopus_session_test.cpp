@@ -272,8 +272,12 @@ int main() {
   OctopusSession disconnected; boot(disconnected); execute(disconnected, "G28 Z");
   disconnected.monitor = true; now += 501;
   assert(std::string(disconnected.next(now)) == "M119");
-  now += 10001; assert(!disconnected.next(now));
-  assert(strstr(disconnected.fault, "M119") && disconnected.failures == 1);
+  now += 10001;
+  const char* probe = disconnected.next(now);
+  assert(probe && strstr(probe, "M118") && !strstr(probe, "M410"));
+  assert(disconnected.homed == 4 && !disconnected.failures && !disconnected.healthy(now));
+  now += 10000; assert(!disconnected.next(now));
+  assert(strstr(disconnected.fault, "diagnostic recovery timed out") && disconnected.failures == 1);
   std::string previous = drainMarker(disconnected.stop(now));
   for (unsigned retry = 0; retry < 3; ++retry) {
     assert(!disconnected.next(now + 9999));
@@ -353,5 +357,43 @@ int main() {
   now += 1200; assert(live.driverReportAge(now) == 1200);
   live.receive("start", now);
   assert(!live.driverReportAvailable && !live.drivers.tested);
+  // A lost read-only report fences late ok replies and re-identifies the
+  // Octopus without throwing away calibrated positions or replaying movement.
+  OctopusSession soak; boot(soak); soak.homed = 63;
+  for (unsigned a = 0; a < 6; ++a) { soak.known[a] = true; soak.positions[a] = a + 10; }
+  unsigned interruptions = 0;
+  for (unsigned poll = 0; poll < 34560; ++poll) { // 48 hours at one diagnostic every five seconds.
+    now += 5001; assert(std::string(soak.next(now)) == "M122");
+    if (poll % 97 == 0) {
+      if (poll % 2) {
+        now += 10001;
+        const char* command = soak.next(now);
+        assert(command && !strncmp(command, "M118 ", 5));
+      } else {
+        soak.receive("\t\tX\tY\tZ\tI\tJ\tK", now); soak.receive("ok", now);
+        assert(soak.next(now) && soak.state == State::Drain);
+      }
+      const std::string marker = drainMarker(soak.active);
+      assert(!soak.healthy(now) && soak.homed == 63 && !soak.failures);
+      soak.receive("ok", now); assert(soak.state == State::Drain);
+      soak.receive(marker.c_str(), now); assert(soak.state == State::Drain);
+      soak.receive("ok", now); now += 1001;
+      assert(std::string(soak.next(now)) == "M115"); identify(soak);
+      assert(!soak.healthy(now) && !soak.drivers.good() && soak.homed == 63);
+      assert(std::string(soak.next(now)) == "M122"); drivers(soak); soak.receive("ok", now);
+      assert(soak.state == State::Ready); ++interruptions;
+    } else { drivers(soak); soak.receive("ok", now); }
+    assert(soak.healthy(now) && soak.homed == 63 && !soak.failures && !soak.completions);
+    for (unsigned a = 0; a < 6; ++a) assert(soak.known[a] && soak.positions[a] == a + 10);
+  }
+  assert(soak.diagnosticRecoveries == interruptions);
+  // Actual thermal/driver failures, moving timeouts and board restarts retain
+  // their existing interlocks; retries are restricted to idle read-only work.
+  now += 5001; assert(std::string(soak.next(now)) == "M122");
+  drivers(soak); soak.receive("OT prewarn\ttrue\tfalse\tfalse\tfalse\tfalse\tfalse", now); soak.receive("ok", now);
+  assert(!soak.healthy(now) && soak.drivers.thermalWarning == 1 && soak.state == State::Ready);
+  assert(!soak.retryDiagnostic(now));
+  soak.receive("start", now); assert(!soak.homed);
+  std::cout << "Idle diagnostics: 48 simulated hours with " << interruptions << " fenced interruptions; positions preserved and real thermal faults still blocked\n";
   std::cout << "Octopus kernel: identity, driver modes, all six axes, stop, recovery, homing timeout and switches passed\n";
 }

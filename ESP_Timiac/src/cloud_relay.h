@@ -1,9 +1,11 @@
 #pragma once
 #include "cloud_certificate.h"
+#include "cloud_transport.h"
 
 // Outbound HTTPS relay. No router port needs to be opened.
 String cloudState = "disabled", cloudError, cloudLastAction, cloudLastActionId, cloudActionError;
-uint32_t cloudLastSync = 0, cloudLastActionAt = 0;
+uint32_t cloudLastSync = 0, cloudLastSuccess = 0, cloudLastActionAt = 0;
+uint32_t cloudRetryMs = 5000, cloudFailures = 0, cloudLastDuration = 0;
 
 bool cloudEnabled() {
   return strlen(TIMIAC_CLOUD_URL) && strlen(TIMIAC_CLOUD_DEVICE_ID) && strlen(TIMIAC_CLOUD_DEVICE_KEY);
@@ -12,7 +14,9 @@ void writeCloudStatus(JsonObject cloud) {
   cloud["enabled"] = cloudEnabled(); cloud["state"] = cloudState;
   cloud["error"] = cloudError; cloud["lastAction"] = cloudLastAction;
   cloud["lastActionError"] = cloudActionError;
-  cloud["lastSyncAgeMs"] = cloudLastSync ? millis() - cloudLastSync : 0;
+  cloud["lastSyncAgeMs"] = cloudLastSuccess ? millis() - cloudLastSuccess : 0;
+  cloud["inFlight"] = cloudInFlight; cloud["failures"] = cloudFailures; cloud["durationMs"] = cloudLastDuration;
+  cloud["workerStackFree"] = cloudTask ? uxTaskGetStackHighWaterMark(cloudTask) : 0;
 }
 void cloudSnapshot(JsonObject snapshot) {
   snapshot["session"] = bootId; snapshot["machineReady"] = bothHealthy();
@@ -20,11 +24,13 @@ void cloudSnapshot(JsonObject snapshot) {
   snapshot["speedPercent"] = motionSpeedPercent;
   snapshot["software"] = kSoftwareRevision;
   snapshot["firmware"] = timiac::machineId;
+  writeReliabilityStatus(snapshot.createNestedObject("reliability"));
   writeFirmwareUpdateStatus(snapshot.createNestedObject("ota"));
   JsonObject clock = snapshot.createNestedObject("clock");
   writeRtcStatus(clock); writeNtpStatus(clock);
   clock["automatic"] = bool(TIMIAC_RELEASE); clock["running"] = releaseClockEnabled;
   clock["startupPending"] = releaseStartupPending; clock["armMinute"] = armTimeMinutes;
+  clock["pausedReason"] = releaseClockEnabled ? "" : clockPauseReason;
   JsonObject operationStatus = snapshot.createNestedObject("operation");
   operationStatus["id"] = operation.id; operationStatus["state"] = operation.barrier.name();
   operationStatus["error"] = operation.error; operationStatus["homing"] = operation.homing;
@@ -98,35 +104,42 @@ void receiveCloudAction(JsonVariant action) {
   if (error) logMessage("Remote action refused: " + String(error));
   else logMessage("Remote action accepted: " + type);
 }
-void cloudTick() {
+void configureCloud() {
   if (!cloudEnabled()) return;
+  if (!configureCloudTransport()) { cloudState = "unavailable"; cloudError = "Cloud worker memory unavailable; local clock remains active"; }
+}
+void cloudTick() {
+  if (!cloudEnabled() || !cloudRequests || !cloudResponses) return;
+  CloudExchange* completed = nullptr;
+  if (xQueueReceive(cloudResponses, &completed, 0) == pdTRUE) {
+    cloudInFlight = false; cloudLastDuration = completed->elapsed;
+    if (!completed->error.isEmpty()) {
+      cloudState = "connection failed"; cloudError = completed->error; ++cloudFailures;
+      cloudRetryMs = min(uint32_t(60000), cloudRetryMs * 2);
+    } else {
+      DynamicJsonDocument inbound(2048);
+      if (deserializeJson(inbound, completed->response)) {
+        cloudState = "connection failed"; cloudError = "Invalid cloud response"; ++cloudFailures;
+      } else {
+        cloudState = "connected"; cloudError = ""; cloudLastSuccess = millis(); cloudRetryMs = 5000;
+        receiveCloudAction(inbound["action"]);
+        if (!inbound["action"].is<JsonObject>()) acceptFirmwareUpdate(inbound["update"]);
+      }
+    }
+    delete completed;
+  }
   if (WiFi.status() != WL_CONNECTED || wifiPending || networkChanging) {
     cloudState = "waiting for router"; return;
   }
-  if (cloudLastSync && !timiac::expired(millis(), cloudLastSync, 5000)) return;
-  cloudLastSync = millis();
-  WiFiClientSecure client;
-  client.setCACert(strlen(TIMIAC_CLOUD_CA_CERT) ? TIMIAC_CLOUD_CA_CERT : kCloudRunRootCa);
-  HTTPClient request;
-  const String endpoint = String(TIMIAC_CLOUD_URL) + "/device/v1/devices/" + TIMIAC_CLOUD_DEVICE_ID + "/sync";
-  request.setConnectTimeout(1500); request.setTimeout(1500);
-  if (!request.begin(client, endpoint)) { cloudState = "connection failed"; cloudError = "Could not start secure cloud connection"; return; }
-  request.addHeader("Content-Type", "application/json");
-  request.addHeader("X-Timiac-Device-Key", TIMIAC_CLOUD_DEVICE_KEY);
+  if (cloudInFlight || (cloudLastSync && !timiac::expired(millis(), cloudLastSync, cloudRetryMs))) return;
+  // Keep peak heap usage bounded while TLS runs in its own task. A low-memory
+  // cloud retry must not take down the independently operating clock.
+  if (ESP.getFreeHeap() < 50000) { cloudError = "Waiting for cloud connection memory"; return; }
   DynamicJsonDocument outbound(8192); cloudSnapshot(outbound.createNestedObject("status"));
-  if (outbound.overflowed()) {
-    cloudState = "connection failed"; cloudError = "Cloud status is too large"; request.end(); return;
-  }
-  String payload; serializeJson(outbound, payload);
-  const int code = request.POST(payload);
-  if (code != 200) {
-    cloudState = "connection failed"; cloudError = "Cloud service returned HTTP " + String(code); request.end(); return;
-  }
-  DynamicJsonDocument inbound(2048);
-  const DeserializationError parsed = deserializeJson(inbound, request.getStream());
-  request.end();
-  if (parsed) { cloudState = "connection failed"; cloudError = "Invalid cloud response"; return; }
-  cloudState = "connected"; cloudError = "";
-  receiveCloudAction(inbound["action"]);
-  if (!inbound["action"].is<JsonObject>()) acceptFirmwareUpdate(inbound["update"]);
+  if (outbound.overflowed()) { cloudState = "connection failed"; cloudError = "Cloud status is too large"; return; }
+  CloudExchange* exchange = new (std::nothrow) CloudExchange;
+  if (!exchange) { cloudError = "Waiting for cloud connection memory"; return; }
+  serializeJson(outbound, exchange->payload);
+  if (xQueueSend(cloudRequests, &exchange, 0) != pdTRUE) { delete exchange; return; }
+  cloudInFlight = true; cloudLastSync = millis();
 }

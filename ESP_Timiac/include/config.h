@@ -68,7 +68,7 @@
 #endif
 constexpr unsigned long kBaud = 115200;
 // Application revision is separate from the hardware identity shared with Marlin.
-constexpr char kSoftwareRevision[] = "2026-10-15.6";
+constexpr char kSoftwareRevision[] = "2026-10-16.1";
 #if TIMIAC_MASTER
 constexpr char kOtaImageMarker[] = "TIMIAC_OTA_ROLE:master";
 #elif TIMIAC_BOARD_ID == 1
@@ -77,7 +77,7 @@ constexpr char kOtaImageMarker[] = "TIMIAC_OTA_ROLE:esp1";
 constexpr char kOtaImageMarker[] = "TIMIAC_OTA_ROLE:esp2";
 #endif
 // Checked against the compiled animation call chains before exporting a master.
-constexpr unsigned kMasterLoopStackBytes = 8192;
+constexpr unsigned kMasterLoopStackBytes = 12288;
 // Wi-Fi/serial telemetry can be delayed while every axis is homing. These are
 // link-loss limits, separate from the 180-second G28 completion limit.
 constexpr unsigned long kPeerTimeout = 15000;

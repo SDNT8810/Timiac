@@ -13,6 +13,7 @@ void statusReply(AsyncWebServerRequest* request) {
   doc["dashboard"] = TIMIAC_RELEASE ? "release" : "development";
   doc["firmware"] = timiac::machineId; doc["protocol"] = timiac::protocolVersion;
   doc["software"] = kSoftwareRevision;
+  writeReliabilityStatus(doc.createNestedObject("reliability"));
   writeFirmwareUpdateStatus(doc.createNestedObject("ota"));
   doc["speedPercent"] = motionSpeedPercent;
   JsonObject clock = doc.createNestedObject("clock");
@@ -22,6 +23,7 @@ void statusReply(AsyncWebServerRequest* request) {
   clock["automatic"] = bool(TIMIAC_RELEASE);
   clock["running"] = releaseClockEnabled;
   clock["startupPending"] = releaseStartupPending;
+  clock["pausedReason"] = releaseClockEnabled ? "" : clockPauseReason;
   writeProximityStatus(doc.createNestedObject("proximity"));
   writeUplinkStatus(doc.createNestedObject("wifi"));
   writeCloudStatus(doc.createNestedObject("cloud"));

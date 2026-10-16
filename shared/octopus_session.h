@@ -22,6 +22,7 @@ class OctopusSession {
   bool monitor = false;
   bool homingInFlight = false;
   bool driverReportAvailable = false;
+  uint32_t diagnosticRecoveries = 0;
   uint32_t sent = 0, lastRx = 0, lastPoll = 0;
   unsigned speedPercent = 100;
   uint32_t driverReportAge(uint32_t now) const { return uint32_t(now - driverAt); }
@@ -34,6 +35,15 @@ class OctopusSession {
   bool halted() const { return state == State::Halted; }
   bool busy() const { return running() || state == State::Prepare || state == State::Prepared || state == State::Drain; }
   void clearPosition() { homed = 0; for (auto& value : known) value = false; }
+  // An interrupted idle read-only report is not evidence that a motor moved.
+  // Fence its late acknowledgements, re-identify the board and obtain a full
+  // fresh driver report before allowing motion. Never retry a movement.
+  const char* retryDiagnostic(uint32_t now) {
+    if (state != State::Ready || !waiting || !drivers.good() || fault[0] ||
+        (strcmp(active, "M122") && strcmp(active, "M119")) || diagnosticRetries >= 2) return nullptr;
+    ++diagnosticRetries; ++diagnosticRecoveries;
+    return beginDrain(now, true);
+  }
   bool stage(const char* const* lines, unsigned count, uint32_t now, bool trajectory = false, unsigned percent = 100) {
     if (!validSpeedPercent(percent)) return false;
     if (state != State::Ready || !healthy(now) || count > (trajectory ? maxTrajectoryCommands : 6U)) return false;
@@ -106,7 +116,9 @@ class OctopusSession {
   const char* next(uint32_t now) {
     if (state == State::Halted) return nullptr;
     if (state == State::Drain) {
+      if (diagnosticDrainPending) { diagnosticDrainPending = false; return active; }
       if (uint32_t(now - sent) >= 10000) {
+        if (diagnosticDrain) { fail("Read-only diagnostic recovery timed out; checking Octopus link"); return nullptr; }
         if (!fault[0]) {
           snprintf(fault, sizeof(fault), "Octopus link unavailable after Stop; retrying"); ++failures;
         }
@@ -119,6 +131,7 @@ class OctopusSession {
     if (waiting) {
       const uint32_t limit = running() ? acknowledgementTimeout(active, speedPercent) : 10000;
       if (uint32_t(now - sent) >= limit) {
+        if (const char* retry = retryDiagnostic(now)) return retry;
         char message[180];
         snprintf(message, sizeof(message), "%s acknowledgement timed out; checking Octopus link", active);
         fail(message);
@@ -154,6 +167,7 @@ class OctopusSession {
       state = State::Offline; identity = waiting = false; drivers.begin(); clearPosition(); endstops.clear();
       driverReportAvailable = false;
       homingInFlight = false;
+      diagnosticDrain = diagnosticDrainPending = false; diagnosticRetries = 0;
       fault[0] = 0; size = cursor = 0; lastPoll = now; ++resets;
       if (interrupted) { snprintf(fault, sizeof(fault), "Octopus restarted during work"); ++failures; }
       return;
@@ -189,6 +203,13 @@ class OctopusSession {
       if (!identity) { fail("Wrong Octopus firmware: flash the matching TIMIAC2 image"); return; }
       state = State::Drivers;
     } else if (!strcmp(active, "M122")) {
+      if (!pendingDrivers.complete() && state == State::Ready) {
+        // Lost UART bytes must not turn an incomplete diagnostic into a
+        // permanent unhomed condition. A complete failing report is a fault.
+        waiting = true;
+        if (retryDiagnostic(now)) { diagnosticDrainPending = true; return; }
+        waiting = false; fail("Incomplete driver diagnostics after two recovery attempts"); return;
+      }
       drivers = pendingDrivers;
       driverReportAvailable = true;
       driverAt = now;
@@ -199,6 +220,7 @@ class OctopusSession {
         if (state == State::Prepare || state == State::Run) { ++failures; size = cursor = 0; clearPosition(); }
         state = State::Ready;
       } else {
+        diagnosticRetries = 0;
         fault[0] = 0;
         if (state == State::Drivers) state = State::Ready;
       }
@@ -223,12 +245,18 @@ class OctopusSession {
   uint32_t drainSequence = 0;
   char drainMarker[40] = {};
   bool drainMarkerSeen = false;
+  bool diagnosticDrain = false, diagnosticDrainPending = false;
+  unsigned diagnosticRetries = 0;
   DriverReport pendingDrivers;
-  const char* beginDrain(uint32_t now) {
+  const char* beginDrain(uint32_t now, bool diagnostic = false) {
     state = State::Drain; waiting = identity = false; sent = now;
+    diagnosticDrain = diagnostic; diagnosticDrainPending = false;
+    // M115 alone must not republish yesterday's passing masks as readiness
+    // while the replacement M122 is still in flight after a diagnostic fault.
+    if (diagnostic) { drivers.begin(); driverReportAvailable = false; }
     drainMarkerSeen = false;
     snprintf(drainMarker, sizeof(drainMarker), "TIMIAC_DRAINED_%lu", static_cast<unsigned long>(++drainSequence));
-    snprintf(active, sizeof(active), "M410\nM400\nM118 %s", drainMarker);
+    snprintf(active, sizeof(active), diagnostic ? "M118 %s" : "M410\nM400\nM118 %s", drainMarker);
     return active;
   }
   static bool fieldMatches(const char* line, const char* key, const char* value) {

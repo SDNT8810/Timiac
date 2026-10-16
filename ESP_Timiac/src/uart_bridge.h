@@ -86,7 +86,13 @@ struct UartBridge {
   }
   void tick() {
 #if !TIMIAC_MASTER
-    if (Serial.hasOverrun()) { session.fail("Octopus serial receive overrun"); sync(); }
+    if (Serial.hasOverrun()) {
+      if (const char* retry = session.retryDiagnostic(millis())) {
+        serialLine = ""; serialDiscard = false;
+        send(retry); logMessage("Idle diagnostic receive overrun; fencing replies and refreshing checks");
+      } else session.fail("Octopus serial receive overrun");
+      sync();
+    }
     unsigned budget = 4096;
     while (Serial.available() && budget--) {
       const char c = Serial.read();

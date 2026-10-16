@@ -38,7 +38,17 @@ def animation_stack_report(disassembly, release, stack_bytes):
     builders = ["(anonymous namespace)::writePresetTrajectory(",
                 "timiac::presetTrajectoryFrame(", "timiac::presetStep(",
                 "timiac::userAction(", "snprintf", "_svfprintf_r", "_dtoa_r"]
-    paths = {"queued_animation": base + ["(anonymous namespace)::programTick()"] + builders}
+    program = "(anonymous namespace)::programTick()"
+    loop_body = bodies.get("loop()", "")
+    if program in functions:
+        queued_base = base + [program]
+    elif "writePresetTrajectory(" in loop_body:
+        # GCC can inline programTick after moving TLS out of loop(). Its
+        # locals then live in the measured loop frame; don't count it twice.
+        queued_base = base
+    else:
+        raise ValueError("Review animation stack guard: queued animation call path is missing")
+    paths = {"queued_animation": queued_base + builders}
     if release:
         paths["automatic_hour"] = base + ["(anonymous namespace)::releaseClockTick()",
                                           "(anonymous namespace)::startBuiltinPreset("] + builders
@@ -47,6 +57,8 @@ def animation_stack_report(disassembly, release, stack_bytes):
     cloud = "(anonymous namespace)::cloudTick()"
     if "startBuiltinPreset(" in bodies.get(cloud, ""):
         paths["remote_animation"] = base + [cloud, "(anonymous namespace)::startBuiltinPreset("] + builders
+    elif cloud not in functions and "startBuiltinPreset(" in loop_body:
+        paths["inlined_animation"] = base + ["(anonymous namespace)::startBuiltinPreset("] + builders
     # The hand sensor now prepares the same complete Struggle trajectory.
     # Its tick is usually inlined into loop(), but account for a separate frame
     # too if a compiler change stops inlining it.

@@ -32,6 +32,7 @@ function render(state = controller.status) {
   if (connected && !moving && !otherOwner && !state.fault && homed && state.machineReady && state.proximity?.enabled && state.proximity.ready && !state.proximity.armed) {
     $('machine-status').textContent = 'All 12 arms ready. Move hand away to arm the sensor.';
   }
+  $('stop-history').textContent = state?.reliability?.lastStop ? 'Last stop: ' + state.reliability.lastStop : '';
   renderSystemStatus(state, connected, $);
   $('travel').textContent = `All arms to ${state?.travelMm ?? 50} mm`;
   const time = renderClockReadouts(state, connected, $);

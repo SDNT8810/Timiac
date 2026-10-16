@@ -49,6 +49,7 @@ void resetMaster() {
   systemLatched = stopPending = stopRequested = networkChanging = false; stopRequired = stopRecoveryRequired = 0;
   operation = Operation(); program = Program(); receiptNext = 0;
   releaseClockEnabled = false; armTimeMinutes = releaseClockMinute = -1;
+  lastStopReason = lastStopSession = clockPauseReason = ""; lastStopAt = lastStopCount = 0;
   releaseStartupPending = TIMIAC_MASTER && TIMIAC_RELEASE;
   motionSpeedPercent = timiac::defaultSpeedPercent;
   rtcValid = true; rtcTime.h = 13; rtcTime.m = 45;
@@ -678,5 +679,21 @@ int main() {
   resetMaster(); connectBoard(0); connectBoard(1);
   boards[0].updating = true;
   assert(!boardOnline(0) && !bothHealthy() && boardsHealthy(2));
+  // A recovered stop must leave its cause visible after calibration and clock
+  // resume; transient systemFault clearing previously erased all evidence.
+  resetMaster(); connectBoard(0); connectBoard(1); releaseClockEnabled = true;
+  stopAll("Bridge link lost during work; movement cancelled, no replay");
+  assert(lastStopCount == 1 && lastStopReason == systemFault && !releaseClockEnabled);
+  for (unsigned b = 0; b < 2; ++b) boards[b].stopAck = stopToken;
+  recoverStop();
+  assert(!systemLatched && systemFault.isEmpty() && !lastStopReason.isEmpty());
+  trackManualClockAction("show-time");
+  DynamicJsonDocument history(1024); writeReliabilityStatus(history.to<JsonObject>());
+  assert(history["lastStop"] == lastStopReason && history["stopCount"] == 1);
+  assert(lastStopSession == bootId);
+#if TIMIAC_RELEASE
+  assert(clockPauseReason.isEmpty());
+#endif
   std::cout << "Production coordinator: independent boards, jobs, Stop, photoelectric gestures and update motion guards passed\n";
+  return 0;
 }

@@ -15,6 +15,7 @@ void releaseClockTick() {
     armTimeMinutes = -1;
     releaseClockMinute = -1;
     releaseClockEnabled = true;
+    clockPauseReason = "";
     logMessage("Release startup: homing all twelve arms, then displaying current time");
     startOperation(doc["a"], doc["b"], bootId + "-startup-home-" + String(++sequence), commandHash(doc["a"], doc["b"]));
     return;

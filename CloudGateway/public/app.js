@@ -43,7 +43,8 @@ function render(remote) {
   $('connection').textContent = reason || (!homed ? 'Homing required. Use Calibrate arms under Maintenance.' : 'Connected to Timiac');
   $('clock').textContent = state.clock?.valid ? state.clock.localTime.slice(11) : '--:--:--';
   $('date').textContent = state.clock?.internetSync === 'synchronized' ? 'Internet-synchronized clock' : state.clock?.error || 'Local clock time';
-  $('clock-mode').textContent = state.clock?.running ? 'Clock running' : 'Clock paused';
+  $('clock-mode').textContent = state.clock?.running ? homed ? 'Clock running' : 'Clock waiting for calibrated arms' : 'Clock paused' + (state.clock?.pausedReason ? ': ' + state.clock.pausedReason : '');
+  $('stop-history').textContent = state.reliability?.lastStop ? 'Last stop: ' + state.reliability.lastStop : '';
   $('board-a').textContent = stateLabel(state.a); $('board-b').textContent = stateLabel(state.b);
   const busy = Boolean(reason);
   document.querySelectorAll('[data-action]').forEach(button => {

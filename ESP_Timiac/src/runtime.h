@@ -9,6 +9,42 @@ bool serialDiscard = false, stopRequested = false, systemLatched = false, stopPe
 bool networkChanging = false;
 bool firmwareUpdating = false, firmwareUpdateCancel = false;
 String systemFault, stopToken, stopReason, acknowledgedStop;
+String lastStopReason, lastStopSession, clockPauseReason;
+uint32_t lastStopAt = 0, lastStopCount = 0;
+void rememberStop(const String& reason) {
+  lastStopReason = reason; lastStopSession = bootId; lastStopAt = millis(); ++lastStopCount;
+#if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
+  Preferences history;
+  if (history.begin("timiac-history", false)) {
+    DynamicJsonDocument saved(512);
+    saved["reason"] = reason; saved["session"] = lastStopSession; saved["at"] = lastStopAt; saved["count"] = lastStopCount;
+    String text; serializeJson(saved, text); history.putString("stop", text); history.end();
+  }
+#endif
+}
+void configureReliability() {
+#if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
+  Preferences history;
+  if (history.begin("timiac-history", true)) {
+    DynamicJsonDocument saved(512);
+    if (!deserializeJson(saved, history.getString("stop", "{}"))) {
+      lastStopReason = saved["reason"] | ""; lastStopSession = saved["session"] | "";
+      lastStopAt = saved["at"] | 0U; lastStopCount = saved["count"] | 0U;
+    }
+    history.end();
+  }
+#endif
+}
+void writeReliabilityStatus(JsonObject status) {
+  status["uptimeMs"] = millis(); status["lastStop"] = lastStopReason; status["stopCount"] = lastStopCount;
+  status["lastStopSession"] = lastStopSession;
+  if (lastStopSession == bootId && !lastStopReason.isEmpty()) status["lastStopAgeMs"] = uint32_t(millis() - lastStopAt);
+  else status["lastStopAgeMs"] = nullptr;
+#if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
+  status["freeHeap"] = ESP.getFreeHeap(); status["minFreeHeap"] = ESP.getMinFreeHeap();
+  status["resetReason"] = unsigned(esp_reset_reason());
+#endif
+}
 uint8_t stopRequired = 0, stopRecoveryRequired = 0;
 uint32_t lastStateTx = 0, reconnectAt = 0, reconnectDelay = 500, lastWifiRetry = 0;
 
@@ -64,6 +100,7 @@ unsigned lastStruggleVariant = timiac::struggleVariantCount;
 void trackManualClockAction(const char* action) {
 #if TIMIAC_RELEASE
   releaseClockEnabled = !systemLatched && !strcmp(action, "show-time");
+  clockPauseReason = releaseClockEnabled ? "" : String("Manual ") + action;
   releaseClockMinute = -1;
 #if defined(ARDUINO_ARCH_ESP32)
   if (releaseClockEnabled) {

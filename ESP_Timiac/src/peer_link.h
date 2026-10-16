@@ -130,7 +130,9 @@ void stopAll(const String& reason) {
   releaseClockMinute = -1;
   releaseStartupPending = false;
   releaseClockEnabled = false;
+  clockPauseReason = reason;
   if (systemLatched) return;
+  rememberStop(reason);
   // A never-connected, unused board cannot hold recovery hostage. A lost
   // participant must still acknowledge Stop before another job can run.
   if (TIMIAC_MASTER) {

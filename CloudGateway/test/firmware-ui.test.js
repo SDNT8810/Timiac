@@ -121,3 +121,10 @@ test('reopening the dashboard restores durable Full update progress and prevents
   assert.equal(f.node('full-update').disabled, true); assert.equal(f.node('stop').disabled, false);
   assert.ok(f.buttons.every(button => button.disabled));
 });
+
+
+test('the last stop remains visible after recovery and the pause reason is explicit', async () => {
+  const f = await dashboard({statusPatch: {reliability: {lastStop: 'Bridge link lost during work'}, clock: {running: false, pausedReason: 'Manual close'}}});
+  assert.equal(f.node('stop-history').textContent, 'Last stop: Bridge link lost during work');
+  assert.equal(f.node('clock-mode').textContent, 'Clock paused: Manual close');
+});

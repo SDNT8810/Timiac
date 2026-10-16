@@ -17,6 +17,7 @@ struct DriverReport {
   int32_t microsteps[6] = {-1, -1, -1, -1, -1, -1};
   bool columns = false;
   void begin() { *this = DriverReport(); }
+  bool complete() const { return tested == 63 && columns && settings == 7; }
   bool good() const { return tested == 63 && connected == 63 && columns && settings == 7 && modeOk == 63 && currentOk == 63 && stepsOk == 63 && !thermalWarning; }
   void receive(const char* line) {
     if (!strncmp(line, "Testing ", 8)) {
