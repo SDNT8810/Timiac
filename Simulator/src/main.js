@@ -22,7 +22,7 @@ const DIAL_NUMBER_MATERIAL = new THREE.MeshStandardMaterial({
 });
 
 const presets = [
-  { id: 'hour-movement', name: 'Hour movement', note: 'all open, then directly to time; 30% slower', code: hourMovementCode, glyph: 'H' },
+  { id: 'hour-movement', name: 'Hour movement', note: 'all open, all close, then show time; 30% slower', code: hourMovementCode, glyph: 'H' },
   { id: 'struggle', name: 'Struggle · random', note: '7 insect patterns · 0–20 mm', glyph: '?' },
   { id: 'curious', name: 'Curious creature', note: 'reach · recoil · inspect', code: curiousCode, glyph: '◒' },
   { id: 'breathe', name: 'Slow breathing', note: 'inhale · shiver · rest', code: breatheCode, glyph: '◌' },

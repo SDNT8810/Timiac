@@ -11,23 +11,16 @@ function moves(code) {
   }));
 }
 
-test('every Next Hour target opens, flutters within 37-48 mm for three seconds, then closes directly into time', () => {
+test('every Next Hour target fully opens, fully closes, then shows time with no flutter', () => {
   for (let minute = 0; minute < 1440; minute++) {
     const time = `${Math.floor(minute / 60)}:${minute % 60}`;
-    const frames = moves(generateHourMovement(time));
-    assert.equal(frames.length, 5);
+    const code = generateHourMovement(time), frames = moves(code);
+    assert.equal(frames.length, 3);
     assert.deepEqual(frames[0].values, Array(12).fill(100));
-    assert.deepEqual(frames.at(-1).values, clockPoseValues(time));
-    assert.equal(frames.at(-1).values[Math.floor((minute % 60) / 5)], 100);
-    assert.equal(frames[0].feed, 700); assert.equal(frames.at(-1).feed, 700);
-    let previous = frames[0].values, seconds = 0;
-    for (const frame of frames.slice(1, -1)) {
-      assert.ok(frame.values.every(value => value >= 74 && value <= 96));
-      assert.ok(new Set(frame.values).size > 1);
-      seconds += Math.max(...frame.values.map((value, i) => Math.abs(value - previous[i]))) / frame.feed * 60 / FIXED_SPEED;
-      previous = frame.values;
-    }
-    assert.ok(Math.abs(seconds - 3) < 0.001);
+    assert.deepEqual(frames[1].values, Array(12).fill(0));
+    assert.deepEqual(frames[2].values, clockPoseValues(time));
+    assert.ok(frames.every(frame => frame.feed === 700));
+    assert.doesNotMatch(code, /^G4/m);
   }
   const example = readFileSync(new URL('../Simulator/gcodes/hour-movement.gcode', import.meta.url), 'utf8');
   assert.deepEqual(moves(example), moves(generateHourMovement('01:00')));

@@ -15,7 +15,7 @@ export function clockPoseValues(time) {
 
 export function generateHourMovement(time) {
   return [
-    `; HOUR MOVEMENT TO ${time}: all open, 3-second struggle at 37-48 mm, then directly to time.`,
+    `; HOUR MOVEMENT TO ${time}: all open, all close, then show time.`,
     'G90',
     ...HOUR_FRAMES.map((frame, index) => `G1 ${words(index + 1 === HOUR_FRAMES.length ? clockPoseValues(time) : frame.positions)} F${frame.feed}`),
   ].join('\n');

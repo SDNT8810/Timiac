@@ -26,7 +26,7 @@ Only deploy `Simulator/dist/` to the existing Cloudflare Pages project `timiac`.
 
 ## Movement behavior
 
-**Next Hour** opens all arms, performs the current three-second asymmetric flutter at **37–48 mm**, then settles directly into the selected time. **Struggle** selects one of seven asymmetric insect patterns without an immediate repeat. In the existing **Clock pose / Time** panel, choose **1–7** and press **PREVIEW**, or use **RANDOM STRUGGLE** / the **S** key outside editable controls and modal navigation.
+**Next Hour** fully opens all arms, fully closes all arms, then shows the selected time. It has no flutter or intermediate Struggle; the existing 30% slower animation speed is retained. **Struggle** selects one of seven asymmetric insect patterns without an immediate repeat. In the existing **Clock pose / Time** panel, choose **1–7** and press **PREVIEW**, or use **RANDOM STRUGGLE** / the **S** key outside editable controls and modal navigation.
 
 Each Struggle has three short movement beats with uneven arm groupings and **0–20 mm** openings, then returns directly to the selected time. Only the final time pose lets the minute arm fully extend; non-time arms close fully. The clock stays paused at that pose. Movements start from the visible pose without snapping. You can switch directly between pattern previews.
 

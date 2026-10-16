@@ -1,3 +1,12 @@
+# Current animation update ? 2026-10-16.2
+
+Next Hour and automatic hour boundaries now use exactly three poses: all open,
+all closed, then the requested clock pose. Simulator tests check all 1,440 time
+values; native tests verify the physical open/closed coordinates, coordinated
+feeds and final clock pose. The intermediate Struggle is removed. All three
+phases retain the prior 30% speed reduction. Earlier notes below describe
+historical releases and their then-current motion paths.
+
 # Remote update validation - 2026-10-15.5
 
 Matched package **TIMIAC2-03b3b6e145e4**, protocol 7, trajectory capability 2.

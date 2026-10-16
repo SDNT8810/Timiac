@@ -161,8 +161,8 @@ share the selector and exclude its previous result. Arm groups and directions
 vary intentionally within the insect movements; the final clock pose closes
 all non-time arms.
 The lower acceleration is bracketed by normal restores, and a valid RTC is required.
-Next Hour uses two poses at 70% of its former speed: all open, then directly to
-time. Trajectory version 2 allows only normal or 80%
+Next Hour uses three poses at 70% of its former speed: all open, all closed,
+then show time. It has no intermediate Struggle. Trajectory version 2 allows only normal or 80%
 travel acceleration and a bounded coordinated vector-feed envelope. Manual Next controls and Struggle pause release
 RTC tracking until Start clock resumes it.
 

@@ -419,7 +419,7 @@ int main() {
   stopAll("Cancel automatic hour"); releaseClockTick();
   assert(!releaseClockEnabled && releaseClockMinute == -1 && !program.reserved());
 #endif
-  // Next hour is one two-board operation, containing the entire queued wave.
+  // Next hour queues open, close, then time as one synchronized two-board operation.
   resetMaster(); connectBoard(0); connectBoard(1);
   for (auto& board : boards) {
     board.homed = 63;
@@ -440,7 +440,7 @@ int main() {
     assert(wire.length() <= timiac::PeerOutbox::maxPacket);
     assert(!deserializeJson(packet, wire));
     assert(packet["type"] == "prepare" && packet["trajectory"] == true);
-    assert(packet["lines"].size() == 7);
+    assert(packet["lines"].size() == 5); // Three poses bracketed by acceleration settings.
     assert(validLines(packet["lines"], true) && !validLines(packet["lines"]));
     const char* lines[timiac::maxTrajectoryCommands]; unsigned count = 0;
     for (JsonVariant line : packet["lines"].as<JsonArray>()) lines[count++] = line.as<const char*>();
@@ -448,13 +448,17 @@ int main() {
     kernel.state = timiac::OctopusSession::State::Ready; kernel.identity = true;
     kernel.lastRx = hostNow; kernel.homed = 63; kernel.drivers = boards[b].drivers;
     assert(kernel.stage(lines, count, hostNow, true)); kernel.next(hostNow); assert(kernel.commit());
-    unsigned moves = 0, drains = 0;
+    unsigned moves = 0, dwells = 0, drains = 0;
     while (kernel.running()) if (const char* line = kernel.next(hostNow)) {
       if (!strncmp(line, "G1 ", 3)) { ++moves; assert(!drains); }
+      if (!strncmp(line, "G4 ", 3)) ++dwells;
       if (!strcmp(line, "M400")) ++drains;
       kernel.receive("ok", hostNow);
     }
-    assert(moves == 5 && drains == 1 && kernel.completions == 1);
+    // At 03:30 both time arms belong to board 2; board 1 remains closed
+    // during the final pose and waits for its partner instead of moving again.
+    assert(moves == (b == 0 ? 2U : 3U) && dwells == (b == 0 ? 1U : 0U));
+    assert(drains == 1 && kernel.completions == 1);
   }
   report(0, "preparing", true); operationTick(); programTick();
   assert(lastType(0) == "prepare");

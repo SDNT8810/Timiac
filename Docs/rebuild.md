@@ -1,4 +1,4 @@
-# Motion and remote update package - 2026-10-15.6
+# Motion and remote update package - 2026-10-16.2
 
 Install all five boards once to enable [remote updates](remote-updates.md).
 The existing bootloaders are retained, and both Octopus cards stay installed.
@@ -25,12 +25,12 @@ All user motion is fixed at **75%**; no dashboard speed slider remains and
 previously saved percentages are ignored. Homing is **240 mm/min before scaling**,
 double the old 120; the fixed override gives **180 mm/min**.
 
-Next Hour and the automatic hourly animation first open all arms, then run
-three asymmetric flutter poses within **37-48 mm opening**, then move directly
-to the selected time. The flutter has 3 seconds of nominal motion at 75%;
-acceleration adds a small allowance on real hardware. Opening and the final
-move retain the 350 mm/min per-axis profile before the fixed override.
-Firmware and simulator use the same generated frames and fixed speed.
+Next Hour and the automatic hourly animation use three phases: fully open all
+arms, fully close all arms, then show the selected time. There is no flutter
+or Struggle between phases. All three phases retain the 350 mm/min per-axis
+profile before the fixed 75% override. Firmware and simulator use the same
+three generated frames. The stability fixes from 2026-10-16.1 are included;
+see [clock stability](stability.md).
 The **Open** button sends a normal move to full opening and parks there.
 Real homing remains in automatic startup and **Maintenance > Calibrate arms**.
 

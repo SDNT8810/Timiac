@@ -57,9 +57,7 @@ constexpr StrugglePattern strugglePatterns[] = {
 constexpr unsigned struggleVariantCount = sizeof(strugglePatterns) / sizeof(StrugglePattern);
 constexpr PresetFrame hourFrames[] = {
   {{100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100}, 700, 0},
-  {{74, 96, 80, 92, 76, 94, 84, 90, 96, 78, 88, 82}, 1000, 0},
-  {{79.75, 90.25, 85.75, 86.25, 81.75, 88.25, 89.75, 84.25, 90.25, 83.75, 82.25, 87.75}, 1000, 0},
-  {{74, 96, 80, 92, 76, 94, 84, 90, 96, 78, 88, 82}, 1000, 0},
+  {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 700, 0},
   {{100, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 700, 0},
 };
 constexpr PresetFrame curiousFrames[] = {
