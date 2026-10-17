@@ -228,6 +228,10 @@ test('firmware updates require the initial installation and are bound to one idl
   assert.equal((await (await f.sync()).json()).update, undefined);
   await f.sync({ ...f.state, ota: { ...f.state.ota, id: queued.id, sha256: image.sha256, state: 'complete' } });
   assert.equal(f.sql.prepare('SELECT state FROM ota_jobs WHERE id=?').get(queued.id).state, 'complete');
+  const receipt = (await (await f.call('/api/devices/clock-01/status', undefined, f.admin)).json()).update;
+  assert.equal(receipt.id, queued.id); assert.equal(receipt.state, 'complete');
+  assert.equal(receipt.target, 'master'); assert.equal(receipt.kind, 'app');
+  assert.equal(receipt.revision, image.revision); assert.ok(Number.isSafeInteger(receipt.createdAt));
   assert.equal((await f.action('home')).status, 202);
 });
 test('Stop cancels queued firmware, active updates block motion, and old sessions are never retried', async t => {

@@ -60,25 +60,31 @@ function render(remote) {
   $('install-firmware').disabled = busy || !state.ota?.supported;
   const ota = state.ota;
   const full = remote.fullUpdate;
+  const job = remote.update;
   $('full-update-log').hidden = !full?.buildUrl;
   if (full?.buildUrl) $('full-update-log').href = full.buildUrl;
   const fullActive = ['building', 'installing'].includes(full?.state);
   $('full-update').disabled = busy || fullActive || !state.ota?.supported;
   const completed = full?.steps?.filter(step => step.state === 'complete').length || 0;
   const current = full?.steps?.find(step => step.state !== 'complete');
-  $('full-update-status').textContent = !full ? 'Build all firmware and install it automatically. No files to select.'
+  const previousFull = full && !fullActive && job?.createdAt > full.updated_at;
+  const fullResult = !full ? 'Build all firmware and install it automatically. No files to select.'
     : full.state === 'building' ? 'Building all firmware. This can take several minutes. You may close this page.'
     : full.state === 'installing' ? `Installing ${completed + 1}/${full.steps.length}: ${current?.target || ''} ${current?.kind === 'filesystem' ? 'dashboard' : ''}. Keep power connected.`
     : full.state === 'complete' ? full.validate_only ? 'Build verified. No hardware was updated.' : 'Full update complete. Calibrate/Home the arms before resuming.'
     : `Full update ${full.state}: ${full.error || 'Check the connection and try again.'}`;
-  $('full-update-status').classList.toggle('error', full?.state === 'failed');
-  const job = remote.update;
+  $('full-update-status').textContent = previousFull ? 'Individual component updates were started after the previous Full update. Latest result is shown below.' : fullResult;
+  $('full-update-status').classList.toggle('error', !previousFull && full?.state === 'failed');
+  $('full-update-history').hidden = !previousFull;
+  $('full-update-history-status').textContent = previousFull ? fullResult : '';
+  const jobTerminal = ['complete', 'failed', 'expired', 'cancelled'].includes(job?.state);
+  const useJob = job && (job.id !== ota?.id || jobTerminal);
   const progress = ota?.size ? ` · ${Math.min(100, Math.round(ota.done / ota.size * 100))}%` : '';
   $('firmware-status').textContent = !ota?.supported ? 'Install the initial USB/SD update package before using remote updates.'
-    : job && job.id !== ota.id ? `Update ${job.state}${job.error ? ': ' + job.error : ''}`
+    : useJob ? `${job.target || 'Update'} · ${job.state}${job.error ? ': ' + job.error : ''}`
     : ota?.id ? `${ota.target} · ${ota.phase || ota.state}${ota.active ? progress : ''}${ota.error ? ': ' + ota.error : ''}`
     : 'Ready for remote updates. Leave a microSD card in each Octopus.';
-  $('firmware-status').classList.toggle('error', ota?.state === 'failed' || ['failed', 'expired'].includes(job?.state));
+  $('firmware-status').classList.toggle('error', useJob ? ['failed', 'expired'].includes(job.state) : ota?.state === 'failed');
   if (pendingAction && state.remoteAction?.id === pendingAction) {
     say(state.remoteAction.error || state.remoteAction.type + ' accepted by the master.', Boolean(state.remoteAction.error));
     pendingAction = '';

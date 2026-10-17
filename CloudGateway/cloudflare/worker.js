@@ -87,7 +87,7 @@ async function deviceState(env, now) {
   const pending = await env.DB.prepare("SELECT COUNT(*) AS count FROM actions WHERE device_id = ? AND state = 'queued' AND expires_at > ?")
     .bind(env.TIMIAC_DEVICE_ID, now).first();
   const updates = await env.DB.prepare("SELECT COUNT(*) AS count FROM ota_jobs WHERE device_id = ? AND state IN ('queued','delivered') AND expires_at > ?").bind(env.TIMIAC_DEVICE_ID, now).first();
-  const update = await env.DB.prepare('SELECT id, state, error FROM ota_jobs WHERE device_id = ? ORDER BY created_at DESC LIMIT 1').bind(env.TIMIAC_DEVICE_ID).first();
+  const update = await env.DB.prepare('SELECT j.id,j.state,j.error,j.created_at AS createdAt,i.target,i.kind,i.revision FROM ota_jobs j JOIN ota_images i ON i.id=j.image_id WHERE j.device_id=? ORDER BY j.created_at DESC,j.rowid DESC LIMIT 1').bind(env.TIMIAC_DEVICE_ID).first();
   return { online: now - row.updated_at <= ONLINE_MS, updatedAt: new Date(row.updated_at).toISOString(), status: JSON.parse(row.status), queued: pending.count + updates.count, update, ...(fullUpdate ? { fullUpdate } : {}) };
 }
 

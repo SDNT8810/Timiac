@@ -31,6 +31,7 @@
       <p>Full update builds the latest pushed code, checks every image, then installs each board automatically. Keep power connected.</p>
       <button id="full-update" type="button" disabled>Full update</button>
       <p id="full-update-status" role="status">Checking full update support...</p><a id="full-update-log" target="_blank" rel="noopener" hidden>Build progress / log</a>
+      <details id="full-update-history" hidden><summary>Previous Full update result</summary><p id="full-update-history-status"></p></details>
       <details><summary>Update one component manually</summary><form id="firmware-form">
         <label>Board / image <select id="firmware-target">
           <option value="master:app">Master ESP32 — application</option>

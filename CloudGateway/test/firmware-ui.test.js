@@ -3,18 +3,18 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
-async function dashboard({ active = false, supported = true, uploadError = false, statusPatch = {}, online = true, queued = 0, fullUpdate = null } = {}) {
+async function dashboard({ active = false, supported = true, uploadError = false, statusPatch = {}, online = true, queued = 0, fullUpdate = null, update = null } = {}) {
   const nodes = new Map(), requests = [], listeners = {};
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', hidden: false, disabled: false, files: [],
-      classList: { toggle() {} }, click() { if (!this.disabled) return this.onclick?.(); } });
+      classList: { classes: new Set(), toggle(name, active) { if (active) this.classes.add(name); else this.classes.delete(name); }, contains(name) { return this.classes.has(name); } }, click() { if (!this.disabled) return this.onclick?.(); } });
     return nodes.get(id);
   };
   const buttons = ['open', 'close', 'show-time', 'next-five', 'next-hour', 'struggle'].map(action => ({ ...node('action-' + action), dataset: { action } }));
   node('firmware-target').value = 'master:app';
   const document = { getElementById: node, activeElement: null,
     querySelectorAll: () => buttons, querySelector: () => buttons[0], addEventListener: (name, fn) => { listeners[name] = fn; } };
-  const status = { online, queued, fullUpdate, status: { machineReady: true, a: { homed: 63 }, b: { homed: 63 },
+  const status = { online, queued, fullUpdate, update, status: { machineReady: true, a: { homed: 63 }, b: { homed: 63 },
     clock: { valid: true, localTime: '2026-10-15T18:15:42', armMinute: 1095 },
     ota: { supported, active, state: active ? 'downloading' : 'idle' }, ...statusPatch } };
   const fetch = async (path, options = {}) => {
@@ -120,6 +120,44 @@ test('reopening the dashboard restores durable Full update progress and prevents
   assert.match(f.node('full-update-status').textContent, /2\/2: esp2/);
   assert.equal(f.node('full-update').disabled, true); assert.equal(f.node('stop').disabled, false);
   assert.ok(f.buttons.every(button => button.disabled));
+});
+
+test('a later manual success moves the old Full update failure into history without erasing it', async () => {
+  const f = await dashboard({fullUpdate: {state: 'failed', updated_at: 1000, error: 'esp2: Previous session expired'},
+    update: {id: 'manual-esp2', target: 'esp2', state: 'complete', createdAt: 2000},
+    statusPatch: {ota: {supported: true, id: 'manual-esp2', target: 'esp2', state: 'complete', active: false}}});
+  assert.equal(f.node('firmware-status').textContent, 'esp2 · complete');
+  assert.equal(f.node('firmware-status').classList.contains('error'), false);
+  assert.equal(f.node('full-update-history').hidden, false);
+  assert.match(f.node('full-update-history-status').textContent, /Full update failed: esp2: Previous session expired/);
+  assert.doesNotMatch(f.node('full-update-status').textContent, /failed|expired/);
+  assert.equal(f.node('full-update-status').classList.contains('error'), false);
+  assert.equal(f.node('full-update').disabled, false);
+});
+
+test('a new manual failure stays visible while the previous full failure is archived', async () => {
+  const f = await dashboard({fullUpdate: {state: 'failed', updated_at: 1000, error: 'Old failure'},
+    update: {id: 'manual', target: 'master', state: 'failed', error: 'SHA mismatch', createdAt: 2000}});
+  assert.match(f.node('firmware-status').textContent, /master · failed: SHA mismatch/);
+  assert.equal(f.node('firmware-status').classList.contains('error'), true);
+  assert.equal(f.node('full-update-history').hidden, false);
+});
+
+test('the current Full update failure remains visible until a later job starts', async () => {
+  const f = await dashboard({fullUpdate: {state: 'failed', updated_at: 2000, error: 'SD write failed'},
+    update: {id: 'full-step', state: 'failed', createdAt: 1000}});
+  assert.match(f.node('full-update-status').textContent, /Full update failed: SD write failed/);
+  assert.equal(f.node('full-update-status').classList.contains('error'), true);
+  assert.equal(f.node('full-update-history').hidden, true);
+});
+
+test('an expired job overrides stale offline hardware progress from the same job', async () => {
+  const f = await dashboard({online: false, update: {id: 'stalled', target: 'master', state: 'expired', error: 'No progress'},
+    statusPatch: {ota: {supported: true, active: true, id: 'stalled', target: 'master', state: 'downloading', done: 98, size: 100}}});
+  assert.equal(f.node('firmware-status').textContent, 'master · expired: No progress');
+  assert.equal(f.node('firmware-status').classList.contains('error'), true);
+  assert.equal(f.node('connection').textContent, 'Master is offline');
+  assert.equal(f.node('install-firmware').disabled, true);
 });
 
 
