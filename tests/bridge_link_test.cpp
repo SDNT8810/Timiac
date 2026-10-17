@@ -48,6 +48,16 @@ void validPackets() {
   }
 }
 int main() {
+  // Reconnecting during an OTA upload replays the existing Stop fence. It is
+  // an acknowledgement request, not a new operator cancellation.
+  setupBridge(); acknowledgedStop = "ota-stop"; firmwareUpdating = true; firmwareUpdateCancel = false;
+  DynamicJsonDocument stop(512); stop["type"] = "stop"; stop["token"] = acknowledgedStop;
+  stop["from"] = coordinatorBoot; stop["session"] = coordinatorBoot;
+  String stopPacket; serializeJson(stop, stopPacket); processPeer(peers[0], stopPacket);
+  assert(!firmwareUpdateCancel);
+  stop["token"] = "new-operator-stop"; stopPacket = ""; serializeJson(stop, stopPacket);
+  processPeer(peers[0], stopPacket); assert(firmwareUpdateCancel);
+  firmwareUpdating = firmwareUpdateCancel = false;
   // Idle status and bursts of UART log lines can exhaust the ESP8266 TCP
   // buffer. The old whole-packet writer closed the connection in this case.
   setupBridge(); auto& p = peers[0]; p.socket.writeCapacity = 0;
@@ -115,4 +125,5 @@ int main() {
   assert(operation.barrier.phase == timiac::Phase::Failed && systemLatched);
   assert(Serial.sent.find("M410") != std::string::npos && !uart.homed && !p.outbox.pending());
   std::cout << "Production bridge: congested telemetry, partial writes, M114 completion, and genuine link failure passed\n";
+  return 0;
 }

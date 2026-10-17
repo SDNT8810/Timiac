@@ -25,6 +25,13 @@ void cloudSnapshot(JsonObject snapshot) {
   snapshot["software"] = kSoftwareRevision;
   snapshot["firmware"] = timiac::machineId;
   writeReliabilityStatus(snapshot.createNestedObject("reliability"));
+  JsonArray diagnostics = snapshot.createNestedArray("diagnostics"); writeDiagnosticBatch(diagnostics);
+  const uint32_t firstLog = logSequence > 3 ? logSequence - 3 : 0;
+  for (uint32_t i = firstLog; i < logSequence; ++i) {
+    const auto& entry = logs[i % 32];
+    JsonObject event = diagnostics.createNestedObject(); event["id"] = "r" + String(entry.id);
+    event["boot"] = bootId; event["sequence"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
+  }
   writeFirmwareUpdateStatus(snapshot.createNestedObject("ota"));
   JsonObject clock = snapshot.createNestedObject("clock");
   writeRtcStatus(clock); writeNtpStatus(clock);
@@ -135,7 +142,7 @@ void cloudTick() {
   // Keep peak heap usage bounded while TLS runs in its own task. A low-memory
   // cloud retry must not take down the independently operating clock.
   if (ESP.getFreeHeap() < 50000) { cloudError = "Waiting for cloud connection memory"; return; }
-  DynamicJsonDocument outbound(8192); cloudSnapshot(outbound.createNestedObject("status"));
+  DynamicJsonDocument outbound(12288); cloudSnapshot(outbound.createNestedObject("status"));
   if (outbound.overflowed()) { cloudState = "connection failed"; cloudError = "Cloud status is too large"; return; }
   CloudExchange* exchange = new (std::nothrow) CloudExchange;
   if (!exchange) { cloudError = "Waiting for cloud connection memory"; return; }

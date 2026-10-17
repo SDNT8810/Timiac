@@ -1,6 +1,7 @@
 import { fullUpdateApi, fullUpdateState, fullUpdateActive, cancelFullUpdate, advanceFullUpdate } from './full-update.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { firmwareApi, firmwareDownload, syncFirmware } from './firmware.js';
+import { saveDeviceDiagnostics, downloadDiagnostics } from './diagnostics.js';
 
 const keys = createRemoteJWKSet(new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'));
 const COOKIE = '__Host-timiac-session';
@@ -133,11 +134,12 @@ export function createGateway({ verifyToken = verifyFirebaseToken, upstream = fe
         if (firmwareResponse) return protect(firmwareResponse);
         const download = await firmwareDownload(request, env, () => authenticateDevice(request, env));
         if (download) return protect(download);
-        const apiMatch = pathname.match(/^\/api\/devices\/([^/]+)\/(status|actions)$/);
+        const apiMatch = pathname.match(/^\/api\/devices\/([^/]+)\/(status|actions|diagnostics)$/);
         if (apiMatch) {
           const username = await administrator(request, env, verifyToken);
           if (apiMatch[1] !== env.TIMIAC_DEVICE_ID) throw failure('Unknown device', 404);
           if (apiMatch[2] === 'status' && request.method === 'GET') return protect(json(await deviceState(env, now)));
+          if (apiMatch[2] === 'diagnostics' && request.method === 'GET') return protect(await downloadDiagnostics(env));
           if (apiMatch[2] === 'actions' && request.method === 'POST') {
             checkOrigin(request, env);
             const body = await readJson(request, 2048);
@@ -174,6 +176,7 @@ export function createGateway({ verifyToken = verifyFirebaseToken, upstream = fe
           await env.DB.prepare('INSERT INTO devices(id, status, updated_at) VALUES(?, ?, ?) ' +
             'ON CONFLICT(id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at')
             .bind(env.TIMIAC_DEVICE_ID, JSON.stringify(status), now).run();
+          await saveDeviceDiagnostics(env, status, now);
           const ready = !status.ota?.active && !status.stopPending && !status.fault && !status.a?.busy && !status.b?.busy &&
             !['preparing', 'running'].includes(status.operation?.state) && !['running', 'paused', 'uploading'].includes(status.program?.state);
           const action = await env.DB.prepare("UPDATE actions SET state = 'delivered', delivered_at = ? WHERE id = (" +

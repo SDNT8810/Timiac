@@ -13,11 +13,11 @@ from run import verify_release
 
 ROOT = Path(__file__).resolve().parent
 IMAGES = {
+    "master": ("master", "app", "esp_master_release.bin"),
     "esp1": ("esp1", "app", "esp_board1.bin"),
     "esp2": ("esp2", "app", "esp_board2.bin"),
     "octopus1": ("octopus1", "octopus", "firmware.bin"),
     "octopus2": ("octopus2", "octopus", "firmware.bin"),
-    "master": ("master", "app", "esp_master_release.bin"),
     "dashboard": ("master", "filesystem", "master_release_littlefs.bin"),
 }
 
@@ -48,7 +48,7 @@ class Gateway:
             failure.status = error.code
             raise failure from None
 
-    def install(self, device, step, timeout=660):
+    def install(self, device, step, timeout=1260):
         target, kind, filename = IMAGES[step]
         print(f"Uploading {filename} for {target} ({kind})...", flush=True)
         base = "/api/devices/" + device
@@ -104,7 +104,7 @@ def main():
     try:
         for step in steps:
             gateway.install(config["deviceId"], step)
-        print("Finished. Use Home, then Show time / Start clock when ready.")
+        print("Finished. Use Maintenance > Calibrate arms, then Show time when ready.")
     finally:
         try:
             gateway.call("/api/logout", {})

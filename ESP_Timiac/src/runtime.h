@@ -4,6 +4,7 @@ LogEntry logs[32];
 uint32_t logSequence = 0, sequence = 0;
 String bootId, coordinatorBoot, serialLine;
 String bridgeResetReason;
+#include "persistent_diagnostics.h"
 uint32_t lastPeerRejection = 0;
 bool serialDiscard = false, stopRequested = false, systemLatched = false, stopPending = false;
 bool networkChanging = false;
@@ -23,6 +24,7 @@ void rememberStop(const String& reason) {
 #endif
 }
 void configureReliability() {
+  configurePersistentDiagnostics();
 #if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
   Preferences history;
   if (history.begin("timiac-history", true)) {
@@ -40,6 +42,8 @@ void writeReliabilityStatus(JsonObject status) {
   status["lastStopSession"] = lastStopSession;
   if (lastStopSession == bootId && !lastStopReason.isEmpty()) status["lastStopAgeMs"] = uint32_t(millis() - lastStopAt);
   else status["lastStopAgeMs"] = nullptr;
+  status["diagnosticWriteFailures"] = diagnosticWriteFailures;
+  writeSavedUpdateCheckpoint(status.createNestedObject("lastUpdate"));
 #if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
   status["freeHeap"] = ESP.getFreeHeap(); status["minFreeHeap"] = ESP.getMinFreeHeap();
   status["resetReason"] = unsigned(esp_reset_reason());

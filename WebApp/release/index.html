@@ -24,7 +24,7 @@
       <button data-action="close" disabled><span class="symbol" aria-hidden="true">↙</span><strong>Close</strong><small id="travel">All arms to 50 mm</small></button>
       <button data-action="show-time" class="accent" disabled title="Follow the current time automatically, even with this page closed."><span class="symbol" aria-hidden="true">◷</span><strong>Start clock</strong><small>Follow the current time</small></button>
       <button data-action="next-five" class="preset" disabled><strong>Next 5 min</strong><small>Advance the clock pose</small></button>
-      <button data-action="next-hour" class="preset" disabled><strong>Next hour</strong><small>Open, brief struggle, then time</small></button>
+      <button data-action="next-hour" class="preset" disabled><strong>Next hour</strong><small>Open, close, then show time</small></button>
       <button data-action="struggle" class="preset" disabled><strong>Struggle</strong><small>7 random patterns · up to 20 mm</small></button>
     </section>
     <div class="machine"><p id="machine-status" role="status">Connecting to Timiac…</p><button id="stop" class="stop">Stop</button></div>
@@ -37,7 +37,7 @@
         <div class="form-actions"><button id="phone-time" type="button">Use phone time</button><button id="save-time" type="submit" class="dark" disabled>Save time</button></div>
         <small>Daylight-saving changes are manual.</small>
       </form>
-      <details><summary>Maintenance</summary><p>Establish the arm positions after a reset or firmware update.</p><button id="calibrate" type="button" disabled>Calibrate arms</button><p id="stop-history" role="status"></p></details>
+      <details><summary>Maintenance</summary><p>Establish the arm positions after a reset or firmware update.</p><button id="calibrate" type="button" disabled>Calibrate arms</button><p id="stop-history" role="status"></p><p><a href="/api/diagnostics">Download diagnostic log</a></p></details>
       <details class="wifi-settings"><summary>Router / hotspot Wi-Fi</summary><p id="wifi-status">Reading connection…</p>
         <form id="wifi-form"><label for="wifi-ssid">Wi-Fi name (2.4 GHz)</label><input id="wifi-ssid" autocomplete="off" maxlength="32" required>
           <label for="wifi-password">Password (leave empty for an open network)</label><input id="wifi-password" type="password" autocomplete="new-password" maxlength="63">

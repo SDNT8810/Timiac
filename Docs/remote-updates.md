@@ -45,8 +45,8 @@ python remote_update.py --target all
 ```
 
 Enter the same **Andrea** dashboard password when prompted. The command checks
-the local package, signs in over HTTPS, updates both bridges, both Octopus boards,
-the master application, then its local dashboard, and waits for each result.
+the local package, signs in over HTTPS, updates the master application, both
+bridges, both Octopus boards, then the local dashboard, and waits for each result.
 It stops on an error and never automatically retries a failed flashing job.
 
 For one component use `--target esp1`, `esp2`, `octopus1`, `octopus2`, or `master`.
@@ -149,7 +149,11 @@ Open the remote dashboard, sign in, and press **Full update** under Firmware upd
 4. If any build or installation fails, the sequence stops. Check the message/build log before trying again. Keep power connected throughout installation. **Stop** cancels the remaining sequence; a flash already activating must finish safely.
 5. After success, calibrate/home the arms and resume operation from the dashboard.
 
-Timiac installs ESP bridge 1, ESP bridge 2, Octopus 1, Octopus 2, master ESP32 application, then its local dashboard (six steps across five boards).
+Timiac installs the master ESP32 application first, then ESP bridge 1, ESP bridge 2,
+Octopus 1, Octopus 2 and finally the local dashboard (six steps across five boards).
+The master receives updater fixes before forwarding the other images. See
+[USB recovery and persistent diagnostic logs](ota-recovery.md) if the old master
+is offline or cannot finish its own update.
 
 The initial USB/SD setup is still required once. Leave all Octopus microSD cards inserted and connect the controller to Internet Wi-Fi. Push your code before using Full update: uncommitted changes on a PC are not included.
 

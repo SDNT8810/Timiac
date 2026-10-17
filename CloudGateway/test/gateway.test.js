@@ -251,6 +251,48 @@ test('a remote Octopus update requires its bridge capability and initial SD rece
   const { update } = await (await f.sync()).json();
   assert.equal(update.target, 'octopus2'); assert.equal(update.crc32, firmwareCrc32(firmwareImage('octopus')));
 });
+
+test('firmware progress renews only the exact job lease; repeated stuck phases expire promptly', async t => {
+  const f = otaFixture(t), image = await (await f.upload(firmwareImage())).json();
+  await f.sync(); const queued = await (await f.install(image.id)).json(); await f.sync();
+  const report = { ...f.state, ota: { ...f.state.ota, active: true, id: queued.id, sha256: image.sha256, state: 'downloading', done: 10 } };
+  await f.sync(report);
+  const first = f.sql.prepare('SELECT expires_at FROM ota_jobs WHERE id=?').get(queued.id).expires_at;
+  f.advance(120000); await f.sync(report);
+  assert.equal(f.sql.prepare('SELECT expires_at FROM ota_jobs WHERE id=?').get(queued.id).expires_at, first);
+  report.ota.done = 20; await f.sync(report);
+  const second = f.sql.prepare('SELECT expires_at FROM ota_jobs WHERE id=?').get(queued.id).expires_at;
+  assert.ok(second > first);
+  f.advance(120000); report.ota.done = 30; report.ota.sha256 = '0'.repeat(64); await f.sync(report);
+  assert.equal(f.sql.prepare('SELECT expires_at FROM ota_jobs WHERE id=?').get(queued.id).expires_at, second);
+  f.advance(60001); await f.sync(report);
+  const expired = f.sql.prepare('SELECT state,error FROM ota_jobs WHERE id=?').get(queued.id);
+  assert.equal(expired.state, 'expired'); assert.match(expired.error, /stopped making progress/);
+});
+
+test('an unconfirmed delivered job explains a master power-cycle and is never replayed', async t => {
+  const f = otaFixture(t), image = await (await f.upload(firmwareImage())).json();
+  await f.sync(); const queued = await (await f.install(image.id)).json(); await f.sync();
+  await f.sync({ ...f.state, session: 'restarted-master' });
+  const row = f.sql.prepare('SELECT state,error FROM ota_jobs WHERE id=?').get(queued.id);
+  assert.equal(row.state, 'expired'); assert.match(row.error, /Controller restarted/);
+});
+
+test('diagnostic history survives a reboot and remains downloadable while hardware is offline', async t => {
+  const f = fixture(t);
+  assert.equal((await f.call('/api/devices/clock-01/diagnostics')).status, 401);
+  f.state.software = '2026-10-17.1';
+  f.state.diagnostics = [{id: 'p1',boot: 'previous-boot',sequence: 1,at: 21000,utc: 1792248000,text: 'OTA master verifying 1150784/1150784',persistent: true}];
+  await f.sync(); await f.sync();
+  f.state.session = 'rebooted-master'; await f.sync(); f.advance(60000);
+  const response = await f.call('/api/devices/clock-01/diagnostics', undefined, f.admin);
+  assert.equal(response.status, 200); assert.match(response.headers.get('Content-Disposition'), /attachment/);
+  const saved = await response.json();
+  assert.equal(saved.lastKnownStatus.session, 'rebooted-master');
+  const event = saved.events.filter(e => e.message === 'OTA master verifying 1150784/1150784');
+  assert.equal(event.length, 1); assert.equal(event[0].persistent, 1); assert.equal(event[0].boot, 'previous-boot');
+  assert.equal((await (await f.call('/api/devices/clock-01/status', undefined, f.admin)).json()).online, false);
+});
 test('old unused firmware is pruned while an active update image is retained', async t => {
   const f = otaFixture(t), first = await (await f.upload(firmwareImage())).json();
   f.advance(8 * 86400000);

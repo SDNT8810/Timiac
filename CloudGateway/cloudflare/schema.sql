@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS ota_chunks (
 CREATE TABLE IF NOT EXISTS ota_jobs (
   id TEXT PRIMARY KEY, image_id TEXT NOT NULL REFERENCES ota_images(id), device_id TEXT NOT NULL,
   session TEXT NOT NULL, state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+  delivered_at INTEGER, progress_done INTEGER NOT NULL DEFAULT 0,
+  progress_state TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ota_queue ON ota_jobs(state, expires_at);
 
@@ -39,3 +41,11 @@ CREATE TABLE IF NOT EXISTS full_update_steps (
   target TEXT NOT NULL, kind TEXT NOT NULL, image_id TEXT NOT NULL REFERENCES ota_images(id),
   job_id TEXT NOT NULL UNIQUE, PRIMARY KEY(full_id,position)
 );
+
+CREATE TABLE IF NOT EXISTS diagnostic_events (
+  event_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, boot TEXT NOT NULL,
+  uptime_ms INTEGER NOT NULL, utc_seconds INTEGER NOT NULL,
+  message TEXT NOT NULL, persistent INTEGER NOT NULL DEFAULT 0, received_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS diagnostic_received ON diagnostic_events(received_at);
+CREATE INDEX IF NOT EXISTS diagnostic_device ON diagnostic_events(device_id,received_at);

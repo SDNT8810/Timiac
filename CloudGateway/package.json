@@ -8,7 +8,7 @@
   "scripts": {
     "start": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "node --check cloudflare/worker.js && node --check cloudflare/firmware.js && node --check public/app.js && node --check cloudflare/full-update.js",
+    "check": "node --check cloudflare/worker.js && node --check cloudflare/firmware.js && node --check public/app.js && node --check cloudflare/full-update.js && node --check cloudflare/diagnostics.js",
     "test": "node --test test/*.test.js",
     "configure:secrets": "wrangler secret bulk project-secrets.json"
   },

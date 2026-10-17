@@ -1,4 +1,9 @@
-# Motion and remote update package - 2026-10-16.2
+# Motion and remote update package - 2026-10-17.1
+
+For an offline master or a stalled remote update, use the
+[USB recovery and persistent diagnostic log instructions](ota-recovery.md).
+This release keeps the existing machine identity and adds reliable OTA transfer
+handling, explicit progress timeouts and logs that survive master power cycles.
 
 Install all five boards once to enable [remote updates](remote-updates.md).
 The existing bootloaders are retained, and both Octopus cards stay installed.

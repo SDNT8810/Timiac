@@ -43,11 +43,11 @@ class RemoteUpdateTests(unittest.TestCase):
                     self.gateway.install('clock-01', 'esp2')
             self.assertEqual(call.call_count, 3)
 
-    def test_all_updates_bridges_then_octopuses_then_master_and_dashboard(self):
+    def test_all_updates_master_then_bridges_then_octopuses_and_dashboard(self):
         with patch('sys.argv', ['remote_update.py', '--target', 'all']), patch.object(remote_update, 'verify_release'), patch.object(remote_update.getpass, 'getpass', return_value='private'), patch.object(remote_update, 'Gateway') as factory, contextlib.redirect_stdout(io.StringIO()):
             factory.return_value.call.side_effect = [{'username': 'Andrea'}, {'deviceId': 'clock-01'}, {}]
             remote_update.main()
-            self.assertEqual([call.args for call in factory.return_value.install.call_args_list], [('clock-01', target) for target in ['esp1', 'esp2', 'octopus1', 'octopus2', 'master', 'dashboard']])
+            self.assertEqual([call.args for call in factory.return_value.install.call_args_list], [('clock-01', target) for target in ['master', 'esp1', 'esp2', 'octopus1', 'octopus2', 'dashboard']])
 
     def test_corrupt_package_is_rejected_before_login_or_any_upload(self):
         with patch('sys.argv', ['remote_update.py', '--target', 'all']), patch.object(remote_update, 'verify_release', side_effect=ValueError('Checksum mismatch')), patch.object(remote_update, 'Gateway') as factory:

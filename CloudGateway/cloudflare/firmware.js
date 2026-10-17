@@ -121,8 +121,18 @@ export async function syncFirmware(env, status, now, action, advance = async () 
   if (uuid(ota?.id) && ['complete', 'failed'].includes(ota.state) && /^[a-f0-9]{64}$/.test(ota.sha256 || ''))
     await env.DB.prepare("UPDATE ota_jobs SET state = ?, error = ? WHERE id = ? AND device_id = ? AND state = 'delivered' AND image_id IN (SELECT id FROM ota_images WHERE sha256 = ?)")
       .bind(ota.state, String(ota.error || '').slice(0, 300), ota.id, env.TIMIAC_DEVICE_ID, ota.sha256).run();
-  await env.DB.prepare("UPDATE ota_jobs SET state = 'expired', error = 'Update expired or its controller session changed' WHERE (state = 'queued' AND session != ?) OR (state IN ('queued','delivered') AND expires_at <= ?)")
-    .bind(status.session, now).run();
+  // Only this exact job/hash may renew a lease, and only real byte/phase progress
+  // renews it. Repeating 'stopping / 0%' can no longer remain stuck indefinitely.
+  if (uuid(ota?.id) && ota.active && /^[a-f0-9]{64}$/.test(ota.sha256 || '')) {
+    const done = Number.isSafeInteger(ota.done) && ota.done >= 0 ? ota.done : 0;
+    const phase = String(ota.state || '').slice(0, 64) + ':' + String(ota.phase || '').slice(0, 128);
+    await env.DB.prepare("UPDATE ota_jobs SET expires_at=MIN(COALESCE(delivered_at,created_at)+1200000,?),progress_done=?,progress_state=? WHERE id=? AND device_id=? AND session=? AND state='delivered' AND expires_at>? AND image_id IN (SELECT id FROM ota_images WHERE sha256=?) AND (progress_done<? OR progress_state!=?)")
+      .bind(now + 180000, done, phase, ota.id, env.TIMIAC_DEVICE_ID, status.session, now, ota.sha256, done, phase).run();
+  }
+  await env.DB.prepare("UPDATE ota_jobs SET state='expired',error='Controller restarted before this update was confirmed; calibrate arms before moving' WHERE state IN ('queued','delivered') AND session!=?")
+    .bind(status.session).run();
+  await env.DB.prepare("UPDATE ota_jobs SET state='expired',error='Firmware update stopped making progress; check the board connection before retrying' WHERE state IN ('queued','delivered') AND expires_at<=?")
+    .bind(now).run();
   if (action?.type === 'stop') {
     await env.DB.prepare("UPDATE ota_jobs SET state='cancelled' WHERE state='queued'").run(); return null;
   }
@@ -130,8 +140,8 @@ export async function syncFirmware(env, status, now, action, advance = async () 
   if (action || !ota?.supported || ota.active || status.stopPending || status.a?.busy || status.b?.busy ||
       (status.control?.owner && !status.control.owner.startsWith('cloud:')) ||
       ['preparing', 'running'].includes(status.operation?.state) || ['running', 'paused', 'uploading'].includes(status.program?.state)) return null;
-  const job = await env.DB.prepare("UPDATE ota_jobs SET state='delivered', expires_at=? WHERE id=(SELECT id FROM ota_jobs WHERE state='queued' AND device_id=? AND session=? AND expires_at>? ORDER BY created_at LIMIT 1) AND state='queued' RETURNING id,image_id")
-    .bind(now + 600000, env.TIMIAC_DEVICE_ID, status.session, now).first();
+  const job = await env.DB.prepare("UPDATE ota_jobs SET state='delivered', expires_at=?, delivered_at=?, progress_done=0, progress_state='' WHERE id=(SELECT id FROM ota_jobs WHERE state='queued' AND device_id=? AND session=? AND expires_at>? ORDER BY created_at LIMIT 1) AND state='queued' RETURNING id,image_id")
+    .bind(now + 180000, now, env.TIMIAC_DEVICE_ID, status.session, now).first();
   if (!job) return null;
   const image = await env.DB.prepare('SELECT ' + fields + ' FROM ota_images WHERE id = ? AND complete = 1').bind(job.image_id).first();
   if (!image) return null;

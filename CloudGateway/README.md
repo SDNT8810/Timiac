@@ -80,6 +80,11 @@ owns `timiac.it`. The deployed Worker requires secrets `TIMIAC_DEVICE_KEY` and
 `FIREBASE_API_KEY`; use `wrangler secret put` or the ignored private secrets file
 with `wrangler secret bulk .local/cloudflare-secrets.json`. Never commit it.
 Initialize a new D1 database with `cloudflare/schema.sql` before deploying.
+For an existing database from before firmware 2026-10-17.1, apply
+`cloudflare/ota-progress.sql` once and `cloudflare/diagnostics-schema.sql` before
+deploying. These add progress leases and the persistent diagnostic archive.
+Diagnostic downloads require the normal signed-in administrator session and
+remain available while hardware is offline. See [recovery instructions](../Docs/ota-recovery.md).
 
 To update the administrator password, authenticate `gcloud` for the configured
 Firebase project and run `python scripts/provision_firebase.py`. It prompts for

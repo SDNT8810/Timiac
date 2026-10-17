@@ -287,6 +287,22 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
 }
 void configureHttp() {
   http.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) { statusReply(request); });
+  http.on("/api/diagnostics", HTTP_GET, [](AsyncWebServerRequest* request) {
+    RuntimeLock lock;
+    DynamicJsonDocument document(16384);
+    document["boot"] = bootId; document["software"] = kSoftwareRevision;
+    writeReliabilityStatus(document.createNestedObject("reliability"));
+    writeDiagnosticBatch(document.createNestedArray("persistentEvents"), true);
+    JsonArray events = document.createNestedArray("recentEvents");
+    const uint32_t first = logSequence > 32 ? logSequence - 32 : 0;
+    for (uint32_t i = first; i < logSequence; ++i) {
+      const auto& entry = logs[i % 32]; JsonObject event = events.createNestedObject();
+      event["id"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
+    }
+    String text; serializeJson(document, text);
+    auto* response = request->beginResponse(200, "application/json", text);
+    response->addHeader("Cache-Control", "no-store"); response->addHeader("Content-Disposition", "attachment; filename=\"timiac-diagnostics.json\""); request->send(response);
+  });
 #if !TIMIAC_RELEASE
   http.on("/api/rtc", HTTP_GET, [](AsyncWebServerRequest* request) {
     RuntimeLock lock;

@@ -9,6 +9,7 @@
 #include "../../shared/timeouts.h"
 #include "../../shared/gcode.h"
 #include "../../shared/firmware_transfer.h"
+#include "../../shared/diagnostic_journal.h"
 #include "../../shared/endstops.h"
 #include "../../shared/driver_report.h"
 #include "../../shared/octopus_session.h"
@@ -98,12 +99,12 @@ void loop() {
   {
     RuntimeLock lock;
     networkTick(); operationTick();
-    dns.processNextRequest(); programTick(); uplinkTick(); ntpTick(); rtcTick(); releaseClockTick(); proximityTick(); cloudTick(); firmwareUpdateTick();
+    dns.processNextRequest(); programTick(); uplinkTick(); ntpTick(); rtcTick(); releaseClockTick(); proximityTick(); cloudTick(); checkpointFirmwareUpdate(); firmwareUpdateTick(); checkpointFirmwareUpdate();
   }
 #else
   networkTick(); operationTick();
   if (!firmwareUpdateOwnsUart()) uart.tick();
-  firmwareUpdateTick(); operationTick();
+  checkpointFirmwareUpdate(); firmwareUpdateTick(); checkpointFirmwareUpdate(); operationTick();
 #endif
   yield();
 }

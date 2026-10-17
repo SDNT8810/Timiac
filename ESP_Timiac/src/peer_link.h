@@ -52,6 +52,8 @@ bool sendPeer(Peer& p, JsonDocument& doc) {
 void logMessage(const String& message) {
   LogEntry& entry = logs[logSequence % 32];
   entry.id = ++logSequence; entry.at = millis(); entry.text = message.substring(0, 180);
+  if (message.startsWith("FAULT:") || message.indexOf(" link lost:") >= 0 ||
+      message.indexOf("boot reason:") >= 0 || message.startsWith("Firmware update failed:")) persistDiagnostic(entry.text);
   if (!TIMIAC_MASTER && peers[0].paired && !peers[0].outbox.pending()) {
     StaticJsonDocument<512> doc; doc["type"] = "log"; doc["text"] = entry.text; sendPeer(peers[0], doc);
   }
@@ -309,10 +311,12 @@ void processPeer(Peer& p, const String& line) {
       else if (phase == "done") { operation.barrier.done(1U << p.board); recordReceipt(); }
     }
   } else if (!TIMIAC_MASTER && type == "stop") {
-    if (firmwareUpdating) firmwareUpdateCancel = true;
     String token = doc["token"] | "";
     if (token.isEmpty()) { p.socket.stop(); return; }
-    if (token != acknowledgedStop) uart.abort(doc["reason"] | "Master stop");
+    if (token != acknowledgedStop) {
+      if (firmwareUpdating) firmwareUpdateCancel = true;
+      uart.abort(doc["reason"] | "Master stop");
+    }
     // Cancel the barrier as well as the UART queue. Otherwise the old homing
     // deadline keeps firing after Stop. A local hardware fault survives Stop.
     acknowledgedStop = token;

@@ -7,7 +7,7 @@ import { createGateway } from '../cloudflare/worker.js';
 const timiac = import.meta.url.toLowerCase().includes('/timiac/');
 const family = timiac ? 'TIMIAC' : 'LUMIAC', prefix = timiac ? 'Timiac' : 'Lumiac';
 const sha = 'a'.repeat(40), machine = timiac ? 'TIMIAC2-123456789abc' : 'LUMIAC1-123456789abc';
-const components = timiac ? [['esp1','app'],['esp2','app'],['octopus1','octopus'],['octopus2','octopus'],['master','app'],['master','filesystem']]
+const components = timiac ? [['master','app'],['esp1','app'],['esp2','app'],['octopus1','octopus'],['octopus2','octopus'],['master','filesystem']]
   : [['octopus','octopus'],['esp12','app'],['esp32','app']];
 function fixture(t, controller = 'esp32') {
   const db = new DatabaseSync(':memory:');
@@ -115,6 +115,16 @@ test('failure halts the entire sequence without retrying or flashing another boa
   assert.equal((await (await f.sync()).json()).update, undefined);
   assert.equal((await f.full()).state, 'failed'); assert.match((await f.full()).error, /SD write failed/);
   await f.sync(); assert.equal(f.db.prepare('SELECT count(*) n FROM ota_jobs').get().n, 1);
+});
+
+test('a stalled board is reported even if the master goes offline and never syncs again', async t => {
+  const f = fixture(t); await f.sync(); const id = await f.begin(); await f.bundle(id); await f.build(id, 'complete');
+  const update = (await (await f.sync()).json()).update;
+  assert.equal(update.target, timiac ? 'master' : 'octopus');
+  f.advance(180001);
+  const result = await f.full();
+  assert.equal(result.state, 'failed'); assert.match(result.error, /stopped making progress/);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM ota_jobs').get().n, 1);
 });
 
 test('Stop cancels a build and rejects late build callbacks', async t => {
