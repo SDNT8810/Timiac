@@ -108,4 +108,5 @@ int main() {
   reset(); image[0] = 0xE9; command("M997 P0 2048 " + std::to_string(crc(image)));
   assert(command(block(image, 0)).find("wrong STM32") != std::string::npos && !rebooted);
   std::cout << "Production SD updater: retries, truncation, wrong images, SD faults, CRC readback and verified activation passed\n";
+  return 0;
 }

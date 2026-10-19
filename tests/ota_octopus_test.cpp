@@ -3,7 +3,7 @@
 #undef main
 #include "../shared/firmware_transfer.h"
 struct {
-  String kind = "octopus", revision = kSoftwareRevision, state = "waiting for UART", error;
+  String kind = "octopus", revision = kSoftwareRevision, state = "waiting for UART", phase, error;
   uint32_t size = 1024, done = 0, crc32 = 123;
 } firmwareUpdate;
 void otaFailed(const String& reason) { firmwareUpdate.state = "failed"; firmwareUpdate.error = reason; firmwareUpdating = firmwareUpdateCancel = false; }
@@ -28,14 +28,16 @@ int main() {
   Serial.feed("TIMIAC_FW_OFFSET 0\n"); octopusTick(); assert(octopusPhase == 2);
   const String first = lastCommand();
   Serial.feed("TIMIAC_FW_OFFSET 0\n"); octopusTick(); assert(lastCommand() == first && firmwareUpdate.done == 0);
-  hostNow += 3001; octopusTick(); assert(lastCommand() == first && octopusRetries == 1);
+  hostNow += 3001; octopusTick(); assert(lastCommand() == first && !octopusRetries);
+  hostNow += 7000; octopusTick(); assert(lastCommand() == first && octopusRetries == 1);
   while (octopusPhase == 2) {
     timiac::FirmwareCommand command;
     assert(timiac::parseFirmwareCommand(lastCommand().c_str(), command));
-    assert(command.type == 1 && command.offset == octopusOffset && command.count == 64);
+    assert(command.type == 1 && command.offset == octopusOffset && command.count == 16);
     Serial.feed("TIMIAC_FW_OFFSET " + std::to_string(octopusNextOffset) + "\n"); octopusTick();
   }
   assert(octopusPhase == 3 && firmwareUpdate.done == 1024 && lastCommand() == "M997 P2");
+  hostNow += 10001; octopusTick(); assert(octopusPhase == 3 && !octopusRetries);
   Serial.feed("TIMIAC_FW_VERIFIED\n"); octopusTick(); assert(octopusPhase == 4 && lastCommand() == "M997 P3");
   const std::string atActivation = Serial.sent;
   hostNow += 5000; firmwareUpdateCancel = true; octopusTick();
@@ -47,5 +49,18 @@ int main() {
   firmwareUpdating = true; firmwareUpdateCancel = false; octopusPhase = 2;
   Serial.feed("Error:SD card unavailable\n"); octopusTick();
   assert(firmwareUpdate.state == "failed" && firmwareUpdate.error == "Error:SD card unavailable");
+  // A native reset during a block must not be swallowed as another lost ACK.
+  firmwareUpdating = true; firmwareUpdateCancel = false; octopusPhase = 2; octopusOffset = 512;
+  const unsigned resetsBefore = uart.resetCount;
+  Serial.feed("start\n"); octopusTick();
+  assert(!octopusPhase && !firmwareUpdating && uart.resetCount == resetsBefore + 1);
+  assert(firmwareUpdate.error.indexOf("Octopus restarted while writing SD block at byte 512") >= 0);
+  // Give an exhausted block wait an actionable offset and actual last reply.
+  firmwareUpdating = true; firmwareUpdateCancel = false; octopusPhase = 2;
+  octopusCommand = first; octopusRetries = 0; octopusSent = hostNow;
+  uart.lastReply = "ok";
+  for (unsigned retry = 0; retry < 5; ++retry) { hostNow += 10001; octopusTick(); }
+  assert(!octopusPhase && !firmwareUpdating && firmwareUpdate.state == "failed");
+  assert(firmwareUpdate.error.indexOf("writing SD block at 512/1024; last reply: ok") >= 0);
   std::cout << "Production Octopus sender: stale ACKs, exact block CRC/offsets, safe retries and one-shot activation with delayed reboot passed\n";
 }

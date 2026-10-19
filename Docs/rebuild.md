@@ -1,4 +1,9 @@
-# Motion and remote update package - 2026-10-19.4
+# Motion and remote update package - 2026-10-19.5
+
+The bridge now sends SD firmware in UART commands small enough for the installed
+Octopus receive buffer, resynchronizes abandoned transfers, and reports reset/
+offset/last-reply details. See [the 512-byte SD timeout investigation](sd-update-timeout.md).
+Full update installs the new bridge code before retrying the motor boards.
 
 This release fixes the bridge decoder's per-packet heap allocation and reduces
 cloud TLS memory pressure. Cloud polling and firmware downloads share the TLS
