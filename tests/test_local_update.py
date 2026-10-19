@@ -1,6 +1,8 @@
 import contextlib
 import hashlib
 import hmac
+import http.client
+import http.server
 import io
 import json
 import threading
@@ -35,6 +37,90 @@ class LocalUpdateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 local_update.LocalGateway(host)
         self.assertEqual(local_update.LocalGateway('192.168.4.1').host, '192.168.4.1')
+
+    def test_windows_connection_abort_retries_get_and_recovers(self):
+        gateway = local_update.LocalGateway()
+        response = io.BytesIO(b'{"localSupported":true,"nonce":"nonce","software":"2026-10-19.4"}')
+        aborted = urllib.error.URLError(ConnectionAbortedError(10053, 'connection aborted by host software'))
+        with patch.object(gateway.client, 'open', side_effect=[aborted, response]) as opened, \
+             patch.object(local_update.time, 'sleep') as sleep, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(gateway.info()['software'], '2026-10-19.4')
+        self.assertEqual(opened.call_count, 2)
+        self.assertTrue(all(call.args[0].get_method() == 'GET' for call in opened.call_args_list))
+        self.assertTrue(all(call.kwargs['timeout'] == 5 for call in opened.call_args_list))
+        sleep.assert_called_once_with(0.5)
+
+    def test_persistent_connection_abort_is_bounded_and_explains_browser_python_check(self):
+        gateway = local_update.LocalGateway()
+        error = urllib.error.URLError(ConnectionAbortedError(10053, 'connection aborted'))
+        with patch.object(gateway.client, 'open', side_effect=error) as opened, \
+             patch.object(local_update.time, 'sleep'), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, '10053.*browser.*Python executable') as failure:
+                gateway.info()
+        self.assertEqual(opened.call_count, 3)
+        self.assertEqual(failure.exception.status, 503)
+        self.assertIn(local_update.sys.executable, str(failure.exception))
+
+    def test_incomplete_reads_and_busy_get_are_retried_but_refusal_is_not(self):
+        gateway = local_update.LocalGateway()
+        busy = urllib.error.HTTPError(gateway.url, 503, 'busy', {}, io.BytesIO(b'{"error":"Controller busy"}'))
+        response = io.BytesIO(b'{"localSupported":true,"nonce":"nonce"}')
+        with patch.object(gateway.client, 'open', side_effect=[http.client.RemoteDisconnected(), busy, response]) as opened, \
+             patch.object(local_update.time, 'sleep'), contextlib.redirect_stdout(io.StringIO()):
+            self.assertTrue(gateway.info()['localSupported'])
+        self.assertEqual(opened.call_count, 3)
+        refused = urllib.error.HTTPError(gateway.url, 403, 'forbidden', {}, io.BytesIO(b'{"error":"Request refused"}'))
+        with patch.object(gateway.client, 'open', side_effect=refused) as opened:
+            with self.assertRaisesRegex(RuntimeError, 'Request refused') as failure:
+                gateway.info()
+        self.assertEqual(opened.call_count, 1)
+        self.assertEqual(failure.exception.status, 403)
+
+    def test_transport_and_busy_post_failures_never_replay_a_command(self):
+        gateway = local_update.LocalGateway()
+        for error in (urllib.error.URLError(ConnectionAbortedError(10053, 'connection aborted')),
+                      urllib.error.HTTPError(gateway.url, 503, 'busy', {}, io.BytesIO(b'{"error":"Controller busy"}'))):
+            with patch.object(gateway.client, 'open', side_effect=error) as opened, patch.object(local_update.time, 'sleep') as sleep:
+                with self.assertRaises(RuntimeError):
+                    gateway.call('/api/firmware/local', {'id': 'already submitted'})
+            self.assertEqual(opened.call_count, 1)
+            self.assertEqual(opened.call_args.args[0].get_method(), 'POST')
+            sleep.assert_not_called()
+
+    def test_connection_check_sends_only_one_get_without_loading_images_or_stopping(self):
+        response = io.BytesIO(b'{"localSupported":true,"nonce":"nonce","software":"2026-10-19.4"}')
+        with patch('sys.argv', ['local_update.py', '--check']), \
+             patch.object(urllib.request.OpenerDirector, 'open', return_value=response) as opened, \
+             patch.object(local_update, 'prepare_images') as images, patch.object(local_update, 'ImageServer') as server, \
+             patch.object(local_update.LocalGateway, 'pause') as pause, contextlib.redirect_stdout(io.StringIO()):
+            local_update.main()
+        opened.assert_called_once()
+        self.assertEqual(opened.call_args.args[0].get_method(), 'GET')
+        self.assertEqual(opened.call_args.args[0].full_url, 'http://192.168.4.1/api/firmware/local')
+        images.assert_not_called(); server.assert_not_called(); pause.assert_not_called()
+
+    def test_real_socket_closed_without_reply_recovers_before_any_post(self):
+        methods = []
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                methods.append(self.command)
+                if len(methods) == 1:
+                    self.close_connection = True
+                    return
+                data = b'{"localSupported":true,"nonce":"nonce"}'
+                self.send_response(200); self.send_header('Content-Length', str(len(data))); self.end_headers()
+                self.wfile.write(data)
+            def log_message(self, *_): pass
+        with http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+            gateway = local_update.LocalGateway()
+            gateway.url = 'http://127.0.0.1:' + str(server.server_port)
+            try:
+                with patch.object(local_update.time, 'sleep'), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertTrue(gateway.info()['localSupported'])
+            finally:
+                server.shutdown(); thread.join()
+        self.assertEqual(methods, ['GET', 'GET'])
 
     def test_real_local_server_serves_exact_image_and_rejects_unrelated_paths_or_clients(self):
         with local_update.ImageServer(('127.0.0.1', 0), '127.0.0.1') as server:

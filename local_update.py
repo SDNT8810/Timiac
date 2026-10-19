@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import hmac
+import http.client
 import http.server
 import ipaddress
 import json
@@ -102,21 +103,44 @@ class LocalGateway:
         self.client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def call(self, path, body=None):
-        request = urllib.request.Request(self.url + path,
-            data=None if body is None else json.dumps(body).encode(),
-            headers={'Content-Type': 'application/json', 'X-Timiac': '1', 'User-Agent': 'Timiac-Local-Updater/1.0'})
-        try:
-            with self.client.open(request, timeout=15) as response:
-                return json.load(response)
-        except urllib.error.HTTPError as error:
+        # Retrying a status GET is safe. A POST may already have reached the
+        # controller even when its reply is lost; NEVER replay Stop or a flash.
+        attempts = 3 if body is None else 1
+        for attempt in range(attempts):
+            request = urllib.request.Request(self.url + path,
+                data=None if body is None else json.dumps(body).encode(),
+                headers={'Content-Type': 'application/json', 'X-Timiac': '1',
+                         'User-Agent': 'Timiac-Local-Updater/1.1', 'Connection': 'close', 'Cache-Control': 'no-cache'})
             try:
-                message = json.load(error).get('error', str(error))
-            except (ValueError, AttributeError):
-                message = str(error)
-            if error.code == 404 and path == '/api/firmware/local':
-                message = 'Install local-update support on the master by USB once before using hotspot updates'
-            failure = RuntimeError(message); failure.status = error.code
-            raise failure from None
+                with self.client.open(request, timeout=5 if body is None else 15) as response:
+                    return json.load(response)
+            except urllib.error.HTTPError as error:
+                with error:
+                    try:
+                        message = json.load(error).get('error', str(error))
+                    except (ValueError, AttributeError):
+                        message = str(error)
+                if body is None and error.code in (500, 502, 503, 504) and attempt + 1 < attempts:
+                    print(f'Master busy at {path}; retrying read ({attempt + 2}/{attempts})...', flush=True)
+                    time.sleep(0.5 * (attempt + 1)); continue
+                if error.code == 404 and path == '/api/firmware/local':
+                    message = 'Install local-update support on the master by USB once before using hotspot updates'
+                failure = RuntimeError(message); failure.status = error.code
+                raise failure from None
+            except (OSError, http.client.HTTPException, json.JSONDecodeError) as error:
+                if attempt + 1 < attempts:
+                    print(f'Connection interrupted at {path}; retrying read ({attempt + 2}/{attempts})...', flush=True)
+                    time.sleep(0.5 * (attempt + 1)); continue
+                reason = getattr(error, 'reason', error)
+                message = f'Connection to {self.url + path} failed: {reason}. '
+                if body is None:
+                    message += f'Open {self.url}/api/firmware/local in a browser on this PC. '
+                    message += 'If that opens, allow this Python executable in the PC firewall/security software and check any VPN: ' + sys.executable
+                    message += '. If it does not open, connect to Timiac Wi-Fi or use --host with the clock router IP.'
+                else:
+                    message += 'The command was sent only once; its reply may have been lost.'
+                failure = RuntimeError(message); failure.status = 503
+                raise failure from None
 
     def info(self):
         info = self.call('/api/firmware/local')
@@ -190,6 +214,7 @@ class LocalGateway:
 def install_targets(host, steps, mode='release'):
     prepared, key = prepare_images(steps, mode), pairing_key()
     gateway = LocalGateway(host)
+    print(f'Connecting to {gateway.url} to check local-update support...', flush=True)
     info = gateway.info()
     if (info.get('ota') or {}).get('active'):
         raise RuntimeError('Another firmware update is active; wait for its result')
@@ -215,7 +240,16 @@ def main():
     parser.add_argument('--host', default='192.168.4.1', help='master hotspot or router LAN IPv4 address')
     parser.add_argument('--target', choices=['all', *IMAGES], default='all')
     parser.add_argument('--build', action='store_true', help='build all firmware before verifying/installing the bundle')
+    parser.add_argument('--check', action='store_true', help='check the master connection without stopping or updating the clock')
     args = parser.parse_args()
+    if args.check:
+        if args.build:
+            parser.error('--check cannot be combined with --build')
+        gateway = LocalGateway(args.host)
+        info = gateway.info()
+        print(f'Connected to Timiac at {gateway.url}; installed firmware: {info.get("software", "unknown")}.')
+        print('Local updates supported. Connection check finished; no Stop or update command was sent.')
+        return
     if args.build:
         subprocess.run([sys.executable, str(ROOT / 'build.py'), 'all'], check=True)
     steps = list(IMAGES) if args.target == 'all' else ['master', 'dashboard'] if args.target == 'master' else [args.target]

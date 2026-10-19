@@ -75,6 +75,26 @@ After installing, use **Maintenance > Calibrate arms**, then **Show time**.
 
 ## Recovery and limits
 
+If the updater prints `WinError 10053` after verifying the images, it lost a
+connection to the master. Before `Serving firmware...` appears, no installation
+has started. The error alone does not identify whether Windows security software,
+a network interruption or the device's HTTP connection caused it.
+
+The updater retries read-only GET requests up to three times. It never retries
+a Stop or installation POST; a lost install reply is reconciled using the exact
+existing job receipt. To check connectivity without pausing/updating the clock:
+
+```powershell
+python local_update.py --check
+```
+
+On the same PC, open http://192.168.4.1/api/firmware/local in a browser. If this
+works but Python still fails, allow the Python executable printed in the error
+through the PC firewall/security software and check any VPN. Do not disable the
+entire firewall. The image-server firewall permission applies later, when the
+master downloads the files from the PC. If using router Wi-Fi, use the current
+clock address, for example `python local_update.py --check --host 192.168.1.4`.
+
 An interrupted transfer is not automatically resubmitted. SHA-256, role,
 hardware identity, revision and restart receipt must agree before success is
 reported. Local master updates also require the replacement image to retain
