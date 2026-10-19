@@ -115,19 +115,24 @@ void configureCloud() {
   if (!cloudEnabled()) return;
   if (!configureCloudTransport()) { cloudState = "unavailable"; cloudError = "Cloud worker memory unavailable; local clock remains active"; }
 }
+void recordCloudFailure(const String& error) {
+  if (cloudState != "connection failed" || cloudError != error) persistDiagnostic("Cloud connection failed: " + error);
+  cloudState = "connection failed"; cloudError = error; ++cloudFailures;
+  cloudRetryMs = min(uint32_t(60000), cloudRetryMs * 2);
+}
 void cloudTick() {
   if (!cloudEnabled() || !cloudRequests || !cloudResponses) return;
   CloudExchange* completed = nullptr;
   if (xQueueReceive(cloudResponses, &completed, 0) == pdTRUE) {
     cloudInFlight = false; cloudLastDuration = completed->elapsed;
     if (!completed->error.isEmpty()) {
-      cloudState = "connection failed"; cloudError = completed->error; ++cloudFailures;
-      cloudRetryMs = min(uint32_t(60000), cloudRetryMs * 2);
+      recordCloudFailure(completed->error);
     } else {
       DynamicJsonDocument inbound(2048);
       if (deserializeJson(inbound, completed->response)) {
-        cloudState = "connection failed"; cloudError = "Invalid cloud response"; ++cloudFailures;
+        recordCloudFailure("Invalid cloud response");
       } else {
+        if (cloudState != "connected") persistDiagnostic("Cloud connection established");
         cloudState = "connected"; cloudError = ""; cloudLastSuccess = millis(); cloudRetryMs = 5000;
         receiveCloudAction(inbound["action"]);
         if (!inbound["action"].is<JsonObject>()) acceptFirmwareUpdate(inbound["update"]);

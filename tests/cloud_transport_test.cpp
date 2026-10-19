@@ -13,18 +13,22 @@ std::mutex httpMutex;
 std::condition_variable httpGate;
 bool httpStarted = false, httpReleased = false;
 std::atomic<unsigned> liveTls{0}, finishedHttp{0};
-unsigned httpCode = 503;
+int httpCode = 503, mockTlsError = 0;
 const char kCloudRunRootCa[] = "test-public-certificate";
 struct WiFiClientSecure {
   WiFiClientSecure() { ++liveTls; }
   ~WiFiClientSecure() { --liveTls; }
   void setCACert(const char* cert) { assert(cert && *cert); }
-  void setHandshakeTimeout(unsigned seconds) { assert(seconds == 3); }
+  void setHandshakeTimeout(unsigned seconds) { assert(seconds >= 15 && seconds <= 30); }
+  int lastError(char* detail, size_t size) { if (mockTlsError) snprintf(detail, size, "certificate verification failed"); return mockTlsError; }
 };
 struct HTTPClient {
   std::istringstream response{"{\"action\":null}"};
-  void setConnectTimeout(unsigned ms) { assert(ms == 1500); }
-  void setTimeout(unsigned ms) { assert(ms == 1500); }
+  void setConnectTimeout(unsigned ms) { assert(ms >= 5000 && ms <= 10000); }
+  void setTimeout(unsigned ms) { assert(ms >= 5000 && ms <= 10000); }
+  void useHTTP10(bool enable) { assert(enable); }
+  void setReuse(bool enable) { assert(!enable); }
+  static String errorToString(int) { return "connection refused"; }
   bool begin(WiFiClientSecure&, const String&) { return true; }
   void addHeader(const char*, const String&) {}
   int POST(const String& payload) {
@@ -59,6 +63,17 @@ int main() {
   assert(xQueueSend(cloudRequests, &pending, 0) == pdTRUE);
   assert(xQueueReceive(cloudResponses, &result, portMAX_DELAY) == pdTRUE && result == pending);
   assert(result->error.isEmpty() && result->response == "{\"action\":null}" && !liveTls && finishedHttp == 2); delete result;
+  // Preserve the actual TLS cause, rather than calling a local -1 an HTTP reply.
+  httpCode = -1; mockTlsError = -9984; pending = new CloudExchange; pending->payload = "{\"status\":{}}";
+  assert(xQueueSend(cloudRequests, &pending, 0) == pdTRUE);
+  assert(xQueueReceive(cloudResponses, &result, portMAX_DELAY) == pdTRUE && result == pending);
+  assert(result->error.indexOf("Cloud connection failed (-1:") >= 0);
+  assert(result->error.indexOf("TLS -9984: certificate verification failed") >= 0);
+  assert(result->error.indexOf("returned HTTP -1") < 0 && !liveTls && finishedHttp == 3); delete result;
+  httpCode = 200; mockTlsError = 0; pending = new CloudExchange; pending->payload = "{\"status\":{}}";
+  assert(xQueueSend(cloudRequests, &pending, 0) == pdTRUE);
+  assert(xQueueReceive(cloudResponses, &result, portMAX_DELAY) == pdTRUE && result == pending);
+  assert(result->error.isEmpty() && !liveTls && finishedHttp == 4); delete result;
   { std::lock_guard<std::mutex> lock(cloudRequests->mutex); cloudRequests->closed = true; cloudRequests->ready.notify_all(); }
   cloudTask->join(); delete cloudTask; vQueueDelete(cloudRequests); vQueueDelete(cloudResponses);
   std::cout << "Production cloud task: blocked HTTPS cannot stall 24 hours of clock motion; failure/retry ownership and TLS cleanup passed\n";

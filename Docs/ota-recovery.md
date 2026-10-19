@@ -27,7 +27,7 @@ If it remains offline, connect to the master's local Wi-Fi, open
 `http://192.168.4.1`, and check **Router / hotspot Wi-Fi** for router connectivity.
 Save `/api/status` and `/api/diagnostics` before another reset; the status includes
 the exact gateway error.
-Verify the master reports `2026-10-17.1`, then use **Full update** to install the
+Verify the master reports `2026-10-19.1`, then use **Full update** to install the
 rest. Leave both Octopus microSD cards installed. After the complete update,
 use **Maintenance → Calibrate arms**, then **Show time**.
 

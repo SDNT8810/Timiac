@@ -17,16 +17,27 @@ void performCloudExchange(CloudExchange& exchange) {
   const uint32_t started = millis();
   WiFiClientSecure client;
   client.setCACert(strlen(TIMIAC_CLOUD_CA_CERT) ? TIMIAC_CLOUD_CA_CERT : kCloudRunRootCa);
-  client.setHandshakeTimeout(3); // Seconds; the SDK otherwise allows 120 seconds.
+  // This worker is isolated from motor control. Give certificate negotiation
+  // enough time on the ESP32 instead of abandoning it after three seconds.
+  client.setHandshakeTimeout(20);
   HTTPClient request;
-  request.setConnectTimeout(1500); request.setTimeout(1500);
+  request.setConnectTimeout(8000); request.setTimeout(8000);
+  // deserializeJson reads the stream directly; HTTP/1.0 avoids raw chunk framing.
+  request.useHTTP10(true); request.setReuse(false);
   const String endpoint = String(TIMIAC_CLOUD_URL) + "/device/v1/devices/" + TIMIAC_CLOUD_DEVICE_ID + "/sync";
-  if (!request.begin(client, endpoint)) { exchange.error = "Could not start secure cloud connection"; return; }
+  if (!request.begin(client, endpoint)) { exchange.error = "Could not start secure cloud connection"; exchange.elapsed = millis() - started; return; }
   request.addHeader("Content-Type", "application/json");
   request.addHeader("X-Timiac-Device-Key", TIMIAC_CLOUD_DEVICE_KEY);
   const int code = request.POST(exchange.payload);
   exchange.payload = "";
-  if (code != 200) exchange.error = "Cloud service returned HTTP " + String(code);
+  if (code < 0) {
+    // Negative HTTPClient codes are local transport failures, not HTTP replies.
+    exchange.error = "Cloud connection failed (" + String(code) + ": " + HTTPClient::errorToString(code) + ")";
+    char detail[128] = {};
+    const int tlsError = client.lastError(detail, sizeof(detail));
+    if (tlsError) exchange.error += "; TLS " + String(tlsError) + ": " + detail;
+  }
+  else if (code != 200) exchange.error = "Cloud service returned HTTP " + String(code);
   else {
     DynamicJsonDocument inbound(2048);
     if (deserializeJson(inbound, request.getStream())) exchange.error = "Invalid cloud response";

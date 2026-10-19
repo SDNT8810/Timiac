@@ -1,4 +1,10 @@
-# Motion and remote update package - 2026-10-17.1
+# Motion and remote update package - 2026-10-19.1
+
+The master allows a 20-second TLS handshake and eight-second connect/read limits
+in its independent cloud worker. Transport failures include the SDK/TLS error,
+and connection failure/recovery events are retained in the persistent journal.
+The local **Router / hotspot Wi-Fi** section now shows the remote connection
+separately from router connectivity. See [cloud recovery](stability.md#cloud-connection-recovery---2026-10-191).
 
 For an offline master or a stalled remote update, use the
 [USB recovery and persistent diagnostic log instructions](ota-recovery.md).

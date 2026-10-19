@@ -26,6 +26,14 @@ export function renderSystemStatus(state, connected, element) {
   element('wifi-status').textContent = !connected ? 'Master disconnected' : wifi?.pending ? 'Saved - waiting for idle to connect' :
     wifi?.connecting ? `Connecting to ${wifi.ssid}...` : wifi?.connected ? `Connected to ${wifi.ssid} - ${wifi.ip}` :
     wifi?.error || (wifi?.configured ? `Retrying ${wifi.ssid} while idle` : 'No router configured - Timiac Wi-Fi is available');
+  const cloud = state?.cloud, cloudStatus = element('cloud-status');
+  if (cloudStatus) {
+    cloudStatus.textContent = !connected ? 'Remote dashboard: master disconnected' :
+      !cloud ? 'Remote dashboard status unavailable' : !cloud.enabled ? 'Remote dashboard is not configured' :
+      cloud.error ? `Remote dashboard: ${cloud.error}` :
+      cloud.state === 'connected' ? 'Remote dashboard connected' : `Remote dashboard: ${cloud.state}`;
+    cloudStatus.classList.toggle('error', connected && Boolean(cloud?.enabled && cloud.error));
+  }
 }
 
 export function bindWifiSettings(element, perform, post, message) {

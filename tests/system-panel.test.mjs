@@ -34,6 +34,21 @@ test('network status reports router connectivity without claiming internet reach
   renderSystemStatus(state, false, element); assert.equal(element('wifi-status').textContent, 'Master disconnected');
 });
 
+test('router Wi-Fi can be connected while the remote dashboard reports a TLS failure', () => {
+  const nodes = new Map();
+  const element = id => { if (!nodes.has(id)) nodes.set(id, { textContent: '', classList: { toggle() {} } }); return nodes.get(id); };
+  const state = {wifi: {connected: true, ssid: 'Studio', ip: '192.168.1.4'},
+    cloud: {enabled: true, state: 'connection failed', error: 'Cloud connection failed (-1); TLS -9984: certificate verification failed'}};
+  renderSystemStatus(state, true, element);
+  assert.equal(element('wifi-status').textContent, 'Connected to Studio - 192.168.1.4');
+  assert.match(element('cloud-status').textContent, /TLS -9984: certificate verification failed/);
+  state.cloud.state = 'connected'; state.cloud.error = '';
+  renderSystemStatus(state, true, element);
+  assert.equal(element('cloud-status').textContent, 'Remote dashboard connected');
+  renderSystemStatus(state, false, element);
+  assert.equal(element('cloud-status').textContent, 'Remote dashboard: master disconnected');
+});
+
 test('a missing UART reply is offline, while a confirmed halt requires reset', () => {
   const state = { b: { bridgeConnected: true, octopusConnected: false,
     resetRequired: false, fault: 'M119 acknowledgement timed out; checking Octopus link' } };

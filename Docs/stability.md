@@ -1,5 +1,36 @@
 # Clock stability — release 2026-10-16.1
 
+## Cloud connection recovery - 2026-10-19.1
+
+The local status from October 19 confirmed firmware 2026-10-17.1 on all three
+ESPs, healthy calibrated motor boards, router address 192.168.1.4 and synchronized
+internet time. Its six cloud attempts failed with HTTPClient -1, most recently
+after 4,444 ms. In this SDK, -1 means a transport connection failure before an
+HTTP response; it does not establish whether TCP, certificate verification or
+the TLS deadline failed. The firmware previously hid the underlying TLS error.
+
+The master now gives TLS 20 seconds and TCP/HTTP eight seconds in its background
+worker. HTTP/1.0 avoids chunked response framing when parsing the raw stream.
+Negative HTTPClient codes include the SDK description and any TLS error. Error
+changes and successful reconnection are saved in the NVS diagnostic journal.
+The local Wi-Fi section displays the cloud connection/error separately.
+Certificate verification remains enabled; motor control continues while the
+worker waits. The longer limits address a plausible failure path, but the next
+physical connection result is needed to confirm the cause.
+
+Install only the master for this connection change, with its actual USB port:
+
+```powershell
+git pull
+python run.py master_release --port COM5
+```
+
+Allow one minute for Wi-Fi, time synchronization and retries. If the remote
+panel remains offline, copy the **Remote dashboard** message under **Router /
+hotspot Wi-Fi**, or run `(Invoke-RestMethod http://192.168.4.1/api/status).cloud | ConvertTo-Json`.
+
+## Earlier clock-control fixes
+
 This release fixes two software paths that can stop an otherwise healthy clock:
 
 - Cloud HTTPS previously ran inside the coordinator loop and its runtime lock. The installed ESP32 SDK permits a TLS handshake to wait 120 seconds, while the motor bridges require a heartbeat within 15 seconds. Cloud traffic now runs in a separate task with one bounded request mailbox and one reply mailbox. Only the coordinator applies commands. TLS has an explicit three-second handshake limit, and failed requests back off to sixty seconds. The clock and motor links continue while cloud requests wait or fail.
