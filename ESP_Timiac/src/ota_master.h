@@ -83,6 +83,18 @@ __attribute__((noinline)) void acceptFirmwareUpdate(JsonVariant update, bool loc
   firmwareUpdating = true; firmwareUpdateCancel = false;
 }
 bool otaStartDownload() {
+  // A local/cloud update waits for the existing cloud request to release TLS.
+  // cloudTick still drains that response but cannot start a competing request.
+  if (cloudInFlight) {
+    firmwareUpdate.phase = "Waiting for cloud connection to finish";
+    if (uint32_t(millis() - otaSince) > 60000) otaMasterFailed("Cloud connection did not finish; retry from the local hotspot");
+    return false;
+  }
+  if (!platformNetworkMemoryReady(otaLocalImageUrl.isEmpty())) {
+    firmwareUpdate.phase = "Waiting for firmware connection memory";
+    if (uint32_t(millis() - otaSince) > 60000) otaMasterFailed("Not enough memory for firmware connection; retry from the local hotspot");
+    return false;
+  }
   if (otaBridgeNumber) {
     if (!boardPeer(otaBridgeNumber - 1) || boards[otaBridgeNumber - 1].stopAck != stopToken) {
       otaMasterFailed("Bridge must reconnect and acknowledge Stop before updating"); return false;

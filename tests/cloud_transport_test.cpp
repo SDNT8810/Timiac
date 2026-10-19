@@ -31,8 +31,9 @@ struct HTTPClient {
   static String errorToString(int) { return "connection refused"; }
   bool begin(WiFiClientSecure&, const String&) { return true; }
   void addHeader(const char*, const String&) {}
-  int POST(const String& payload) {
-    assert(!payload.isEmpty());
+  int POST(const String&) = delete; // The SDK's String overload copies the body.
+  int POST(uint8_t* payload, size_t size) {
+    assert(std::string(reinterpret_cast<char*>(payload), size) == "{\"status\":{}}");
     std::unique_lock<std::mutex> lock(httpMutex); httpStarted = true; httpGate.notify_all();
     httpGate.wait(lock, [] { return httpReleased; }); return httpCode;
   }

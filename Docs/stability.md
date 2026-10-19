@@ -1,5 +1,14 @@
 # Clock stability — release 2026-10-16.1
 
+## Allocation failures and bridge disconnects - 2026-10-19.4
+
+The October 19 diagnostic export contains `Bridge packet rejected: NoMemory`
+and `SSL - Memory allocation failed`. The decoder closed the bridge connection
+on that allocation failure, which could stop an otherwise functioning clock.
+Release 2026-10-19.4 reserves that parser pool, removes a cloud payload copy,
+releases snapshots before TLS starts, and serializes cloud/OTA TLS sessions.
+Read [the evidence, limits and local wireless installation](memory-failure-2026-10-19.md).
+
 ## Cloud connection recovery - 2026-10-19.1
 
 The local status from October 19 confirmed firmware 2026-10-17.1 on all three

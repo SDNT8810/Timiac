@@ -1,4 +1,11 @@
-# Motion and remote update package - 2026-10-19.3
+# Motion and remote update package - 2026-10-19.4
+
+This release fixes the bridge decoder's per-packet heap allocation and reduces
+cloud TLS memory pressure. Cloud polling and firmware downloads share the TLS
+memory budget; diagnostics now include the largest free block and cloud status.
+See [the recorded failures and fix](memory-failure-2026-10-19.md).
+If local updates are already installed, use `python local_update.py --target all`
+on Timiac Wi-Fi; no further USB installation is required.
 
 Holding current is now 30% (about 300–330 mA after register rounding), down from
 50%. Running and homing stay at 1,000 mA. Update **both Octopus boards** to apply

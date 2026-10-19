@@ -10,7 +10,6 @@ struct CloudExchange {
   uint32_t elapsed = 0;
 };
 QueueHandle_t cloudRequests = nullptr, cloudResponses = nullptr;
-bool cloudInFlight = false;
 TaskHandle_t cloudTask = nullptr;
 
 void performCloudExchange(CloudExchange& exchange) {
@@ -28,7 +27,9 @@ void performCloudExchange(CloudExchange& exchange) {
   if (!request.begin(client, endpoint)) { exchange.error = "Could not start secure cloud connection"; exchange.elapsed = millis() - started; return; }
   request.addHeader("Content-Type", "application/json");
   request.addHeader("X-Timiac-Device-Key", TIMIAC_CLOUD_DEVICE_KEY);
-  const int code = request.POST(exchange.payload);
+  // POST(String) takes its argument by value in this SDK. Avoid retaining a
+  // second complete status string throughout the TLS handshake.
+  const int code = request.POST(reinterpret_cast<uint8_t*>(const_cast<char*>(exchange.payload.c_str())), exchange.payload.length());
   exchange.payload = "";
   if (code < 0) {
     // Negative HTTPClient codes are local transport failures, not HTTP replies.

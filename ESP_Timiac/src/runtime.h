@@ -9,6 +9,7 @@ uint32_t lastPeerRejection = 0;
 bool serialDiscard = false, stopRequested = false, systemLatched = false, stopPending = false;
 bool networkChanging = false;
 bool firmwareUpdating = false, firmwareUpdateCancel = false;
+bool cloudInFlight = false;
 String systemFault, stopToken, stopReason, acknowledgedStop;
 String lastStopReason, lastStopSession, clockPauseReason;
 uint32_t lastStopAt = 0, lastStopCount = 0;
@@ -46,6 +47,7 @@ void writeReliabilityStatus(JsonObject status) {
   writeSavedUpdateCheckpoint(status.createNestedObject("lastUpdate"));
 #if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
   status["freeHeap"] = ESP.getFreeHeap(); status["minFreeHeap"] = ESP.getMinFreeHeap();
+  status["largestFreeBlock"] = ESP.getMaxAllocHeap();
   status["resetReason"] = unsigned(esp_reset_reason());
 #endif
 }

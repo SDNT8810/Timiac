@@ -23,6 +23,7 @@ void checkpointFirmwareUpdate(bool force = false) {
   checkpoint["boot"] = bootId; checkpoint["at"] = millis();
 #if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
   checkpoint["freeHeap"] = ESP.getFreeHeap(); checkpoint["minFreeHeap"] = ESP.getMinFreeHeap();
+  checkpoint["largestFreeBlock"] = ESP.getMaxAllocHeap();
   checkpoint["utc"] = time(nullptr);
 #endif
   String text; serializeJson(checkpoint, text); persistUpdateCheckpoint(text);

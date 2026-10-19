@@ -6,6 +6,7 @@
 String cloudState = "disabled", cloudError, cloudLastAction, cloudLastActionId, cloudActionError;
 uint32_t cloudLastSync = 0, cloudLastSuccess = 0, cloudLastActionAt = 0;
 uint32_t cloudRetryMs = 5000, cloudFailures = 0, cloudLastDuration = 0;
+uint32_t cloudStartFreeHeap = 0, cloudStartLargestBlock = 0;
 
 bool cloudEnabled() {
   return strlen(TIMIAC_CLOUD_URL) && strlen(TIMIAC_CLOUD_DEVICE_ID) && strlen(TIMIAC_CLOUD_DEVICE_KEY);
@@ -17,6 +18,7 @@ void writeCloudStatus(JsonObject cloud) {
   cloud["lastSyncAgeMs"] = cloudLastSuccess ? millis() - cloudLastSuccess : 0;
   cloud["inFlight"] = cloudInFlight; cloud["failures"] = cloudFailures; cloud["durationMs"] = cloudLastDuration;
   cloud["workerStackFree"] = cloudTask ? uxTaskGetStackHighWaterMark(cloudTask) : 0;
+  cloud["startFreeHeap"] = cloudStartFreeHeap; cloud["startLargestFreeBlock"] = cloudStartLargestBlock;
 }
 void cloudSnapshot(JsonObject snapshot) {
   snapshot["session"] = bootId; snapshot["machineReady"] = bothHealthy();
@@ -144,14 +146,22 @@ void cloudTick() {
     cloudState = "waiting for router"; return;
   }
   if (cloudInFlight || (cloudLastSync && !timiac::expired(millis(), cloudLastSync, cloudRetryMs))) return;
-  // Keep peak heap usage bounded while TLS runs in its own task. A low-memory
-  // cloud retry must not take down the independently operating clock.
-  if (ESP.getFreeHeap() < 50000) { cloudError = "Waiting for cloud connection memory"; return; }
-  DynamicJsonDocument outbound(12288); cloudSnapshot(outbound.createNestedObject("status"));
-  if (outbound.overflowed()) { cloudState = "connection failed"; cloudError = "Cloud status is too large"; return; }
+  // One TLS session at a time. Keep reporting while an Octopus writes/reboots,
+  // after its image download has released the TLS buffers.
+  if (!timiac::cloudConnectionAllowed(otaOpenInFlight, otaDownloadSession != nullptr,
+      firmwareUpdating && firmwareUpdate.state == "stopping")) return;
+  if (!platformNetworkMemoryReady(true)) { cloudError = "Waiting for cloud connection memory"; return; }
   CloudExchange* exchange = new (std::nothrow) CloudExchange;
   if (!exchange) { cloudError = "Waiting for cloud connection memory"; return; }
-  serializeJson(outbound, exchange->payload);
+  {
+    DynamicJsonDocument outbound(12288); cloudSnapshot(outbound.createNestedObject("status"));
+    if (outbound.overflowed()) { delete exchange; cloudState = "connection failed"; cloudError = "Cloud status is too large"; return; }
+    if (!exchange->payload.reserve(measureJson(outbound)) || !serializeJson(outbound, exchange->payload)) {
+      delete exchange; cloudError = "Waiting for cloud status memory"; return;
+    }
+  } // Free the 12 KB snapshot BEFORE the worker can start its handshake.
+  cloudStartFreeHeap = ESP.getFreeHeap(); cloudStartLargestBlock = ESP.getMaxAllocHeap();
+  if (!platformNetworkMemoryReady(true)) { delete exchange; cloudError = "Waiting for cloud connection memory"; return; }
   if (xQueueSend(cloudRequests, &exchange, 0) != pdTRUE) { delete exchange; return; }
   cloudInFlight = true; cloudLastSync = millis();
 }

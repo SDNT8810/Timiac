@@ -17,6 +17,11 @@
 #include "../shared/driver_report.h"
 #include "../shared/presets.h"
 #include "../shared/proximity.h"
+#include "../shared/network_memory.h"
+static uint32_t networkFreeHeap = 128U * 1024, networkLargestBlock = 64U * 1024;
+inline bool platformNetworkMemoryReady(bool secure) {
+  return timiac::networkMemoryReady(networkFreeHeap, networkLargestBlock, secure);
+}
 WiFiServer listener;
 #include "../ESP_Timiac/src/runtime.h"
 struct Preferences {
@@ -56,6 +61,7 @@ void resetMaster() {
   lastStruggleVariant = timiac::struggleVariantCount;
   configureProximity(); proximityTriggers = 0; photoelectricLevel = HIGH;
   firmwareUpdating = firmwareUpdateCancel = false;
+  cloudInFlight = false; networkFreeHeap = 128U * 1024; networkLargestBlock = 64U * 1024;
   for (auto& r : receipts) r = Receipt();
   for (unsigned b = 0; b < 2; ++b) { peers[b] = Peer(); boards[b] = RemoteBoard(); lastBoardBoot[b] = ""; }
 }

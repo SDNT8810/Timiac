@@ -7,7 +7,7 @@ void errorReply(AsyncWebServerRequest* request, unsigned code, const String& mes
 }
 void statusReply(AsyncWebServerRequest* request) {
   RuntimeLock lock;
-  if (ESP.getFreeHeap() < 16000) { errorReply(request, 503, "Controller busy; retry status shortly"); return; }
+  if (ESP.getFreeHeap() < 24000 || ESP.getMaxAllocHeap() < 10000) { errorReply(request, 503, "Controller busy; retry status shortly"); return; }
   DynamicJsonDocument doc(8192);
   doc["mode"] = "hardware"; doc["session"] = bootId; doc["revision"] = ++snapshotSerial;
   doc["dashboard"] = TIMIAC_RELEASE ? "release" : "development";
@@ -299,6 +299,8 @@ void configureHttp() {
       DynamicJsonDocument summary(2048);
       summary["software"] = kSoftwareRevision; summary["fault"] = systemFault;
       summary["lastStop"] = lastStopReason; summary["freeHeap"] = ESP.getFreeHeap();
+      summary["largestFreeBlock"] = ESP.getMaxAllocHeap();
+      writeCloudStatus(summary.createNestedObject("cloud"));
       for (unsigned b = 0; b < 2; ++b) {
         auto board = summary.createNestedObject(b ? "b" : "a");
         board["online"] = boardOnline(b); board["fault"] = boards[b].fault;
@@ -308,10 +310,14 @@ void configureHttp() {
       auto* response = request->beginResponse(200, "application/json", text);
       response->addHeader("Cache-Control", "no-store"); response->addHeader("Connection", "close"); request->send(response); return;
     }
-    if (ESP.getFreeHeap() < 48000) { errorReply(request, 503, "Low memory; use /api/diagnostics?brief=1"); return; }
+    if (cloudInFlight || ESP.getFreeHeap() < 64000 || ESP.getMaxAllocHeap() < 20000) {
+      errorReply(request, 503, "Network busy or low memory; retry or use /api/diagnostics?brief=1"); return;
+    }
     DynamicJsonDocument document(16384);
     document["boot"] = bootId; document["software"] = kSoftwareRevision;
     writeReliabilityStatus(document.createNestedObject("reliability"));
+    writeCloudStatus(document.createNestedObject("cloud"));
+    writeUplinkStatus(document.createNestedObject("wifi"));
     writeDiagnosticBatch(document.createNestedArray("persistentEvents"), true);
     JsonArray events = document.createNestedArray("recentEvents");
     const uint32_t first = logSequence > 32 ? logSequence - 32 : 0;

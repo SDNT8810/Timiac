@@ -106,6 +106,14 @@ int main() {
   resetMaster(); connectBoard(0); connectBoard(1); configureFirmwareUpdate(); setBridgeInfo(false);
   accept("22222222-2222-4222-8222-222222222222", "esp1"); assert(stopPending && firmwareUpdating);
   for (auto& board : boards) board.stopAck = stopToken;
+  cloudInFlight = true;
+  recoverStop(); firmwareUpdateTick();
+  assert(!otaOpenInFlight && firmwareUpdate.state == "stopping" && !connections);
+  cloudInFlight = false;
+  networkLargestBlock = 16U * 1024; // Plenty of total RAM, no large TLS block.
+  firmwareUpdateTick();
+  assert(!otaOpenInFlight && firmwareUpdate.state == "stopping" && !connections);
+  networkLargestBlock = 64U * 1024;
   recoverStop(); firmwareUpdateTick(); waitOpening();
   assert(firmwareUpdate.state == "connecting" && otaOpenInFlight);
   for (unsigned n = 0; n < 500; ++n) {
@@ -127,6 +135,10 @@ int main() {
   hostNow += 1500; firmwareUpdateTick(); assert(firmwareUpdating);
   setBridgeInfo(true); hostNow += 1500; firmwareUpdateTick();
   assert(firmwareUpdate.state == "complete" && !firmwareUpdating && !otaBridgeAccepted);
+  assert(timiac::cloudConnectionAllowed(false, false, false)); // Resume bridge progress reports.
+  assert(!timiac::cloudConnectionAllowed(true, false, false));
+  assert(!timiac::cloudConnectionAllowed(false, true, false));
+  assert(!timiac::cloudConnectionAllowed(false, false, true));
   { std::lock_guard<std::mutex> lock(gateMutex); opening = allowOpen = false; }
   accept("33333333-3333-4333-8333-333333333333", "master");
   for (auto& board : boards) board.stopAck = stopToken;
@@ -156,6 +168,9 @@ int main() {
   // Preserve partial-write/receipt behavior, and reject the wrong role BEFORE
   // sending the final block to a bridge that would otherwise auto-activate it.
   for (unsigned wrong = 0; wrong < 2; ++wrong) {
+    // A local HTTP recovery remains possible below the cloud TLS budget.
+    networkFreeHeap = 40U * 1024; networkLargestBlock = 16U * 1024;
+    assert(!platformNetworkMemoryReady(true) && platformNetworkMemoryReady(false));
     image.assign(2048, '\0'); image[0] = char(0xE9);
     image.replace(120, 22, wrong ? "TIMIAC_OTA_ROLE:esp2" : "TIMIAC_OTA_ROLE:esp1");
     image.replace(250, strlen(timiac::machineId), timiac::machineId);

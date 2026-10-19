@@ -20,6 +20,11 @@
 #include <errno.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include "../../shared/network_memory.h"
+
+inline bool platformNetworkMemoryReady(bool secure) {
+  return timiac::networkMemoryReady(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), secure);
+}
 
 // AsyncTCP HTTP callbacks and Arduino loop() execute in different tasks.
 // A recursive mutex also covers status replies nested inside API handlers.

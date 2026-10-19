@@ -16,12 +16,14 @@ struct HostQueue {
 };
 using QueueHandle_t = HostQueue*;
 using TaskHandle_t = std::thread*;
+static void (*hostBeforeQueueSend)(HostQueue*) = nullptr;
 inline QueueHandle_t xQueueCreate(unsigned count, size_t size) { return count == 1 && size == sizeof(void*) ? new HostQueue : nullptr; }
 inline unsigned xQueueSend(HostQueue* q, const void* source, unsigned wait) {
   std::unique_lock<std::mutex> lock(q->mutex);
   if (wait == portMAX_DELAY) q->ready.wait(lock, [&] { return !q->item || q->closed; });
   if (q->closed) throw HostQueueClosed();
   if (q->item) return 0;
+  if (hostBeforeQueueSend) hostBeforeQueueSend(q);
   std::memcpy(&q->item, source, sizeof(void*)); q->ready.notify_all(); return pdTRUE;
 }
 inline unsigned xQueueReceive(HostQueue* q, void* destination, unsigned wait) {

@@ -19,6 +19,7 @@ public:
   String(T number) : value(std::to_string(number)) {}
   const char* c_str() const { return value.c_str(); }
   size_t length() const { return value.size(); }
+  bool reserve(size_t capacity) { value.reserve(capacity); return true; }
   bool isEmpty() const { return value.empty(); }
   char operator[](size_t i) const { return value[i]; }
   String substring(size_t from, size_t to = std::string::npos) const { return value.substr(from, to == std::string::npos ? to : to - from); }
