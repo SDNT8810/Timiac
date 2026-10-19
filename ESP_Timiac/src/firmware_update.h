@@ -33,6 +33,10 @@ void checkpointFirmwareUpdate(bool force = false) {
 
 void writeFirmwareUpdateStatus(JsonObject doc) {
   doc["supported"] = true; doc["active"] = firmwareUpdating;
+#if TIMIAC_MASTER
+  doc["localSupported"] = true;
+  doc["localMarker"] = kLocalOtaMarker;
+#endif
   doc["marker"] = kOtaImageMarker; doc["id"] = firmwareUpdate.id;
   doc["target"] = firmwareUpdate.target; doc["kind"] = firmwareUpdate.kind;
   doc["state"] = firmwareUpdate.state; doc["error"] = firmwareUpdate.error;

@@ -286,6 +286,7 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
   statusReply(request);
 }
 void configureHttp() {
+  configureLocalFirmwareHttp();
   http.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) { statusReply(request); });
   http.on("/api/diagnostics", HTTP_GET, [](AsyncWebServerRequest* request) {
     RuntimeLock lock;

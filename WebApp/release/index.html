@@ -38,6 +38,7 @@
         <small>Daylight-saving changes are manual.</small>
       </form>
       <details><summary>Maintenance</summary><p>Establish the arm positions after a reset or firmware update.</p><button id="calibrate" type="button" disabled>Calibrate arms</button><p id="stop-history" role="status"></p><p><a href="/api/diagnostics">Download diagnostic log</a></p></details>
+      <details><summary>Local Wi-Fi firmware updates</summary><p>Connect your PC to Timiac Wi-Fi and open the updated Timiac project folder. Run <code>python local_update.py --target all</code> to install every board and the dashboard in sequence.</p><p>For the master only: <code>python run.py master_release --host 192.168.4.1</code>. Keep the PC connected throughout. This works without internet or cloud access. Cloud and USB updates remain available.</p></details>
       <details class="wifi-settings"><summary>Router / hotspot Wi-Fi</summary><p id="wifi-status">Reading connection…</p>
         <p id="cloud-status" role="status">Reading remote dashboard connection…</p>
         <form id="wifi-form"><label for="wifi-ssid">Wi-Fi name (2.4 GHz)</label><input id="wifi-ssid" autocomplete="off" maxlength="32" required>

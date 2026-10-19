@@ -10,6 +10,7 @@
 #include "../../shared/gcode.h"
 #include "../../shared/firmware_transfer.h"
 #include "../../shared/diagnostic_journal.h"
+#include "../../shared/firmware_image.h"
 #include "../../shared/endstops.h"
 #include "../../shared/driver_report.h"
 #include "../../shared/octopus_session.h"
@@ -50,6 +51,7 @@ WiFiServer listener(kPeerPort);
 #include "motion_speed.h"
 #include "firmware_update.h"
 #include "cloud_relay.h"
+#include "ota_local_api.h"
 #include "web_api.h"
 #include "release_clock.h"
 #else

@@ -1,5 +1,9 @@
 # Recover and diagnose firmware updates
 
+For firmware 2026-10-19.2 and later, [local hotspot updates](local-updates.md)
+can recover from an unavailable cloud connection without USB. USB remains the
+initial installation method when local-update support is not installed yet.
+
 The 2026-10-17.1 release fixes repeated Stop messages cancelling an update,
 partial TCP writes being treated as upload failure, and secure download setup
 blocking the master's control loop. A bridge also saves the exact successful
@@ -27,7 +31,7 @@ If it remains offline, connect to the master's local Wi-Fi, open
 `http://192.168.4.1`, and check **Router / hotspot Wi-Fi** for router connectivity.
 Save `/api/status` and `/api/diagnostics` before another reset; the status includes
 the exact gateway error.
-Verify the master reports `2026-10-19.1`, then use **Full update** to install the
+Verify the master reports `2026-10-19.2`, then use **Full update** to install the
 rest. Leave both Octopus microSD cards installed. After the complete update,
 use **Maintenance → Calibrate arms**, then **Show time**.
 

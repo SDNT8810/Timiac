@@ -13,6 +13,7 @@ std::condition_variable gate;
 bool opening = false, allowOpen = false;
 unsigned connections = 0, tlsObjects = 0, activations = 0;
 #include "../shared/firmware_transfer.h"
+#include "../shared/firmware_image.h"
 std::string image(2048, 'x');
 String bridgeInfo;
 struct WiFiClientSecure {
@@ -27,13 +28,14 @@ struct DownloadStream {
   int read(uint8_t* bytes, size_t n) { n = min(n, available()); memcpy(bytes, image.data() + offset, n); offset += n; return n; }
 };
 struct HTTPClient {
-  bool firmware = true;
+  bool firmware = true, local = false;
   DownloadStream body;
   std::istringstream info;
   void setConnectTimeout(unsigned) {} void setTimeout(unsigned) {}
-  void useHTTP10(bool) {} void setReuse(bool) {} void addHeader(const char*, const String&) {}
+  void useHTTP10(bool) {} void setReuse(bool) {}
+  void addHeader(const char* name, const String&) { if (!strcmp(name, "X-Timiac-Device-Key")) assert(!local); }
   bool begin(WiFiClientSecure&, const String&) { firmware = true; return true; }
-  bool begin(WiFiClient&, const String&) { firmware = false; info.str(bridgeInfo.c_str()); return true; }
+  bool begin(WiFiClient&, const String& url) { local = firmware = url.indexOf("/firmware/") >= 0; if (!firmware) info.str(bridgeInfo.c_str()); return true; }
   int GET() {
     if (!firmware) return 200;
     std::unique_lock<std::mutex> lock(gateMutex); ++connections; opening = true; gate.notify_all();
@@ -71,16 +73,18 @@ void otaFailed(const String& reason) { firmwareUpdate.state = "failed"; firmware
 bool otaHashValid(const String& hash) { return hash.length() == 64; }
 bool otaEqual(const String& a, const String& b) { return a == b; }
 String otaAuthorization(const String&, const String&, const String&, const String&, unsigned, const String&, unsigned, const String&) { return "authenticated"; }
+String otaMac(const String& message) { return "local-mac:" + message; }
 struct { void restart() {} } ESP;
 void checkpointFirmwareUpdate(bool = false) {}
 #include "../ESP_Timiac/src/ota_master.h"
+#include "../ESP_Timiac/src/ota_local_request.h"
 
-void accept(const char* id, const char* target) {
+void accept(const char* id, const char* target, bool local = false) {
   DynamicJsonDocument job(1024);
   job["id"] = id; job["session"] = bootId; job["target"] = target; job["kind"] = "app";
   job["imageId"] = "11111111-1111-4111-8111-111111111111";
   job["sha256"] = std::string(64, 'a'); job["size"] = image.size(); job["revision"] = kSoftwareRevision;
-  acceptFirmwareUpdate(job.as<JsonVariant>());
+  acceptFirmwareUpdate(job.as<JsonVariant>(), local);
 }
 void setBridgeInfo(bool complete) {
   DynamicJsonDocument info(1024);
@@ -130,6 +134,50 @@ int main() {
   firmwareUpdateCancel = true; firmwareUpdateTick();
   assert(firmwareUpdate.state == "cancelling" && firmwareUpdating && otaOpenInFlight);
   releaseOpen(); collect(); assert(firmwareUpdate.state == "failed" && !firmwareUpdating && !tlsObjects && !activations);
+  // Local manifests are bound to the boot, one-time nonce, complete metadata,
+  // image URL token and PC port. A stale/tampered request cannot reserve a flash.
+  DynamicJsonDocument local(1536);
+  localFirmwareNonce = "one-time-nonce";
+  local["session"] = bootId; local["nonce"] = localFirmwareNonce;
+  local["id"] = "44444444-4444-4444-8444-444444444444";
+  local["imageId"] = "55555555-5555-4555-8555-555555555555";
+  local["target"] = "master"; local["kind"] = "app"; local["size"] = 2048;
+  local["sha256"] = std::string(64, 'a'); local["crc32"] = 0;
+  local["revision"] = kSoftwareRevision; local["machine"] = timiac::machineId; local["port"] = 20000;
+  local["auth"] = localFirmwareAuthorization(local.as<JsonVariant>());
+  assert(!validateLocalFirmwareRequest(local.as<JsonVariant>()));
+  local["port"] = 20001; assert(validateLocalFirmwareRequest(local.as<JsonVariant>())); local["port"] = 20000;
+  local["target"] = "esp2"; assert(validateLocalFirmwareRequest(local.as<JsonVariant>())); local["target"] = "master";
+  localFirmwareNonce = "next-nonce"; assert(validateLocalFirmwareRequest(local.as<JsonVariant>())); localFirmwareNonce = "one-time-nonce";
+  local["machine"] = "TIMIAC2-000000000000"; assert(validateLocalFirmwareRequest(local.as<JsonVariant>())); local["machine"] = timiac::machineId;
+  assert(!validateLocalFirmwareRequest(local.as<JsonVariant>()));
+
+  // Local images use plain LAN HTTP only; cloud TLS and its key are not used.
+  // Preserve partial-write/receipt behavior, and reject the wrong role BEFORE
+  // sending the final block to a bridge that would otherwise auto-activate it.
+  for (unsigned wrong = 0; wrong < 2; ++wrong) {
+    image.assign(2048, '\0'); image[0] = char(0xE9);
+    image.replace(120, 22, wrong ? "TIMIAC_OTA_ROLE:esp2" : "TIMIAC_OTA_ROLE:esp1");
+    image.replace(250, strlen(timiac::machineId), timiac::machineId);
+    image.replace(400, strlen(kSoftwareRevision), kSoftwareRevision);
+    setBridgeInfo(false);
+    accept(wrong ? "66666666-6666-4666-8666-666666666666" : "77777777-7777-4777-8777-777777777777", "esp1", true);
+    otaLocalImageUrl = "http://192.168.4.2:20000/firmware/55555555-5555-4555-8555-555555555555";
+    for (auto& board : boards) board.stopAck = stopToken;
+    recoverStop(); firmwareUpdateTick(); collect();
+    assert(otaDownloadSession && otaDownloadSession->localTransport);
+    for (unsigned n = 0; firmwareUpdate.state == "downloading" && n < 10000; ++n) {
+      ++hostNow; otaBridgeUpload.maxWrite = 17; otaBridgeUpload.writeCapacity = 4096; firmwareUpdateTick();
+    }
+    if (wrong) {
+      assert(firmwareUpdate.state == "failed" && firmwareUpdate.error.indexOf("Local image role") >= 0);
+      assert(firmwareUpdate.done < firmwareUpdate.size && !firmwareUpdating && !activations);
+    } else {
+      assert(firmwareUpdate.state == "waiting for bridge" && firmwareUpdate.done == image.size());
+      setBridgeInfo(true); hostNow += 1500; firmwareUpdateTick();
+      assert(firmwareUpdate.state == "complete" && !firmwareUpdating);
+    }
+  }
   { std::lock_guard<std::mutex> lock(otaOpenRequests->mutex); otaOpenRequests->closed = true; otaOpenRequests->ready.notify_all(); }
   otaOpenTask->join(); delete otaOpenTask; vQueueDelete(otaOpenRequests); vQueueDelete(otaOpenResponses);
   std::cout << "Production master OTA: stalled TLS, heartbeat service, short TCP writes, exact reboot receipts and safe cancellation passed\n";

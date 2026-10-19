@@ -1,4 +1,9 @@
-# Motion and remote update package - 2026-10-19.1
+# Motion and remote update package - 2026-10-19.2
+
+Local hotspot updates are now available alongside cloud and USB. Install this
+master once by USB, then use `python run.py master_release --host 192.168.4.1`
+or `python local_update.py --target all` for later local wireless updates.
+See [all three update methods](local-updates.md).
 
 The master allows a 20-second TLS handshake and eight-second connect/read limits
 in its independent cloud worker. Transport failures include the SDK/TLS error,

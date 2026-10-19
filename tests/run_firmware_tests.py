@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / ".build/tests"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 # Zig's optimized C++ builds define NDEBUG; keep every test assertion active.
-for name in ("firmware_test", "firmware_update_test", "ota_writer_test", "ota_writer_esp32_test", "gcode_cli", "octopus_session_test", "coordinator_test", "coordinator_release_test", "bridge_link_test", "cloud_transport_test", "ota_master_test", "ota_octopus_test", "diagnostic_journal_test"):
+for name in ("firmware_test", "firmware_update_test", "ota_writer_test", "ota_writer_esp32_test", "gcode_cli", "octopus_session_test", "coordinator_test", "coordinator_release_test", "bridge_link_test", "cloud_transport_test", "ota_master_test", "ota_octopus_test", "diagnostic_journal_test", "firmware_image_test"):
     source = "coordinator_test" if name == "coordinator_release_test" else "ota_writer_test" if name == "ota_writer_esp32_test" else name
     target = OUTPUT / (name + (".exe" if sys.platform == "win32" else ""))
     includes = ["-DTIMIAC_RELEASE=1"] if name == "coordinator_release_test" else []

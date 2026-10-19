@@ -1,5 +1,8 @@
 # Remote updates for all five boards — 2026-10-15.6
 
+**Local hotspot updates are also supported from 2026-10-19.2.** Cloud and USB
+remain available. See [local hotspot, cloud and USB instructions](local-updates.md).
+
 After one initial installation, update the master ESP32, both ESP-12 bridges,
 and both Octopus boards through **https://control.timiac.it/**. Only the master
 needs internet; it forwards the other images over the clock's own Wi-Fi.

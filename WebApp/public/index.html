@@ -134,6 +134,7 @@
 <div class="quick-actions"><button data-command="M115" data-control>Firmware</button><button data-command="M119" data-control>Endstops</button><button data-command="M122" data-control>Drivers</button><button data-command="M114" data-control>Positions</button></div>
 <pre id="logs" aria-label="Controller log">Waiting for controller…</pre>
 <p><a href="/api/diagnostics">Download diagnostic log</a></p>
+<details><summary>Local Wi-Fi firmware updates</summary><p>From the updated project folder on a PC connected to Timiac Wi-Fi, run <code>python local_update.py --target all</code>. Master only: <code>python run.py master_release --host 192.168.4.1</code>. Keep the PC connected. Cloud and USB methods remain available.</p></details>
 <p class="note">Stop cancels motion. Wait for both boards to reconnect, then Home before moving again.</p>
 </section>
 </div><div id="message" role="status" aria-live="polite">Connecting to Timiac…</div>

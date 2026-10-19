@@ -29,6 +29,9 @@ const char* saveUplink(JsonVariant doc) {
   return nullptr;
 }
 void uplinkTick() {
+  // A local update must keep the hotspot stable even without an upstream
+  // router. Do not scan/reconnect and change its channel during flashing.
+  if (firmwareUpdating) return;
   const bool idle = !operation.barrier.active() && !program.reserved() && !stopPending;
   const uint32_t now = millis();
   if (wifiPending && !idle) return;

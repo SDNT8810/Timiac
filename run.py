@@ -5,6 +5,7 @@ Examples:
   python run.py esp2_release --port COM5
   python run.py master_dev --port COM5
   python run.py master_release --port COM10  # Paired cloud release included in the repository
+  python run.py master_release --host 192.168.4.1  # Local hotspot; no cloud needed
   python run.py octopus_release --sd I:\\
 """
 
@@ -53,7 +54,9 @@ def parse_args() -> argparse.Namespace:
                 command.add_argument("--allow-fixed-drive", action="store_true",
                                      help="allow the selected card reader when Windows reports it as fixed")
             else:
-                command.add_argument("--port", default=DEFAULT_ESP_PORT, help="USB serial port (default: COM5)")
+                transport = command.add_mutually_exclusive_group()
+                transport.add_argument("--port", default=DEFAULT_ESP_PORT, help="USB serial port (default: COM5)")
+                transport.add_argument("--host", help="update over local Wi-Fi instead of USB (for example 192.168.4.1)")
                 command.add_argument("--baud", type=int, default=460800, help="flash baud rate (default: 460800)")
     return parser.parse_args()
 
@@ -294,6 +297,10 @@ def main() -> int:
     verify_release()
     if args.command == "verify":
         return 0
+    if getattr(args, 'host', None):
+        from local_update import install_targets
+        install_targets(args.host, ['master', 'dashboard'] if args.role == 'master' else [args.role], args.mode)
+        return 0
     if args.role == "esp1":
         flash_esp8266("esp_board1.bin", args.port, args.baud)
     elif args.role == "esp2":
@@ -308,7 +315,7 @@ def main() -> int:
 def cli() -> int:
     try:
         return main()
-    except (FileNotFoundError, OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
+    except (FileNotFoundError, OSError, ValueError, RuntimeError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
 

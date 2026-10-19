@@ -6,6 +6,9 @@ OtaDownloadSession* otaDownloadSession = nullptr;
 WiFiClient otaBridgeUpload;
 OtaSha256 otaForwardHash;
 String otaImageId, otaBridgeNonce, otaBridgeBoot, otaBridgeResponse;
+String otaLocalImageUrl;
+bool otaLocalVerifyImage = false;
+timiac::FirmwareImageMarkers otaLocalMarkers;
 String otaAbortReason, otaUploadHeaders;
 uint8_t otaPendingBytes[1024];
 size_t otaPendingSize = 0, otaPendingOffset = 0, otaHeaderOffset = 0;
@@ -46,7 +49,7 @@ bool otaReadBridge(JsonDocument& doc) {
   const bool good = code == 200 && request.getSize() <= 2048 && !deserializeJson(doc, request.getStream());
   request.end(); return good;
 }
-__attribute__((noinline)) void acceptFirmwareUpdate(JsonVariant update) {
+__attribute__((noinline)) void acceptFirmwareUpdate(JsonVariant update, bool local = false) {
   if (!update.is<JsonObject>() || !update["id"].is<const char*>()) return;
   if (update["session"] != bootId) return;
   const String id = update["id"].as<String>();
@@ -60,7 +63,13 @@ __attribute__((noinline)) void acceptFirmwareUpdate(JsonVariant update) {
   if (!otaIdentifier(id) || !otaIdentifier(imageId) || (!master && !bridge && !octopus) || !otaHashValid(hash) ||
       !size || size > 0x160000 || revision.isEmpty() || revision.length() > 32) return;
   if (firmwareUpdating || operation.barrier.active() || program.reserved() || boards[0].busy || boards[1].busy ||
-      (lease.live() && !lease.owner.startsWith("cloud:"))) return;
+      (!local && lease.live() && !lease.owner.startsWith("cloud:"))) return;
+  otaLocalImageUrl = "";
+  otaLocalVerifyImage = local;
+  if (local) {
+    const String role = "TIMIAC_OTA_ROLE:" + (kind == "filesystem" ? String("master-filesystem") : kind == "octopus" ? String("octopus") : target);
+    otaLocalMarkers.begin(role.c_str(), timiac::machineId, revision.c_str(), target == "master" && kind == "app" ? kLocalOtaMarker : nullptr);
+  }
   firmwareUpdate = FirmwareUpdateStatus(); firmwareUpdate.id = id; firmwareUpdate.target = target;
   firmwareUpdate.kind = kind; firmwareUpdate.size = size; firmwareUpdate.sha256 = hash;
   firmwareUpdate.revision = revision; firmwareUpdate.crc32 = update["crc32"] | 0U;
@@ -89,11 +98,12 @@ bool otaStartDownload() {
   if (!otaOpenRequests) { otaMasterFailed("Firmware download worker unavailable"); return false; }
   auto* session = new (std::nothrow) OtaDownloadSession;
   if (!session) { otaMasterFailed("Not enough memory for firmware download"); return false; }
-  session->url = String(TIMIAC_CLOUD_URL) + "/device/v1/devices/" + TIMIAC_CLOUD_DEVICE_ID + "/firmware/" + otaImageId;
+  session->localTransport = !otaLocalImageUrl.isEmpty();
+  session->url = session->localTransport ? otaLocalImageUrl : String(TIMIAC_CLOUD_URL) + "/device/v1/devices/" + TIMIAC_CLOUD_DEVICE_ID + "/firmware/" + otaImageId;
   session->expectedSize = firmwareUpdate.size;
   if (xQueueSend(otaOpenRequests, &session, 0) != pdTRUE) { delete session; otaMasterFailed("Firmware connection worker busy"); return false; }
   otaOpenInFlight = true; firmwareUpdate.state = "connecting";
-  firmwareUpdate.phase = "Connecting securely to the firmware gateway";
+  firmwareUpdate.phase = session->localTransport ? "Connecting to the local PC firmware server" : "Connecting securely to the firmware gateway";
   return true;
 }
 bool otaBeginImageTransfer() {
@@ -168,6 +178,14 @@ __attribute__((noinline)) void firmwareUpdateTick() {
       }
       const int count = otaDownloadSession->http.getStreamPtr()->read(otaPendingBytes, wanted);
       if (count <= 0) return;
+      if (otaLocalVerifyImage) {
+        otaLocalMarkers.write(otaPendingBytes, count);
+        // Withhold the last block from a bridge until the image role, machine
+        // and revision are proven. A wrong image must never auto-activate there.
+        if (firmwareUpdate.done + count == firmwareUpdate.size && !otaLocalMarkers.complete()) {
+          otaMasterFailed("Local image role, hardware identity or revision does not match"); return;
+        }
+      }
       otaPendingSize = count; otaPendingOffset = 0;
     }
     int written = otaPendingSize;

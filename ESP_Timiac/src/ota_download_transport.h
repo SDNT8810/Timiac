@@ -7,10 +7,12 @@
 // loop() read its body or close it. No hardware/runtime state is used here.
 struct OtaDownloadSession {
   WiFiClientSecure tls;
+  WiFiClient local;
   HTTPClient http;
   String url, error;
+  bool localTransport = false;
   uint32_t expectedSize = 0;
-  ~OtaDownloadSession() { http.end(); tls.stop(); }
+  ~OtaDownloadSession() { http.end(); tls.stop(); local.stop(); }
 };
 QueueHandle_t otaOpenRequests = nullptr, otaOpenResponses = nullptr;
 TaskHandle_t otaOpenTask = nullptr;
@@ -19,18 +21,21 @@ void otaDownloadTask(void*) {
   for (;;) {
     OtaDownloadSession* session = nullptr;
     if (xQueueReceive(otaOpenRequests, &session, portMAX_DELAY) != pdTRUE) continue;
-    session->tls.setCACert(strlen(TIMIAC_CLOUD_CA_CERT) ? TIMIAC_CLOUD_CA_CERT : kCloudRunRootCa);
-    session->tls.setHandshakeTimeout(20);
+    if (!session->localTransport) {
+      session->tls.setCACert(strlen(TIMIAC_CLOUD_CA_CERT) ? TIMIAC_CLOUD_CA_CERT : kCloudRunRootCa);
+      session->tls.setHandshakeTimeout(20);
+    }
     session->http.setConnectTimeout(8000); session->http.setTimeout(5000);
     session->http.useHTTP10(true); session->http.setReuse(false);
-    if (!session->http.begin(session->tls, session->url)) session->error = "Cannot open firmware download";
+    const bool opened = session->localTransport ? session->http.begin(session->local, session->url) : session->http.begin(session->tls, session->url);
+    if (!opened) session->error = "Cannot open firmware download";
     else {
-      session->http.addHeader("X-Timiac-Device-Key", TIMIAC_CLOUD_DEVICE_KEY);
+      if (!session->localTransport) session->http.addHeader("X-Timiac-Device-Key", TIMIAC_CLOUD_DEVICE_KEY);
       session->http.addHeader("Accept-Encoding", "identity");
       const int code = session->http.GET();
       if (code != 200) {
-        session->error = "Firmware gateway connection failed (" + String(code) + ")";
-        if (code < 0) {
+        session->error = String(session->localTransport ? "Local firmware server unreachable; allow Python through the PC firewall (" : "Firmware gateway connection failed (") + String(code) + ")";
+        if (code < 0 && !session->localTransport) {
           char detail[128] = {};
           const int tlsError = session->tls.lastError(detail, sizeof(detail));
           if (tlsError) session->error += "; TLS " + String(tlsError) + ": " + detail;
