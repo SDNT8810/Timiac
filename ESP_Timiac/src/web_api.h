@@ -290,6 +290,25 @@ void configureHttp() {
   http.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) { statusReply(request); });
   http.on("/api/diagnostics", HTTP_GET, [](AsyncWebServerRequest* request) {
     RuntimeLock lock;
+    // Never compete with a TLS handshake/flash operation for the last heap
+    // block. Reply promptly instead of attempting a large failed allocation.
+    if (firmwareUpdating || ESP.getFreeHeap() < 16000) {
+      errorReply(request, 503, "Controller busy; retry the diagnostic download shortly"); return;
+    }
+    if (request->hasParam("brief")) {
+      DynamicJsonDocument summary(2048);
+      summary["software"] = kSoftwareRevision; summary["fault"] = systemFault;
+      summary["lastStop"] = lastStopReason; summary["freeHeap"] = ESP.getFreeHeap();
+      for (unsigned b = 0; b < 2; ++b) {
+        auto board = summary.createNestedObject(b ? "b" : "a");
+        board["online"] = boardOnline(b); board["fault"] = boards[b].fault;
+        board["diagnostic"] = boards[b].diagnostic; board["driverOk"] = boards[b].drivers.good();
+      }
+      String text; serializeJson(summary, text);
+      auto* response = request->beginResponse(200, "application/json", text);
+      response->addHeader("Cache-Control", "no-store"); response->addHeader("Connection", "close"); request->send(response); return;
+    }
+    if (ESP.getFreeHeap() < 48000) { errorReply(request, 503, "Low memory; use /api/diagnostics?brief=1"); return; }
     DynamicJsonDocument document(16384);
     document["boot"] = bootId; document["software"] = kSoftwareRevision;
     writeReliabilityStatus(document.createNestedObject("reliability"));
@@ -300,9 +319,11 @@ void configureHttp() {
       const auto& entry = logs[i % 32]; JsonObject event = events.createNestedObject();
       event["id"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
     }
+    if (document.overflowed()) { errorReply(request, 503, "Diagnostic snapshot unavailable; use /api/diagnostics?brief=1"); return; }
     String text; serializeJson(document, text);
     auto* response = request->beginResponse(200, "application/json", text);
-    response->addHeader("Cache-Control", "no-store"); response->addHeader("Content-Disposition", "attachment; filename=\"timiac-diagnostics.json\""); request->send(response);
+    response->addHeader("Cache-Control", "no-store"); response->addHeader("Connection", "close");
+    response->addHeader("Content-Disposition", "attachment; filename=\"timiac-diagnostics.json\""); request->send(response);
   });
 #if !TIMIAC_RELEASE
   http.on("/api/rtc", HTTP_GET, [](AsyncWebServerRequest* request) {

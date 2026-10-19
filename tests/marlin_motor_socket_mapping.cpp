@@ -43,7 +43,7 @@ static_assert(homeFeeds[0] == expectedHomeFeed && homeFeeds[1] == expectedHomeFe
 #endif
 static_assert(X_HYBRID_THRESHOLD == 1 && Y_HYBRID_THRESHOLD == 1 && Z_HYBRID_THRESHOLD == 1 &&
   I_HYBRID_THRESHOLD == 1 && J_HYBRID_THRESHOLD == 1 && K_HYBRID_THRESHOLD == 1, "Switch every axis above 1 mm/s");
-static_assert(HOLD_MULTIPLIER == 0.5, "Preserve holding torque at half running current");
+static_assert(HOLD_MULTIPLIER == 0.3, "Reduce only standstill current; retain nonzero holding torque");
 static_assert(NUM_Z_STEPPERS == 1, "MOTOR3 is independent axis A, not a second Z axis");
 static_assert(AXIS4_NAME == 'A' && AXIS5_NAME == 'B' && AXIS6_NAME == 'C', "A/B/C names changed");
 static_assert(AXIS_DRIVER_TYPE(X, TMC2209) && AXIS_DRIVER_TYPE(Y, TMC2209) && AXIS_DRIVER_TYPE(Z, TMC2209) && AXIS_DRIVER_TYPE(I, TMC2209) && AXIS_DRIVER_TYPE(J, TMC2209) && AXIS_DRIVER_TYPE(K, TMC2209), "All six drivers must be UART TMC2209");

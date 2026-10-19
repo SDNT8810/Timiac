@@ -23,7 +23,7 @@ in both projects is compatible (`02010206`).
 | Junction deviation | 0.003 mm | 0.3 mm, with normalized six-axis corner directions |
 | Homing bump / second-pass divisor | 2 / 2 on all six axes | 5 / 2 on all six axes |
 | Endstop interrupts / always enabled | On / on | Same |
-| Driver mode / interpolation / hold multiplier | SpreadCycle / on / 0.5 | **StealthChop at rest, SpreadCycle above 1 mm/s** / on / 0.5 (.6 microswitch profile) |
+| Driver mode / interpolation / hold multiplier | SpreadCycle / on / 0.5 | **StealthChop at rest, SpreadCycle above 1 mm/s** / on / 0.3 (2026-10-19.3) |
 | Driver status monitoring / stop on driver error | On / on | Same |
 | Direction / home direction | Not inverted / minimum | Same |
 | Microsteps | 16 | **64**, interpolated internally to 256 |

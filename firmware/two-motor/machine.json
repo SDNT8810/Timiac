@@ -22,7 +22,7 @@
   "uart_address": 0,
   "driver_mode": "hybrid",
   "hybrid_threshold_mm_s": 1,
-  "hold_multiplier": 0.5,
+  "hold_multiplier": 0.3,
   "chopper_timing": "CHOPPER_DEFAULT_24V",
   "axes": [
     {

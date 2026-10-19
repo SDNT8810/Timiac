@@ -19,9 +19,17 @@ If converting back from DIAG homing:
 5. In dev mode verify each switch lamp changes when pressed before homing.
 
 Quiet holding and normal-speed SpreadCycle remain: 1,000 mA requested running/homing current,
-50% holding multiplier (approximately 500 mA at rest), 64 commanded microsteps interpolated to 256, and a
+30% holding multiplier (nominally 300 mA at rest; about 330 mA with the TMC2209's discrete current scale), 64 commanded microsteps interpolated to 256, and a
 1 mm/s hybrid threshold. Maximum motion feed is 500 mm/min; homing is 240 mm/min before the fixed 75% override.
 The planned 24 V / 400 W (16.7 A) supply uses the 24 V chopper timing preset.
+
+Release 2026-10-19.3 reduces only holding current from the previous 50% setting.
+Running and homing remain at 1,000 mA RMS. Drivers stay enabled; the existing
+automatic standstill delay and smooth ramp remain. Thermal protection stays
+active. Update both Octopus boards to apply this change; a master-only update
+cannot change the drivers' standstill current. Verify the arms hold their pose
+under the real load after a long pause. The hardware compatibility identity is
+unchanged because wiring, travel, pulse calibration and running current match.
 
 ## Concurrent homing: endstop did not release
 

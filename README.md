@@ -91,7 +91,7 @@ still runs and the clock pose waits for valid time.
 for running and microswitch homing, with **64 commanded microsteps** over UART
 and **internal interpolation to 256**. Calibration is **11,520 steps/mm**; travel
 is 0-50 mm. Maximum feed is **500 mm/min** (96,000 step pulses/s); homing
-is **240 mm/min before the fixed 75% scaling** (180 mm/min in use). The holding multiplier remains 0.5 (approximately 500 mA at rest).
+is **240 mm/min before the fixed 75% scaling** (180 mm/min in use). Release 2026-10-19.3 reduces the holding multiplier to **0.3** (about 300–330 mA at rest), while moving/homing current stays at 1,000 mA.
 Driver chopper timing now uses the 24 V preset for the planned 24 V / 400 W (16.7 A) supply.
 
 **Home all** now uses Lumiac's concurrent six-arm routine on each Octopus:

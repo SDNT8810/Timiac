@@ -50,7 +50,12 @@ def load():
     # Leave interrupt headroom on the six-axis STM32F446/S-curve build.
     if machine["steps_per_mm"] * machine["max_feed_mm_min"] / 60 > 100000:
         raise ValueError("Motion exceeds the configured 100 kHz step budget")
-    contract = {"machine": machine, "baseline_sha256": source["sha256"]}
+    # Standstill-current tuning does not change wiring, travel, steps/mm or
+    # required running current. Retain the existing identity for this software
+    # policy so installed controllers can accept the cooler Octopus image OTA.
+    # All other contract fields still participate in the compatibility hash.
+    identity_machine = dict(machine, hold_multiplier=0.5)
+    contract = {"machine": identity_machine, "baseline_sha256": source["sha256"]}
     identity = hashlib.sha256(json.dumps(contract, sort_keys=True).encode()).hexdigest()[:12]
     return machine, "TIMIAC2-" + identity
 

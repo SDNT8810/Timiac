@@ -37,7 +37,7 @@ class AxisProfileTests(unittest.TestCase):
         config = json.loads((ROOT / "Marlin/profiles/twelve-motor/profile.json").read_text())["Configuration_adv.h"]
         for group in ("XY", "Z", "I", "J", "K"):
             self.assertEqual(config[f"STEALTHCHOP_{group}"], "")
-        self.assertEqual(config["HOLD_MULTIPLIER"], "0.5")
+        self.assertEqual(config["HOLD_MULTIPLIER"], "0.3")
         self.assertEqual(config["CHOPPER_TIMING"], "CHOPPER_DEFAULT_24V")
         self.assertIsNone(config["SENSORLESS_HOMING"])
         self.assertEqual(config["HYBRID_THRESHOLD"], "")
@@ -50,7 +50,9 @@ class AxisProfileTests(unittest.TestCase):
             self.assertEqual(config[f"{axis}_SLAVE_ADDRESS"], "0")
 
     def test_run_and_home_use_1000_ma_with_24v_timing(self):
-        machine, _ = load()
+        machine, identity = load()
+        self.assertEqual(identity, "TIMIAC2-f09aa035bf26")
+        self.assertEqual(machine["hold_multiplier"], 0.3)
         self.assertEqual(machine["current_ma"], 1000)
         settings = definitions(machine, "test")["Configuration_adv.h"]
         self.assertEqual(settings["SPIDER_RUN_CURRENT_MA"], "1000")

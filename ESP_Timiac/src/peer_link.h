@@ -18,6 +18,31 @@ bool boardStatesHealthy(uint8_t mask) {
 bool boardsHealthy(uint8_t mask) {
   return !firmwareUpdating && !systemLatched && !stopRequested && !stopPending && !networkChanging && boardStatesHealthy(mask);
 }
+String boardHealthFailure(uint8_t mask) {
+  if (!timiac::validBoardMask(mask)) return "Invalid required-board mask";
+  if (firmwareUpdating) return "Firmware update became active during movement";
+  if (systemLatched) return systemFault.isEmpty() ? "Controller fault became active during movement" : systemFault;
+  if (stopRequested || stopPending) return "Stop confirmation pending during movement";
+  if (networkChanging) return "Router connection changed during movement";
+  for (unsigned b = 0; b < 2; ++b) if (mask & (1U << b)) {
+    const auto& board = boards[b];
+    const String prefix = "Board " + String(b + 1) + ": ";
+    if (!boardPeer(b)) return prefix + "ESP connection lost";
+    if (timiac::expired(millis(), board.stateAt, kPeerTimeout)) return prefix + "ESP status overdue (" + String(millis() - board.stateAt) + " ms)";
+    if (board.updating) return prefix + "firmware update became active";
+    if (!board.fault.isEmpty()) return prefix + board.fault;
+    if (board.latched) return prefix + "ESP safety stop is active";
+    if (!board.online) return prefix + "Octopus unavailable; " + board.diagnostic;
+    if (!board.drivers.good()) {
+      if (board.drivers.thermalWarning) return prefix + "driver temperature warning";
+      return prefix + "driver report changed: tested=" + String(board.drivers.tested) + " connected=" + String(board.drivers.connected) +
+        " current=" + String(board.drivers.currentOk) + " steps=" + String(board.drivers.stepsOk) + " mode=" + String(board.drivers.modeOk) +
+        " settings=" + String(board.drivers.settings) + " columns=" + String(board.drivers.columns);
+    }
+    if (!stopToken.isEmpty() && board.stopAck != stopToken) return prefix + "ESP lost the Stop acknowledgement";
+  }
+  return "Required-board health check failed during command";
+}
 bool bothHealthy() { return boardsHealthy(3); }
 bool workRequiresBoard(unsigned b) {
   return program.reserved() || (operation.barrier.active() && operation.barrier.includes(b));
@@ -436,7 +461,10 @@ void operationTick() {
   // UART homing gets 180 seconds; ESP heartbeats remain independent of G28.
   // Preparation and completion wait only for this operation's participants.
   if (TIMIAC_MASTER && operation.barrier.phase == timiac::Phase::Running && !boardsHealthy(operation.barrier.required)) {
-    stopAll("Required-board health check failed during command"); return;
+    // Capture the first failing predicate before Stop replaces each bridge's
+    // original state with the resulting "Homing stopped" / M112 halt.
+    const String reason = boardHealthFailure(operation.barrier.required);
+    stopAll(reason); return;
   }
   if (operation.barrier.phase == timiac::Phase::Preparing) {
     if (TIMIAC_MASTER && operation.barrier.canStart(boardsHealthy(operation.barrier.required))) {

@@ -1,4 +1,11 @@
-# Motion and remote update package - 2026-10-19.2
+# Motion and remote update package - 2026-10-19.3
+
+Holding current is now 30% (about 300–330 mA after register rounding), down from
+50%. Running and homing stay at 1,000 mA. Update **both Octopus boards** to apply
+this change; updating the ESP master alone does not change holding current.
+Drivers remain enabled and thermal protection remains active. Verify that the
+arms hold their position under the real load. Hardware identity is unchanged,
+so the existing local/cloud update route accepts this matched release.
 
 Local hotspot updates are now available alongside cloud and USB. Install this
 master once by USB, then use `python run.py master_release --host 192.168.4.1`
@@ -29,7 +36,7 @@ Struggle randomly selects one of seven
 insect patterns from both the button and hand input; see [the preview guide](struggle-patterns.md).
 
 Running and microswitch homing current is 1,000 mA RMS on all twelve motors.
-Holding current remains 50% (approximately 500 mA). Struggle retains 20 mm/s²
+Holding current is 30% (approximately 300–330 mA). Struggle retains 20 mm/s²
 travel acceleration (20% below normal); every segment is 30% faster, with a
 520 mm/min vector-feed ceiling before the fixed 75% override (390 mm/min in use).
 Each pattern has three asymmetric movement poses bounded to 0–20 mm open,

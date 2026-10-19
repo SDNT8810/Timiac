@@ -21,7 +21,7 @@
   "uart_address": 0,
   "driver_mode": "hybrid",
   "hybrid_threshold_mm_s": 1,
-  "hold_multiplier": 0.5,
+  "hold_multiplier": 0.3,
   "chopper_timing": "CHOPPER_DEFAULT_24V",
   "axes": [
     {"name":"X", "marlin":"X", "socket":0, "step":"PF13", "dir":"PF12", "enable":"PF14", "uart":"PC4", "endstop":"PG6"},

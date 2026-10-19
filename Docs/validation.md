@@ -1,3 +1,25 @@
+# Cooler holding current and diagnostic detail - 2026-10-19.3
+
+All twelve axes retain 1,000 mA RMS requested running/homing current. The
+holding multiplier changes from 0.5 to 0.3 (about 330 mA with the current
+TMC2209 register rounding). Drivers remain enabled; existing power-down delay,
+current ramp, endstops, speeds and overtemperature safeguards remain.
+Both Octopus boards must receive the new image to apply this change.
+
+The compatibility identity remains TIMIAC2-f09aa035bf26. Only hold-current
+policy is normalized to its original value in the compatibility hash; all
+other electrical/mechanical fields still participate. No USB re-pair is needed
+for a standstill-current adjustment. All native motor-socket compile checks
+now assert 0.3 hold and the existing 1,000 mA run/home settings.
+
+The master now retains the specific board-health failure instead of a generic
+message that was overwritten by the subsequent homing halt. Diagnostic downloads
+check available memory and provide a compact `/api/diagnostics?brief=1` view.
+Kernel tests cover all health gates, stopped homing, thermal reports and link
+recovery. These are build/host checks, not a measured temperature or holding
+load test on the real clock. Confirm long-term holding stability and cooling
+on the installed clock before treating the thermal issue as resolved.
+
 # Current animation update ? 2026-10-16.2
 
 Next Hour and automatic hour boundaries now use exactly three poses: all open,

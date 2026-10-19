@@ -683,6 +683,28 @@ int main() {
   resetMaster(); connectBoard(0); connectBoard(1);
   boards[0].updating = true;
   assert(!boardOnline(0) && !bothHealthy() && boardsHealthy(2));
+  // Retain the originating gate failure. A homing Stop subsequently replaces
+  // board diagnostics with M112/reset-required and used to hide this evidence.
+  for (unsigned gate = 0; gate < 10; ++gate) {
+    resetMaster(); connectBoard(0); connectBoard(1); startHome(0);
+    operation.barrier.phase = timiac::Phase::Running;
+    const char* expected = "";
+    switch (gate) {
+      case 0: boards[0].online = false; boards[0].diagnostic = "Waiting for G28 X (210 ms)"; expected = "Octopus unavailable"; break;
+      case 1: boards[0].drivers.currentOk = 62; expected = "current=62"; break;
+      case 2: boards[0].drivers.thermalWarning = 1; expected = "temperature warning"; break;
+      case 3: boards[0].latched = true; expected = "safety stop"; break;
+      case 4: boards[0].fault = "UART failure"; expected = "UART failure"; break;
+      case 5: stopToken = "existing-stop"; expected = "Stop acknowledgement"; break;
+      case 6: boards[0].stateAt = hostNow - kPeerTimeout; expected = "status overdue"; break;
+      case 7: peers[0].socket.stop(); expected = "ESP connection lost"; break;
+      case 8: networkChanging = true; expected = "Router connection changed"; break;
+      case 9: firmwareUpdating = true; expected = "Firmware update became active"; break;
+    }
+    assert(!boardsHealthy(1)); operationTick();
+    assert(operation.barrier.phase == timiac::Phase::Failed && systemLatched);
+    assert(systemFault.indexOf(expected) >= 0 && lastStopReason == systemFault);
+  }
   // A recovered stop must leave its cause visible after calibration and clock
   // resume; transient systemFault clearing previously erased all evidence.
   resetMaster(); connectBoard(0); connectBoard(1); releaseClockEnabled = true;
