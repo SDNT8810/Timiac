@@ -7,15 +7,14 @@ Use the [complete master-board diagram and instructions](master-wiring.md):
 ![Master ESP32 wiring](master-wiring.svg)
 
 Keep the current **24 V to 3.3 V converter**, ESP32 and DS3231 connections.
-The new Heschen E3F-DS30B2 is **NPN normally closed**, powered from **24 V**.
-It connects to **GPIO27** through the documented **4.7 kΩ / 68 kΩ / 10 kΩ**
-resistor interface. Brown = 24 V; blue = common ground; black = resistor input.
-The 68 kΩ resistor is in series from black OUT to GPIO27; 10 kΩ goes from
-GPIO27 to ground. The 4.7 kΩ pull-up goes from +24 V to black OUT and must
-remain on the confirmed NPN NC sensor. See the [enlarged sensor diagram](master-sensor-wiring.svg).
-Only the low-voltage divider junction connects to GPIO27. Do not connect black
-straight to an ESP32 pin. Remove/unplug the old ultrasonic module and leave
-its GPIO18 and GPIO19 PCB traces unused.
+For firmware **2026-10-20.3**, move only the installed low-voltage signal wire
+from **GPIO27 to GPIO34 (ADC1)**. Keep the sensor power, common ground and all
+installed resistors unchanged. The reported input is 95 mV clear and 2.5 mV
+with a hand. The firmware uses analog presence detection rather than a digital
+HIGH/LOW read. See the [sensor diagram](master-sensor-wiring.svg) and the
+[low-voltage ADC limitations](master-wiring.md#analog-detection).
+Never connect a raw 24 V sensor output directly to the ESP32. Keep the old
+ultrasonic module unplugged and its GPIO18/19 traces unused.
 
 | Module / signal | Master ESP32 connection |
 |---|---|
@@ -23,15 +22,14 @@ its GPIO18 and GPIO19 PCB traces unused.
 | Converter / PSU / sensor ground | GND and DS3231 GND |
 | DS3231 SDA | GPIO21 |
 | DS3231 SCL | GPIO22 |
-| New photoelectric resistor-divider junction | GPIO27, ordinary INPUT (no pull-up) |
+| Installed sensor resistor-divider junction | GPIO34, ADC1 analog input (no pull-up) |
 | Existing ultrasonic GPIO18/19 | Unused |
 
 These are GPIO labels, not development-board header positions. Leave RTC SQW
 and 32K unconnected. The DS3231 and its I²C pull-ups remain at 3.3 V. The master
 communicates with the motor bridges over Wi-Fi; it has no Octopus UART wiring.
 
-Check the new input voltage and NC polarity before connecting the GPIO, as
-shown in [master-wiring.md](master-wiring.md). The dashboard reports
+Check both states' actual ADC readings as shown in [master-wiring.md](master-wiring.md). The dashboard reports
 **Detected / Clear**, not centimetres. Clear for 500 ms, then present a hand for
 200 ms to trigger one of seven random Struggle patterns once (valid RTC required).
 Motion, Stop and faults discard hand

@@ -19,11 +19,15 @@
 #define TIMIAC_PROXIMITY_ENABLED 1
 #endif
 #ifndef TIMIAC_PROXIMITY_PIN
-#define TIMIAC_PROXIMITY_PIN 27
+#define TIMIAC_PROXIMITY_PIN 34
 #endif
-// NPN NC through the documented 24 V resistor interface: clear LOW, detected HIGH.
-#ifndef TIMIAC_PROXIMITY_ACTIVE_HIGH
-#define TIMIAC_PROXIMITY_ACTIVE_HIGH 1
+// Installed interface: measured clear 95 mV, hand 2.5 mV. GPIO34 is ADC1,
+// so sensing does not contend with Wi-Fi's ADC2 peripheral.
+#ifndef TIMIAC_PROXIMITY_DETECT_MV
+#define TIMIAC_PROXIMITY_DETECT_MV 40
+#endif
+#ifndef TIMIAC_PROXIMITY_CLEAR_MV
+#define TIMIAC_PROXIMITY_CLEAR_MV 60
 #endif
 #ifndef TIMIAC_WIFI_SSID
 #define TIMIAC_WIFI_SSID "Timiac"
@@ -68,7 +72,7 @@
 #endif
 constexpr unsigned long kBaud = 115200;
 // Application revision is separate from the hardware identity shared with Marlin.
-constexpr char kSoftwareRevision[] = "2026-10-20.2";
+constexpr char kSoftwareRevision[] = "2026-10-20.3";
 constexpr char kLocalOtaMarker[] = "TIMIAC_LOCAL_OTA_V1";
 #if TIMIAC_MASTER
 constexpr char kOtaImageMarker[] = "TIMIAC_OTA_ROLE:master";

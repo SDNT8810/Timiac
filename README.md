@@ -436,17 +436,20 @@ switching dashboard modes.
 
 ## Hand proximity: Heschen E3F-DS30B2 NPN NC
 
-The new infrared switch uses **GPIO27** through a **4.7 kΩ / 68 kΩ / 10 kΩ**
-interface for the existing regulated 24 V supply. Keep the current 24 V → 3.3 V
-converter for the ESP32 and RTC. Brown sensor wire goes to 24 V, blue to common
-ground, and black to the resistor interface. Never connect black directly to
-GPIO27. Old ultrasonic GPIO18/19 PCB traces stay unused. See the complete
+From **2026-10-20.3**, move only the installed sensor signal wire from GPIO27
+to **GPIO34 (ADC1)**. Keep all installed resistors, sensor power, common ground
+and the existing 24 V → 3.3 V converter unchanged. Never connect a raw 24 V
+sensor wire directly to the GPIO. Old ultrasonic GPIO18/19 traces stay unused. See the complete
 [diagram, wire table and voltage checks](Docs/master-wiring.md).
 
 This is an on/off photoelectric switch, not LiDAR. Its advertised sensing
 range is adjustable around 10–30 cm, but it has no software beam-angle control
-or measured-distance output. Both dashboards show **Detected / Clear** instead
-of centimetres. Check the optical path and sensitivity with an actual hand.
+or measured-distance output. Both local dashboards show **Detected / Clear**
+with ADC readings. The user measured 95 mV clear and 2.5 mV with a hand; the
+firmware uses 40/60 mV hysteresis and treats zero ADC counts as the low state.
+These voltages are below the specified accurate ADC range, so verify that clear
+and hand produce distinct counts. A zero-count voltage is labeled below the ADC
+floor, not an exact 0 V. Check the optical path with an actual hand.
 
 After homing, with a valid RTC, clear the sensor for 500 ms, then present a hand
 for 200 ms to run a random Struggle once, returning to the captured current time.
@@ -457,9 +460,10 @@ release mode, gestures require the clock to be running; manual Home keeps it
 parked. Dev mode also supports gestures when idle/homed. The sensor does not
 recognize gesture direction or shape, and NC wire/power failure can mimic a hand.
 
-The defaults are `TIMIAC_PROXIMITY_ENABLED=1`, `TIMIAC_PROXIMITY_PIN=27`, and
-`TIMIAC_PROXIMITY_ACTIVE_HIGH=1`. The divider requires an ordinary GPIO input
-without an internal pull-up. Rebuild after changing configuration.
+The defaults are `TIMIAC_PROXIMITY_ENABLED=1`, `TIMIAC_PROXIMITY_PIN=34`,
+`TIMIAC_PROXIMITY_DETECT_MV=40` and `TIMIAC_PROXIMITY_CLEAR_MV=60`. ADC1 uses
+12-bit, 0 dB readings and a nine-sample median without an internal pull-up.
+Rebuild after changing configuration.
 
 ## Prepare an Octopus card
 

@@ -1,4 +1,4 @@
-"""Draw the master PCB connections, including its 24 V NPN sensor divider."""
+"""Draw the master PCB connections, and the installed analog sensor interface."""
 from pathlib import Path
 import re
 from xml.sax.saxutils import escape
@@ -11,8 +11,8 @@ sensor, sda, scl = (pin(name) for name in ('TIMIAC_PROXIMITY_PIN', 'TIMIAC_RTC_S
 assert sensor not in (18, 19, sda, scl)
 
 parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1300" viewBox="0 0 1700 1300" role="img" aria-labelledby="title desc">',
-         '<title id="title">Timiac master wiring: existing 24 V to 3.3 V converter and NPN NC infrared sensor</title>',
-         '<desc id="desc">DS3231 uses GPIO21 and GPIO22. E3F-DS30B2 uses three resistors into GPIO27. GPIO18 and GPIO19 remain unused. All grounds share the existing PCB ground.</desc>',
+         '<title id="title">Timiac master wiring: existing power and analog hand sensor</title>',
+         f'<desc id="desc">DS3231 uses GPIO21 and GPIO22. Move only the installed sensor signal from GPIO27 to ADC1 GPIO{sensor}; keep its resistors. GPIO18 and GPIO19 remain unused.</desc>',
          '<style>text{font-family:Arial,sans-serif;fill:#172b36} .wire{fill:none;stroke-linejoin:round;stroke-linecap:round}</style>',
          '<rect width="1700" height="1300" fill="#f7f9fb"/>']
 RED, GND, V33, SIGNAL, SDA, SCL = '#bb352e', '#344b60', '#28804c', '#7751b9', '#147b8d', '#b96b13'
@@ -72,98 +72,62 @@ dot(980,395,SIGNAL)
 text(995, 410, f'GPIO{sensor}', 20, SIGNAL, weight='bold')
 text(1300, 543, f'New signal wire to GPIO{sensor}', 19, SIGNAL)
 
-box(40, 555, 1545, 530)
-text(65, 590, '2   VERIFIED NPN NC SENSOR — 68 kΩ / 10 kΩ DIVIDER + 4.7 kΩ PULL-UP', 22, weight='bold')
-box(80, 680, 280, 260, '#fff')
-text(100, 714, 'HESCHEN', 24, weight='bold')
-text(100, 746, 'E3F-DS30B2', 23, weight='bold')
-text(100, 775, 'NPN normally closed', 18)
-text(340, 817, 'BROWN / +V', 18, '#925429', anchor='end')
-text(340, 867, 'BLACK / OUT', 18, '#172b36', anchor='end')
-text(340, 917, 'BLUE / 0 V', 18, '#1675b8', anchor='end')
-
-# The three wires join power and the divided output, not a 24 V GPIO connection.
-wire([(360,810),(470,810)], '#925429', '+24V')
-wire([(470,810),(470,630),(800,630)], RED, '+24V')
-text(480, 656, '+24 V: same master-board input', 18, RED)
-wire([(800,630),(800,675)], RED, '+24V')
-box(788,675,24,80,'#fff6e8','#344b60',0)
-wire([(800,755),(800,800)], '#172b36', 'SENSOR_OUT')
-text(835, 707, 'R1: 4.7 kΩ pull-up', 21, weight='bold')
-text(835, 735, '1%, ¼ W', 18)
-wire([(360,860),(650,860),(650,800),(920,800)], '#172b36', 'SENSOR_OUT')
-dot(800,800,'#172b36')
-text(690, 837, 'A: black output', 18)
-box(920,788,100,24,'#fff6e8','#344b60',0)
-text(970, 762, 'R2: 68 kΩ', 21, weight='bold',anchor='middle')
-text(970, 782, '1%, ¼ W', 16,anchor='middle')
-wire([(1020,800),(1250,800)], SIGNAL, f'GPIO{sensor}')
-dot(1250,800,SIGNAL)
-text(1245, 767, f'TEST / GPIO{sensor}', 21, SIGNAL, weight='bold',anchor='middle')
-wire([(1250,800),(1250,855)], SIGNAL, f'GPIO{sensor}')
-box(1238,855,24,80,'#fff6e8','#344b60',0)
-text(1290, 891, 'R3: 10 kΩ', 21, weight='bold')
-text(1290, 919, '1%, ¼ W', 18)
-wire([(1250,935),(1250,1010),(470,1010),(470,910)], GND, 'GND')
-wire([(470,910),(360,910)], '#1675b8', 'GND')
-text(490, 1043, 'GND: sensor blue + PSU 0 V + converter OUT− + ESP32 GND + clock GND', 18, GND)
-text(680, 970, 'Blue = GND. Black = OUT. R1 supplies the HIGH level.', 19, RED, weight='bold')
-text(680, 1000, f'Only the R2/R3 junction goes to GPIO{sensor}.', 19, RED)
-wire([(980,395),(980,515),(1640,515),(1640,800),(1250,800)], SIGNAL, f'GPIO{sensor}')
-
+box(40, 555, 1620, 530)
+text(65, 590, f'2   INSTALLED SENSOR: MOVE ONLY GPIO27 SIGNAL WIRE TO GPIO{sensor}', 24, weight='bold')
+box(80, 680, 310, 230)
+text(105, 720, 'EXISTING HAND SENSOR', 22, weight='bold')
+text(105, 760, 'Keep its power wiring', 20)
+text(105, 795, 'Keep its ground wiring', 20)
+text(365, 857, 'Existing output', 20, SIGNAL, anchor='end')
+box(590, 680, 430, 230, '#fff6e8')
+text(615, 720, 'EXISTING RESISTOR INTERFACE', 21, weight='bold')
+text(615, 763, 'Leave every resistor as installed.', 21)
+text(615, 800, 'No new pull-up or divider changes.', 20)
+text(995, 857, 'Low-voltage junction', 19, SIGNAL, anchor='end')
+wire([(390,850),(590,850)], SIGNAL, 'SENSOR_OUT')
+wire([(1020,850),(1250,850)], SIGNAL, f'GPIO{sensor}')
+dot(1250,850,SIGNAL)
+text(1250, 785, f'GPIO{sensor} / ADC1', 24, SIGNAL, weight='bold', anchor='middle')
+text(1250, 819, 'Analog input, no pull-up', 19, SIGNAL, anchor='middle')
+wire([(980,395),(980,515),(1640,515),(1640,850),(1250,850)], SIGNAL, f'GPIO{sensor}')
+text(100, 962, 'Measured at the signal junction relative to ESP32 GND:', 22, weight='bold')
+text(100, 1003, 'Clear: 0.095 V (95 mV). Hand: 0.0025 V (2.5 mV). Confirm ADC readings after the move.', 22)
+text(100, 1046, 'ESP32 GND, sensor 0 V and the resistor ground remain connected exactly as before.', 20, GND)
 box(40, 1110, 1620, 155, '#edf5fa')
-text(65, 1145, 'CHECK BEFORE CONNECTING THE GPIO', 20, weight='bold')
-text(65, 1178, f'NC sensor clear → GPIO test point near 0 V. Hand detected → approximately 2.90 V at a 24.0 V supply.', 20)
-text(65, 1210, 'Brown = +24 V. Blue = PSU 0 V / ESP32 GND. Black = sensor OUT, never directly to GPIO27.', 19)
-text(65, 1242, 'NPN NC only: retain all three resistors. Ordinary INPUT, no internal pull-up. Confirm test voltage before connection.', 18)
+text(65, 1145, 'FIRMWARE 2026-10-20.3: ANALOG PRESENCE DETECTION', 21, weight='bold')
+text(65, 1180, 'Detect below 40 mV, clear above 60 mV. Zero ADC counts count as low; voltage is below the ADC floor.', 20)
+text(65, 1214, 'Below 100 mV the ESP32 ADC is outside its specified accurate range. Check both hand states on the dashboard.', 19)
+text(65, 1247, 'Only the existing low-voltage junction connects to the GPIO. Never connect a raw 24 V sensor wire to it.', 19, RED)
 parts.append('</svg>')
 output = ROOT / 'Docs/master-wiring.svg'
 output.write_text('\n'.join(parts) + '\n', encoding='utf-8')
 print(output)
 
-# A separate sensor-only view makes every junction visible without tracing
-# wires through the power/RTC overview. The electrical nets are identical.
-parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="920" viewBox="0 0 1400 920" role="img" aria-labelledby="title desc">',
-         '<title id="title">Confirmed NPN normally closed sensor: supply, pull-up and GPIO27 divider</title>',
-         '<desc id="desc">Brown to plus 24 volts. Blue to common ground. Black output to a 4.7 kiloohm pull-up and the 68 kiloohm series resistor. The 68 kiloohm and 10 kiloohm junction connects to GPIO27; the 10 kiloohm lower end goes to ground.</desc>',
+parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="680" viewBox="0 0 1400 680" role="img" aria-labelledby="title desc">',
+         f'<title id="title">Move the installed sensor signal from GPIO27 to ADC1 GPIO{sensor}</title>',
+         '<desc id="desc">Keep the installed sensor power, resistor network and common ground. Move only the existing divided signal wire to GPIO34. No resistor change is specified.</desc>',
          '<style>text{font-family:Arial,sans-serif;fill:#172b36}.wire{fill:none;stroke-linejoin:round;stroke-linecap:round}</style>',
-         '<rect width="1400" height="920" fill="#f7f9fb"/>']
-text(45, 55, 'SENSOR → GPIO27  /  CONFIRMED NPN NC', 30, weight='bold')
-text(45, 91, 'Fixed regulated 24 V supply · 1% resistors · GPIO27 uses ordinary INPUT', 21)
-box(65, 275, 285, 350)
-text(90, 320, 'E3F-DS30B2', 25, weight='bold')
-text(90, 355, 'NPN normally closed', 21)
-text(330, 416, 'BROWN  +V', 20, '#925429', anchor='end')
-text(330, 506, 'BLACK  OUT', 20, '#172b36', anchor='end')
-text(330, 596, 'BLUE  0 V', 20, '#1675b8', anchor='end')
-text(465, 170, 'PSU +24 V', 23, RED, weight='bold')
-wire([(350,410),(450,410),(450,200),(700,200)], '#925429', '+24V')
-dot(700,200,RED)
-wire([(700,200),(700,280)], RED, '+24V')
-box(686,280,28,115,'#fff6e8',GND,0)
-wire([(700,395),(700,500)], '#172b36', 'SENSOR_OUT')
-text(750, 310, 'R1  4.7 kΩ', 24, weight='bold')
-text(750, 342, 'Pull-up to +24 V', 20)
-text(750, 372, '¼ W minimum', 18)
-wire([(350,500),(840,500)], '#172b36', 'SENSOR_OUT')
-dot(700,500,'#172b36')
-text(665, 552, 'A: OUT', 20, anchor='end')
-box(840,486,140,28,'#fff6e8',GND,0)
-text(910, 450, 'R2  68 kΩ', 23, weight='bold', anchor='middle')
-wire([(980,500),(1260,500)], SIGNAL, f'GPIO{sensor}')
-dot(1120,500,SIGNAL)
-text(1280, 508, f'GPIO{sensor}', 24, SIGNAL, weight='bold')
-text(1120, 454, 'B: test point', 20, SIGNAL, anchor='middle')
-wire([(1120,500),(1120,570)], SIGNAL, f'GPIO{sensor}')
-box(1106,570,28,100,'#fff6e8',GND,0)
-text(1170, 608, 'R3', 23, weight='bold')
-text(1170, 639, '10 kΩ', 23, weight='bold')
-wire([(1120,670),(1120,720),(450,720),(450,590)], GND, 'GND')
-wire([(450,590),(350,590)], '#1675b8', 'GND')
-text(450, 758, 'PSU 0 V + sensor BLUE + ESP32 GND + converter GND', 21, GND)
-box(45, 795, 1310, 95, '#edf5fa')
-text(65, 830, 'NPN NC: clear → B LOW; hand detected → B ≈ 2.90 V (at a 24.0 V supply).', 22)
-text(65, 865, 'Do not omit R1. Do not swap BLUE and BLACK. Measure B before connecting GPIO27.', 21, RED, weight='bold')
+         '<rect width="1400" height="680" fill="#f7f9fb"/>']
+text(45, 55, f'SENSOR SIGNAL: GPIO27 → GPIO{sensor}', 32, weight='bold')
+text(45, 100, 'Leave all installed resistors, sensor power and common ground unchanged.', 24)
+box(65, 190, 350, 230)
+text(90, 235, 'EXISTING SENSOR', 25, weight='bold')
+text(90, 278, 'Keep power and GND', 21)
+text(390, 352, 'Existing OUT', 20, SIGNAL, anchor='end')
+box(530, 190, 460, 230, '#fff6e8')
+text(555, 235, 'EXISTING RESISTORS', 25, weight='bold')
+text(555, 278, 'Keep the complete interface.', 21)
+text(555, 315, 'No components need changing.', 21)
+text(965, 352, 'Signal junction', 20, SIGNAL, anchor='end')
+wire([(415,345),(530,345)], SIGNAL, 'SENSOR_OUT')
+wire([(990,345),(1150,345)], SIGNAL, f'GPIO{sensor}')
+dot(1150,345,SIGNAL)
+text(1180, 350, f'GPIO{sensor}', 29, SIGNAL, weight='bold')
+text(1140, 395, 'ADC1, no pull-up', 19, SIGNAL)
+text(65, 480, 'Measured: clear ≈ 95 mV; hand ≈ 2.5 mV. These values still need ADC verification.', 23)
+text(65, 525, 'Firmware: detect < 40 mV; clear > 60 mV; zero counts are handled as below the ADC floor.', 22)
+text(65, 570, 'GPIO34 avoids ADC2 / Wi-Fi contention. Below 100 mV, absolute accuracy is not specified.', 21)
+text(65, 624, 'Connect only the existing low-voltage junction. Never connect raw sensor OUT / 24 V to an ESP32 pin.', 20, RED)
 parts.append('</svg>')
 output = ROOT / 'Docs/master-sensor-wiring.svg'
 output.write_text('\n'.join(parts) + '\n', encoding='utf-8')

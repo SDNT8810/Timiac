@@ -1,42 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="920" viewBox="0 0 1400 920" role="img" aria-labelledby="title desc">
-<title id="title">Confirmed NPN normally closed sensor: supply, pull-up and GPIO27 divider</title>
-<desc id="desc">Brown to plus 24 volts. Blue to common ground. Black output to a 4.7 kiloohm pull-up and the 68 kiloohm series resistor. The 68 kiloohm and 10 kiloohm junction connects to GPIO27; the 10 kiloohm lower end goes to ground.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="680" viewBox="0 0 1400 680" role="img" aria-labelledby="title desc">
+<title id="title">Move the installed sensor signal from GPIO27 to ADC1 GPIO34</title>
+<desc id="desc">Keep the installed sensor power, resistor network and common ground. Move only the existing divided signal wire to GPIO34. No resistor change is specified.</desc>
 <style>text{font-family:Arial,sans-serif;fill:#172b36}.wire{fill:none;stroke-linejoin:round;stroke-linecap:round}</style>
-<rect width="1400" height="920" fill="#f7f9fb"/>
-<text x="45" y="55" font-size="30" style="fill:#172b36" font-weight="bold" text-anchor="start">SENSOR → GPIO27  /  CONFIRMED NPN NC</text>
-<text x="45" y="91" font-size="21" style="fill:#172b36" font-weight="normal" text-anchor="start">Fixed regulated 24 V supply · 1% resistors · GPIO27 uses ordinary INPUT</text>
-<rect x="65" y="275" width="285" height="350" rx="12" fill="#fff" stroke="#c4ced7" stroke-width="2"/>
-<text x="90" y="320" font-size="25" style="fill:#172b36" font-weight="bold" text-anchor="start">E3F-DS30B2</text>
-<text x="90" y="355" font-size="21" style="fill:#172b36" font-weight="normal" text-anchor="start">NPN normally closed</text>
-<text x="330" y="416" font-size="20" style="fill:#925429" font-weight="normal" text-anchor="end">BROWN  +V</text>
-<text x="330" y="506" font-size="20" style="fill:#172b36" font-weight="normal" text-anchor="end">BLACK  OUT</text>
-<text x="330" y="596" font-size="20" style="fill:#1675b8" font-weight="normal" text-anchor="end">BLUE  0 V</text>
-<text x="465" y="170" font-size="23" style="fill:#bb352e" font-weight="bold" text-anchor="start">PSU +24 V</text>
-<polyline class="wire" points="350,410 450,410 450,200 700,200" stroke="#925429" stroke-width="4" data-net="+24V"/>
-<circle cx="700" cy="200" r="6" fill="#bb352e"/>
-<polyline class="wire" points="700,200 700,280" stroke="#bb352e" stroke-width="4" data-net="+24V"/>
-<rect x="686" y="280" width="28" height="115" rx="0" fill="#fff6e8" stroke="#344b60" stroke-width="2"/>
-<polyline class="wire" points="700,395 700,500" stroke="#172b36" stroke-width="4" data-net="SENSOR_OUT"/>
-<text x="750" y="310" font-size="24" style="fill:#172b36" font-weight="bold" text-anchor="start">R1  4.7 kΩ</text>
-<text x="750" y="342" font-size="20" style="fill:#172b36" font-weight="normal" text-anchor="start">Pull-up to +24 V</text>
-<text x="750" y="372" font-size="18" style="fill:#172b36" font-weight="normal" text-anchor="start">¼ W minimum</text>
-<polyline class="wire" points="350,500 840,500" stroke="#172b36" stroke-width="4" data-net="SENSOR_OUT"/>
-<circle cx="700" cy="500" r="6" fill="#172b36"/>
-<text x="665" y="552" font-size="20" style="fill:#172b36" font-weight="normal" text-anchor="end">A: OUT</text>
-<rect x="840" y="486" width="140" height="28" rx="0" fill="#fff6e8" stroke="#344b60" stroke-width="2"/>
-<text x="910" y="450" font-size="23" style="fill:#172b36" font-weight="bold" text-anchor="middle">R2  68 kΩ</text>
-<polyline class="wire" points="980,500 1260,500" stroke="#7751b9" stroke-width="4" data-net="GPIO27"/>
-<circle cx="1120" cy="500" r="6" fill="#7751b9"/>
-<text x="1280" y="508" font-size="24" style="fill:#7751b9" font-weight="bold" text-anchor="start">GPIO27</text>
-<text x="1120" y="454" font-size="20" style="fill:#7751b9" font-weight="normal" text-anchor="middle">B: test point</text>
-<polyline class="wire" points="1120,500 1120,570" stroke="#7751b9" stroke-width="4" data-net="GPIO27"/>
-<rect x="1106" y="570" width="28" height="100" rx="0" fill="#fff6e8" stroke="#344b60" stroke-width="2"/>
-<text x="1170" y="608" font-size="23" style="fill:#172b36" font-weight="bold" text-anchor="start">R3</text>
-<text x="1170" y="639" font-size="23" style="fill:#172b36" font-weight="bold" text-anchor="start">10 kΩ</text>
-<polyline class="wire" points="1120,670 1120,720 450,720 450,590" stroke="#344b60" stroke-width="4" data-net="GND"/>
-<polyline class="wire" points="450,590 350,590" stroke="#1675b8" stroke-width="4" data-net="GND"/>
-<text x="450" y="758" font-size="21" style="fill:#344b60" font-weight="normal" text-anchor="start">PSU 0 V + sensor BLUE + ESP32 GND + converter GND</text>
-<rect x="45" y="795" width="1310" height="95" rx="12" fill="#edf5fa" stroke="#c4ced7" stroke-width="2"/>
-<text x="65" y="830" font-size="22" style="fill:#172b36" font-weight="normal" text-anchor="start">NPN NC: clear → B LOW; hand detected → B ≈ 2.90 V (at a 24.0 V supply).</text>
-<text x="65" y="865" font-size="21" style="fill:#bb352e" font-weight="bold" text-anchor="start">Do not omit R1. Do not swap BLUE and BLACK. Measure B before connecting GPIO27.</text>
+<rect width="1400" height="680" fill="#f7f9fb"/>
+<text x="45" y="55" font-size="32" style="fill:#172b36" font-weight="bold" text-anchor="start">SENSOR SIGNAL: GPIO27 → GPIO34</text>
+<text x="45" y="100" font-size="24" style="fill:#172b36" font-weight="normal" text-anchor="start">Leave all installed resistors, sensor power and common ground unchanged.</text>
+<rect x="65" y="190" width="350" height="230" rx="12" fill="#fff" stroke="#c4ced7" stroke-width="2"/>
+<text x="90" y="235" font-size="25" style="fill:#172b36" font-weight="bold" text-anchor="start">EXISTING SENSOR</text>
+<text x="90" y="278" font-size="21" style="fill:#172b36" font-weight="normal" text-anchor="start">Keep power and GND</text>
+<text x="390" y="352" font-size="20" style="fill:#7751b9" font-weight="normal" text-anchor="end">Existing OUT</text>
+<rect x="530" y="190" width="460" height="230" rx="12" fill="#fff6e8" stroke="#c4ced7" stroke-width="2"/>
+<text x="555" y="235" font-size="25" style="fill:#172b36" font-weight="bold" text-anchor="start">EXISTING RESISTORS</text>
+<text x="555" y="278" font-size="21" style="fill:#172b36" font-weight="normal" text-anchor="start">Keep the complete interface.</text>
+<text x="555" y="315" font-size="21" style="fill:#172b36" font-weight="normal" text-anchor="start">No components need changing.</text>
+<text x="965" y="352" font-size="20" style="fill:#7751b9" font-weight="normal" text-anchor="end">Signal junction</text>
+<polyline class="wire" points="415,345 530,345" stroke="#7751b9" stroke-width="4" data-net="SENSOR_OUT"/>
+<polyline class="wire" points="990,345 1150,345" stroke="#7751b9" stroke-width="4" data-net="GPIO34"/>
+<circle cx="1150" cy="345" r="6" fill="#7751b9"/>
+<text x="1180" y="350" font-size="29" style="fill:#7751b9" font-weight="bold" text-anchor="start">GPIO34</text>
+<text x="1140" y="395" font-size="19" style="fill:#7751b9" font-weight="normal" text-anchor="start">ADC1, no pull-up</text>
+<text x="65" y="480" font-size="23" style="fill:#172b36" font-weight="normal" text-anchor="start">Measured: clear ≈ 95 mV; hand ≈ 2.5 mV. These values still need ADC verification.</text>
+<text x="65" y="525" font-size="22" style="fill:#172b36" font-weight="normal" text-anchor="start">Firmware: detect &lt; 40 mV; clear &gt; 60 mV; zero counts are handled as below the ADC floor.</text>
+<text x="65" y="570" font-size="21" style="fill:#172b36" font-weight="normal" text-anchor="start">GPIO34 avoids ADC2 / Wi-Fi contention. Below 100 mV, absolute accuracy is not specified.</text>
+<text x="65" y="624" font-size="20" style="fill:#bb352e" font-weight="normal" text-anchor="start">Connect only the existing low-voltage junction. Never connect raw sensor OUT / 24 V to an ESP32 pin.</text>
 </svg>

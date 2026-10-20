@@ -1,140 +1,108 @@
-# Master board: E3F-DS30B2 NPN NC sensor
+# Master board: analog hand sensor on GPIO34
+
+**Firmware 2026-10-20.3: move only the existing sensor signal wire from GPIO27
+to GPIO34. Leave every resistor, sensor power connection and ground unchanged.**
+GPIO34 is an input-only ADC1 pin, so analog sensing can run with the master's
+Wi-Fi AP and router connection active. GPIO27 belongs to ADC2 and cannot provide
+this analog measurement while Wi-Fi is running on the installed classic ESP32.
 
 ![Complete master-board wiring](master-wiring.svg)
 
-[Open the scalable wiring diagram](master-wiring.svg) or [PNG image](master-wiring.png).
+[Complete PNG](master-wiring.png) · [Sensor-only SVG](master-sensor-wiring.svg) ·
+[Sensor-only PNG](master-sensor-wiring.png)
 
-**2026-10-20 review: the installed sensor is confirmed NPN normally closed.**
-The divider is **black OUT → 68 kΩ → GPIO27**, with **10 kΩ from GPIO27 to
-ground**. The additional **4.7 kΩ from +24 V to black OUT** is the pull-up that
-establishes HIGH when the NPN output opens. Keep all three resistors.
+The diagrams show the installed resistor interface as a block. They specify
+only the GPIO migration; they do not ask for the earlier proposed three-resistor
+circuit to be installed. The actual reported measurements at GPIO27 relative
+to ESP32 GND were **95 mV clear** and **2.5 mV with a hand**. This firmware follows
+those measured states rather than inferring switching polarity from the NC label.
 
-![Enlarged sensor wiring with every junction labeled](master-sensor-wiring.svg)
-
-[Sensor-only PNG](master-sensor-wiring.png). Brown is +24 V, **blue is ground**,
-and **black is OUT**. Drawing colors must not be used to exchange these functions.
-
-Keep the existing **24 V input and 24 V → 3.3 V converter**. The ESP32 and DS3231
-stay on 3.3 V. Remove/unplug the ultrasonic module. Its existing **GPIO18 and
-GPIO19 PCB traces stay unused**; the new sensor uses a new wire to **GPIO27**.
-GPIO numbers mean the labels printed on the ESP32 board, not header positions.
-
-## All connections to the master
+## Connections
 
 | Connection | Destination |
 |---|---|
-| 24 V PSU positive | Existing master PCB input and converter IN+ |
-| PSU 0 V | Existing PCB ground and converter IN− |
-| Converter OUT+ (regulated 3.3 V) | ESP32 3V3, DS3231 VCC |
-| Converter OUT− | ESP32 GND, DS3231 GND, sensor blue / PSU 0 V; all share ground |
-| ESP32 GPIO21 | DS3231 SDA |
-| ESP32 GPIO22 | DS3231 SCL |
-| ESP32 GPIO27 | R2/R3 junction in the new sensor interface below |
-| GPIO18, GPIO19 | Unused; do not repurpose the existing ultrasonic traces |
-| RTC SQW / 32K | Not connected |
-| Master → ESP-12 bridges | Wi-Fi; no UART/control wires between them |
+| Existing 24 V input and DC converter | Keep unchanged; converter output stays 3.3 V |
+| ESP32 / DS3231 supply | Existing 3.3 V and GND |
+| DS3231 SDA / SCL | GPIO21 / GPIO22 |
+| Installed resistor interface's low-voltage signal junction | GPIO34, previously GPIO27 |
+| Sensor power, common ground and installed resistors | Keep unchanged |
+| GPIO18 / GPIO19 ultrasonic traces | Unused |
+| RTC SQW / 32K | Unconnected |
+| Master to motor bridges | Wi-Fi; no master UART wiring |
 
-The DS3231 and its I²C pull-ups stay at **3.3 V**, not 5 V. Do not feed 24 V
-into an ESP32 pin. The existing converter, not the ESP32 board, receives 24 V.
-Switch off/disconnect 24 V before powering the board from USB for flashing,
-unless the PCB has verified isolation between its USB and external supplies.
+GPIO numbers mean the board's GPIO labels, not header positions. Move the wire
+with power off. Connect only the existing low-voltage signal junction, never a
+raw 24 V sensor wire. The master and RTC stay on 3.3 V.
 
-## Three-resistor sensor interface
+## Analog detection
 
-Use **1% tolerance, ¼ W** resistors. No optocoupler is needed for this fixed
-24 V circuit. It does not provide electrical isolation or surge protection.
+The master configures ADC1 for 12-bit readings at 0 dB attenuation, takes nine
+samples every 20 ms and uses their median to reject isolated spikes. There is
+no sensor heap allocation in the sampling loop.
 
-```text
-24 V + ───────────── brown: sensor +V
-  │
-  └── R1 4.7 kΩ ── A ── R2 68 kΩ ── B ───────── GPIO27
-                  │                 │
-                  │                 R3 10 kΩ
-                  │                 │
-               black: OUT           GND
+- Below **40 mV**: hand detected.
+- Above **60 mV**: clear.
+- Between 40 and 60 mV, including the boundaries: retain the last known state.
+  Starting in this band does not establish a state or arm the gesture.
+- A genuine **zero-count** ADC result counts as the low/detected state. The
+  ESP32's calibrated conversion can return about 75 mV for zero counts; applying
+  the 40 mV threshold to that result alone would never detect a grounded input.
+  The dashboard labels this as **below the ADC floor**, not an exact 0 V.
+- Invalid ADC reads and stale samples reset gesture arming. An invalid read is
+  never interpreted as zero or as a hand.
 
-PSU 0 V / PCB GND ── blue: sensor 0 V
-```
+**The ESP32's specified accurate ADC range starts at 100 mV at 0 dB.** The
+requested 40/60 mV boundaries cannot be guaranteed as physical voltage thresholds
+in this clipped region. This implementation is intended to distinguish the
+reported 95 mV clear state from a near-ground hand state. If both return zero
+counts on this particular ESP32, software cannot distinguish them: the gesture
+will remain unarmed instead of triggering at boot. Inspect actual readings
+before relying on it; median filtering cannot recover a clipped signal.
 
-**Only B connects to GPIO27.** A is the black sensor-output node and can be
-around 22–24 V. Sensor brown goes to 24 V; it must not be powered from the
-3.3 V converter. Sensor blue, PSU 0 V, converter output ground and ESP32 GND
-must have a common reference. There is no internal GPIO pull-up in this firmware.
+After homing, with a valid RTC and the release clock running, clear the sensor
+continuously for **500 ms**, then present a hand for **200 ms**. This starts one
+of seven random Struggle patterns and then returns to time. A held hand does
+not repeat. Withdraw it after the animation to rearm. Motion, Stop, faults,
+missing boards and a paused release clock discard gestures. The development
+dashboard also supports gestures while idle and homed.
 
-For an NPN normally-closed sensor:
+This is presence sensing, not a distance measurement or safety interlock.
+A disconnected/grounded signal or sensor power failure can resemble a hand.
 
-| Sensor state | Output transistor | GPIO27 test point B |
-|---|---|---|
-| Clear / no hand | Conducting to ground | Near 0 V: LOW |
-| Hand detected | Open / not conducting | About 2.90 V: HIGH |
+## Install and check
 
-When the output is open, all three resistors form the supply-to-ground chain:
-`24 × 10 / (4.7 + 68 + 10) = 2.90 V`. The 68 kΩ/10 kΩ divider also keeps an
-unexpected 24 V on A to about 3.08 V at B. R1 dissipates about 0.123 W while
-the sensor conducts. These values are for the existing **regulated 24 V**
-supply, not an arbitrary supply anywhere in the sensor's 10–30 V rating.
-
-The two-resistor sketch has the correct series/shunt divider arrangement when
-its signal lead is the actual sensor OUT. On this confirmed NPN unit, OUT is
-black and 0 V is blue. A bare NPN output sinks current or opens; it does not
-provide a guaranteed +24 V source. With only 68 kΩ to OUT and 10 kΩ to ground,
-there is no defined source for HIGH when OUT opens. Retain R1 instead of relying
-on unspecified internal leakage. A PNP or driven 24 V output needs a separately
-reviewed circuit and polarity; it must not be inferred from a similar model name.
-
-Before connecting B to the ESP32, power the converter and sensor, measure the
-converter output at 3.3 V, and measure B relative to PCB GND. With no hand B
-must be below 0.8 V. With a hand at the intended distance B should be 2.6–3.2 V.
-Check the actual unit is **NPN NC**, not PNP or NO. Do not connect B if these
-checks fail. Do not swap brown and blue to change the switching polarity.
-
-## Detection and commissioning
-
-This Heschen is a **diffuse-reflection infrared switch**, not a laser/LiDAR
-distance sensor. It supplies one detected/clear signal; it cannot report
-centimetres, hand direction, or gesture shape. The supplier advertises adjustable
-10–30 cm detection, calibrated with a white paper target. Set it using an actual
-hand at the intended distance. The adjustment changes range/sensitivity, not the
-beam angle. A narrow, unobstructed optical path still has to be checked on the clock.
-
-Heschen's product title and wiring photograph identify NPN NC; its description
-also contains an inconsistent NO entry. Follow the **actual NC label and the
-voltage check above**. Test that nearby metal and all stationary clock poses
-leave the sensor clear. Reflections, target colour and mechanical obstructions
-can affect this sensor; an optical sensing-angle specification was not provided.
-
-The firmware reads GPIO27 every 20 ms. After homing, and while the release clock
-is running, clear the sensor continuously for **500 ms**, then present a hand
-for **200 ms**. With a valid RTC this starts one of **seven random Struggle patterns**,
-with openings limited to 20 mm, then returns to the time display. A held hand cannot repeat
-it. Withdraw the hand after the animation to rearm. Hand arrivals during motion,
-Stop, faults, lost board connection, or a paused release clock are discarded.
-The development master also supports gestures while idle and homed.
-
-Both local dashboards show **Hand sensor: Detected / Clear**, including before
-homing and during movement. `/api/status` includes `proximity.rawHigh`,
-`detected`, `armed`, `ready`, and the GPIO number. `distanceCm` is always null.
-`rangeMaxCm: 30` is the nominal rating, not a measured distance.
-
-Fit the complete resistor interface, including R3, before running this firmware.
-Without the adapter, GPIO27 is floating and its reading is not meaningful.
-An open/broken NC output wire or sensor power loss can look like a detected
-hand. The single signal cannot distinguish those faults. Clear-first arming
-prevents a trigger on startup with a missing sensor when the adapter is intact,
-but a wire failure after
-arming could trigger once. This is a gesture input, not a safety interlock.
-
-Only flash the master for this change:
+Only the master application and its dashboard need installation for this sensor
+change. Pull the prepared images while online, connect the PC to Timiac Wi-Fi,
+then run:
 
 ```powershell
-git pull
-python run.py master_release --port COM10
+python run.py master_release --host 192.168.4.1
 ```
 
-The ESP-12/Octopus wiring and firmware stay unchanged. The new default is
-`TIMIAC_PROXIMITY_PIN=27`, `TIMIAC_PROXIMITY_ACTIVE_HIGH=1`. Disable gestures with
-`TIMIAC_PROXIMITY_ENABLED=0` and rebuild if the new sensor is not yet connected.
+Alternatively use Full update for the complete prepared package, or install the
+master over USB with `python run.py master_release --port COM5` using its real
+COM port. Keep the GPIO34 signal connected when checking the readings.
 
-Sources: [Heschen product and wiring photographs](https://heschen.com/products/heschen-e3f-ds30b2),
-[ESP32 electrical characteristics](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf),
-[DS3231 datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/ds3231.pdf).
+The local dashboard shows **Clear / Detected** plus estimated millivolts or
+**below N mV**. Presence remains visible before homing and during movement;
+that does not mean the gesture is eligible to run.
+
+`/api/status` and downloaded diagnostics expose:
+
+| `proximity` field | Meaning |
+|---|---|
+| `pin`, `inputMode` | 34, analog |
+| `rawAdc` | Median 12-bit ADC count; zero means clipped near ground |
+| `millivolts` | Calibrated estimate; null for zero-count, stale or invalid reads |
+| `adcFloorMv` | Calibration's voltage for zero counts; not a precise minimum measurable voltage |
+| `belowRange` | Reading is below the specified accurate range |
+| `detectBelowMv`, `clearAboveMv` | 40 and 60 |
+| `detected` | Presence state, or null when unknown/stale/invalid |
+| `armed`, `ready`, `triggers` | Gesture eligibility and accepted trigger count |
+
+The legacy digital field `rawHigh` and distance fields stay null. Defaults are
+`TIMIAC_PROXIMITY_PIN=34`, `TIMIAC_PROXIMITY_DETECT_MV=40` and
+`TIMIAC_PROXIMITY_CLEAR_MV=60`. Disable gestures with
+`TIMIAC_PROXIMITY_ENABLED=0` and rebuild when required.
+
+Source: [Espressif ADC channels, limitations and measurement range](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/api-reference/peripherals/adc.html).

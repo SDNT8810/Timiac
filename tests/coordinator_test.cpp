@@ -48,10 +48,15 @@ struct TestRtc {
   unsigned minute() const { return m; }
 } rtcTime;
 #include "../ESP_Timiac/src/release_clock.h"
-constexpr unsigned INPUT = 0, HIGH = 1;
-unsigned photoelectricLevel = HIGH;
-void pinMode(unsigned pin, unsigned mode) { assert(pin == 27 && mode == INPUT); }
-unsigned digitalRead(unsigned pin) { assert(pin == 27); return photoelectricLevel; }
+constexpr unsigned INPUT = 0;
+unsigned photoelectricLevel = 0; // Zero ADC counts; calibrated API alone returns 75 mV.
+bool photoelectricAdcValid = true;
+void pinMode(unsigned pin, unsigned mode) { assert(pin == 34 && mode == INPUT); }
+bool configureProximityAdc(unsigned pin) { assert(pin == 34); return true; }
+bool readProximityAdc(uint16_t& raw, uint32_t& mv, uint32_t& floor) {
+  raw = photoelectricLevel * 4; mv = photoelectricLevel ? photoelectricLevel : 75; floor = 75;
+  return photoelectricAdcValid;
+}
 #include "../ESP_Timiac/src/proximity_sensor.h"
 
 void resetMaster() {
@@ -64,7 +69,7 @@ void resetMaster() {
   motionSpeedPercent = timiac::defaultSpeedPercent;
   rtcValid = true; rtcTime.h = 13; rtcTime.m = 45;
   lastStruggleVariant = timiac::struggleVariantCount;
-  configureProximity(); proximityTriggers = 0; photoelectricLevel = HIGH;
+  configureProximity(); proximityTriggers = 0; photoelectricLevel = 0; photoelectricAdcValid = true;
   firmwareUpdating = firmwareUpdateCancel = false;
   cloudInFlight = false; networkFreeHeap = 128U * 1024; networkLargestBlock = 64U * 1024;
   WiFi.state = WL_CONNECTED;
@@ -659,34 +664,49 @@ int main() {
       proximityTick();
     }
   };
-  sensorFor(HIGH, 600); assert(!proximityTriggers && !proximityGate.armed); // Held at boot / unconnected.
-  sensorFor(0, 600); assert(proximityGate.armed);
+  sensorFor(50, 600); assert(!proximityTriggers && !proximityGate.armed && !proximityKnown); // Boot in deadband.
+  sensorFor(0, 600); assert(!proximityTriggers && !proximityGate.armed); // Held at boot / grounded.
   {
     DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
-    assert(status["type"] == "photoelectric" && status["pin"] == 27);
-    assert(status["detected"] == false && status["rawHigh"] == false && status["distanceCm"].isNull());
+    assert(status["rawAdc"] == 0 && status["millivolts"].isNull() && status["adcFloorMv"] == 75);
+    assert(status["belowRange"] == true && status["detected"] == true);
   }
-  sensorFor(HIGH, 180); assert(!proximityTriggers);
-  sensorFor(HIGH, 60); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Struggle);
+  sensorFor(95, 600); assert(proximityGate.armed);
+  {
+    DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
+    assert(status["type"] == "photoelectric" && status["pin"] == 34 && status["inputMode"] == "analog");
+    assert(status["detected"] == false && status["rawHigh"].isNull() && status["distanceCm"].isNull());
+    assert(status["millivolts"] == 95 && status["rawAdc"] == 380 && status["belowRange"] == true);
+    assert(status["detectBelowMv"] == 40 && status["clearAboveMv"] == 60);
+  }
+  sensorFor(50, 300); sensorFor(40, 300); sensorFor(60, 300);
+  assert(proximityGate.armed && !proximityDetected && !proximityTriggers); // Hysteresis, including exact boundaries.
+  sensorFor(39, 180); assert(!proximityTriggers);
+  sensorFor(0, 60); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Struggle);
   assert(program.struggleVariant < 7 && program.targetMinute == 13 * 60 + 45 && releaseClockEnabled);
-  sensorFor(HIGH, 600); assert(proximityTriggers == 1 && !proximityGate.armed);
+  sensorFor(50, 600); assert(proximityTriggers == 1 && !proximityGate.armed && proximityDetected);
   program = Program(); operation = Operation();
-  sensorFor(HIGH, 600); assert(proximityTriggers == 1); // No replay after movement.
-  sensorFor(0, 600); assert(proximityGate.armed);
-  stopRequested = true; sensorFor(HIGH, 300); assert(proximityTriggers == 1 && !proximityGate.armed);
-  stopRequested = false; sensorFor(HIGH, 300); assert(proximityTriggers == 1);
-  boards[0].homed = 0; sensorFor(0, 600); assert(!proximityGate.armed);
+  sensorFor(0, 600); assert(proximityTriggers == 1); // No replay after movement.
+  sensorFor(95, 600); assert(proximityGate.armed);
+  photoelectricAdcValid = false; sensorFor(0, 300);
+  assert(!proximityGate.armed && !proximityKnown && proximityTriggers == 1);
+  { DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>()); assert(status["detected"].isNull() && status["rawAdc"].isNull()); }
+  photoelectricAdcValid = true; sensorFor(0, 300); assert(!proximityGate.armed && proximityTriggers == 1);
+  sensorFor(95, 600); assert(proximityGate.armed);
+  stopRequested = true; sensorFor(0, 300); assert(proximityTriggers == 1 && !proximityGate.armed);
+  stopRequested = false; sensorFor(0, 300); assert(proximityTriggers == 1);
+  boards[0].homed = 0; sensorFor(95, 600); assert(!proximityGate.armed);
   {
     DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
     assert(status["detected"] == false && status["ready"] == false); // Still visible before home.
     hostNow += 1001; status.clear(); writeProximityStatus(status.to<JsonObject>());
     assert(status["detected"].isNull()); // Stale samples do not look current.
   }
-  boards[0].homed = 63; sensorFor(0, 600); assert(proximityGate.armed);
-  hostNow += 1000; sensorFor(HIGH, 20); assert(!proximityGate.armed && proximityTriggers == 1);
-  sensorFor(HIGH, 300); assert(proximityTriggers == 1); // Long sampling gap discards pending eligibility.
+  boards[0].homed = 63; sensorFor(95, 600); assert(proximityGate.armed);
+  hostNow += 1000; sensorFor(0, 20); assert(!proximityGate.armed && proximityTriggers == 1);
+  sensorFor(0, 300); assert(proximityTriggers == 1); // Long sampling gap discards pending eligibility.
 #if TIMIAC_RELEASE
-  releaseClockEnabled = false; sensorFor(0, 600); assert(!proximityGate.armed); // Manual Home/paused clock.
+  releaseClockEnabled = false; sensorFor(95, 600); assert(!proximityGate.armed); // Manual Home/paused clock.
 #endif
   resetMaster(); connectBoard(0); connectBoard(1);
   firmwareUpdating = true;

@@ -1,6 +1,6 @@
 #pragma once
 
-// Master uses I2C for the DS3231 and GPIO27 for the divided photoelectric input.
+// Master uses I2C for the DS3231 and ADC1 GPIO34 for the divided sensor input.
 // Existing ultrasonic PCB traces on GPIO18/19 are left unused.
 // It has no Octopus UART connection.
 // ESP-12S bridges alone initialize the Octopus control UART.
@@ -22,6 +22,7 @@
 #include <freertos/semphr.h>
 #include "../../shared/network_memory.h"
 #include "tls_memory.h"
+#include "proximity_adc.h"
 
 inline bool platformNetworkMemoryReady(bool secure) {
   // ESP.getFreeHeap()/getMaxAllocHeap() also count 32-bit-only instruction

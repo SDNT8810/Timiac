@@ -1,6 +1,13 @@
 # Local hotspot, cloud and USB firmware updates
 
-For the prepared **2026-10-20.2 Octopus confirmation recovery fix**, update the
+For the **2026-10-20.3 GPIO34 analog sensor update**, move only the old GPIO27
+signal wire to GPIO34, retaining all installed resistors and ground connections.
+Pull while online, then connect the PC to Timiac Wi-Fi and run
+`python run.py master_release --host 192.168.4.1` to install the prepared master
+and dashboard without compiling. See [sensor commissioning](master-wiring.md)
+for the 40/60 mV thresholds, ADC-floor handling and actual-reading check.
+
+For the included **2026-10-20.2 Octopus confirmation recovery fix**, update the
 complete package so the master and both ESP bridges are installed before the
 Octopus SD updates. In the Timiac folder run `git pull` while online, then
 connect the PC to **Timiac** Wi-Fi and run:

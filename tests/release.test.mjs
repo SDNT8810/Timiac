@@ -247,6 +247,23 @@ test('photoelectric sensor reports detected/clear without inventing distance, ev
   assert.equal(element('sensor-status').textContent, 'Disconnected');
 });
 
+test('analog hand sensor shows estimated voltage and ADC-floor readings without inventing precision', async () => {
+  const { context, element, state } = dashboard(); await flush();
+  state.proximity = { type: 'photoelectric', inputMode: 'analog', enabled: true, ready: true, armed: true,
+    detected: false, millivolts: 95, rawAdc: 80, adcFloorMv: 75, belowRange: true };
+  vm.runInContext('render()', context);
+  assert.equal(element('sensor-distance').textContent, 'Clear');
+  assert.equal(element('sensor-status').textContent, 'Armed · ~95 mV');
+  Object.assign(state.proximity, { detected: true, armed: false, rawAdc: 0, millivolts: null });
+  vm.runInContext('render()', context);
+  assert.equal(element('sensor-status').textContent, 'Withdraw hand · below 75 mV');
+  Object.assign(state.proximity, { detected: null, rawAdc: null, millivolts: null, adcFloorMv: null });
+  vm.runInContext('render()', context);
+  assert.equal(element('sensor-status').textContent, 'Waiting for input');
+  vm.runInContext('connected = false; render()', context);
+  assert.equal(element('sensor-status').textContent, 'Disconnected');
+});
+
 test('release Wi-Fi form claims control, submits credentials and clears the password', async () => {
   const { element, calls } = dashboard(); await flush();
   element('wifi-ssid').value = 'Phone hotspot'; element('wifi-password').value = 'test-password';

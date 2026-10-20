@@ -18,6 +18,11 @@ export function renderClockReadouts(state, connected, element) {
   element('sensor-status').textContent = !connected ? 'Disconnected' : !sensor?.enabled ? 'Disabled'
     : digital ? !hasPresence ? 'Waiting for input' : near ? 'Withdraw hand' : sensor.armed ? 'Armed' : sensor.ready ? 'Clearing…' : 'Gesture paused'
     : !hasDistance ? 'No valid echo' : near ? 'Near' : 'Clear';
+  if (connected && sensor?.enabled && sensor.inputMode === 'analog') {
+    const voltage = Number.isFinite(sensor.millivolts) ? `~${sensor.millivolts} mV`
+      : sensor.rawAdc === 0 && Number.isFinite(sensor.adcFloorMv) ? `below ${sensor.adcFloorMv} mV` : '';
+    if (voltage) element('sensor-status').textContent += ` · ${voltage}`;
+  }
   const time = connected && state?.clock?.valid ? state.clock.localTime : '';
   element('clock').textContent = time ? time.slice(11) : '--:--:--';
   element('date').textContent = time ? new Date(time).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'Clock time unavailable';
