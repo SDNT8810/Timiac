@@ -47,8 +47,8 @@ int main(int argc, char** argv) {
   for (unsigned now = 0; now < 2000; now += 20) assert(!gate.sample(true, true, now)); // No boot trigger, even unplugged/HIGH.
   assert(!gate.armed);
   assert(!gate.sample(false, true, 2000));
-  assert(!gate.sample(false, true, 2499)); assert(!gate.armed);
-  assert(!gate.sample(false, true, 2500)); assert(gate.armed);
+  assert(!gate.sample(false, true, 2299)); assert(!gate.armed);
+  assert(!gate.sample(false, true, 2300)); assert(gate.armed);
   assert(!gate.sample(true, true, 2520)); assert(!gate.sample(true, true, 2559));
   assert(gate.sample(true, true, 2560));
   for (unsigned now = 2740; now < 4000; now += 20) assert(!gate.sample(true, true, now)); // Held hand cannot repeat.
@@ -66,6 +66,14 @@ int main(int argc, char** argv) {
   assert(!gate.sample(false, true, 0xfffffff0U + 500U)); assert(gate.armed); // millis wrap.
   assert(!gate.sample(true, true, 0xfffffff0U + 520U));
   assert(gate.sample(true, true, 0xfffffff0U + 720U));
+  ProximityObservation observed;
+  assert(!observed.sample(false, 0));
+  assert(!observed.sample(true, 20)); assert(observed.sample(true, 60));
+  assert(!observed.sample(false, 100)); assert(!observed.sample(false, 399));
+  assert(observed.reported); // 299 ms clear is not enough.
+  assert(!observed.sample(false, 400)); assert(!observed.reported);
+  assert(!observed.sample(true, 420)); assert(observed.sample(true, 460));
+  assert(!observed.sample(true, 1000)); // One count for a held hand.
   for (Preset preset : {Preset::Struggle, Preset::Hour, Preset::Curious}) {
     unsigned moves = 0, dwells = 0;
     float positions[12] = {};

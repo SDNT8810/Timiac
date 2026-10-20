@@ -2,7 +2,7 @@
 #include <stdint.h>
 
 namespace timiac {
-constexpr uint32_t proximityClearMs = 500, proximityDetectMs = 40;
+constexpr uint32_t proximityClearMs = 300, proximityDetectMs = 40;
 struct ProximityGate {
   bool armed = false, initialized = false, detected = false;
   uint32_t changedAt = 0;

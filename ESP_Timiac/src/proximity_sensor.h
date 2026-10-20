@@ -114,7 +114,7 @@ void proximityTick() {
     recordProximityEvent(!error, error ? String(error) : String());
   } else if (arrival) {
     const char* reason = proximityMotionBlockReason();
-    recordProximityEvent(false, reason ? reason : "Sensor was not armed; clear it for 500 ms first");
+    recordProximityEvent(false, reason ? reason : "Sensor was not armed; clear it for 300 ms first");
   }
 #endif
 }
@@ -143,7 +143,7 @@ void writeProximityStatus(JsonObject doc) {
   doc["samplingGaps"] = proximitySamplingGaps;
   if (proximitySampled) doc["sampleAgeMs"] = uint32_t(millis() - proximitySampleAt); else doc["sampleAgeMs"] = nullptr;
   doc["blockedReason"] = blocked ? blocked : !fresh ? "Sensor reading is unavailable or stale" :
-    !proximityKnown ? "Reading is between thresholds" : !proximityGate.armed ? "Withdraw hand and clear the sensor for 500 ms" : "";
+    !proximityKnown ? "Reading is between thresholds" : !proximityGate.armed ? "Withdraw hand and clear the sensor for 300 ms" : "";
   doc["ignored"] = proximityIgnored; doc["lastOutcome"] = proximityLastOutcome;
   doc["lastReason"] = proximityLastReason; doc["lastEventTime"] = proximityLastEventTime;
   doc["lastTriggerTime"] = proximityLastTriggerTime; doc["lastTriggerId"] = proximityLastTriggerId;
