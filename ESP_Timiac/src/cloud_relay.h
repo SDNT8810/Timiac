@@ -7,6 +7,7 @@ String cloudState = "disabled", cloudError, cloudLastAction, cloudLastActionId, 
 uint32_t cloudLastSync = 0, cloudLastSuccess = 0, cloudLastActionAt = 0;
 uint32_t cloudRetryMs = 5000, cloudFailures = 0, cloudLastDuration = 0;
 uint32_t cloudStartFreeHeap = 0, cloudStartLargestBlock = 0;
+uint32_t cloudUplinkGeneration = 0;
 
 bool cloudEnabled() {
   return strlen(TIMIAC_CLOUD_URL) && strlen(TIMIAC_CLOUD_DEVICE_ID) && strlen(TIMIAC_CLOUD_DEVICE_KEY);
@@ -19,6 +20,7 @@ void writeCloudStatus(JsonObject cloud) {
   cloud["inFlight"] = cloudInFlight; cloud["failures"] = cloudFailures; cloud["durationMs"] = cloudLastDuration;
   cloud["workerStackFree"] = cloudTask ? uxTaskGetStackHighWaterMark(cloudTask) : 0;
   cloud["startFreeHeap"] = cloudStartFreeHeap; cloud["startLargestFreeBlock"] = cloudStartLargestBlock;
+  writeTlsMemoryStatus(cloud);
 }
 void cloudSnapshot(JsonObject snapshot) {
   snapshot["session"] = bootId; snapshot["machineReady"] = bothHealthy();
@@ -145,6 +147,9 @@ void cloudTick() {
   if (WiFi.status() != WL_CONNECTED || wifiPending || networkChanging) {
     cloudState = "waiting for router"; return;
   }
+  if (cloudUplinkGeneration != uplinkGeneration) {
+    cloudUplinkGeneration = uplinkGeneration; cloudLastSync = 0; cloudRetryMs = 5000;
+  }
   if (cloudInFlight || (cloudLastSync && !timiac::expired(millis(), cloudLastSync, cloudRetryMs))) return;
   // One TLS session at a time. Keep reporting while an Octopus writes/reboots,
   // after its image download has released the TLS buffers.
@@ -160,7 +165,7 @@ void cloudTick() {
       delete exchange; cloudError = "Waiting for cloud status memory"; return;
     }
   } // Free the 12 KB snapshot BEFORE the worker can start its handshake.
-  cloudStartFreeHeap = ESP.getFreeHeap(); cloudStartLargestBlock = ESP.getMaxAllocHeap();
+  cloudStartFreeHeap = platformFreeNetworkHeap(); cloudStartLargestBlock = platformLargestNetworkBlock();
   if (!platformNetworkMemoryReady(true)) { delete exchange; cloudError = "Waiting for cloud connection memory"; return; }
   if (xQueueSend(cloudRequests, &exchange, 0) != pdTRUE) { delete exchange; return; }
   cloudInFlight = true; cloudLastSync = millis();

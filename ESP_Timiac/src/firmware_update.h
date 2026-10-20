@@ -22,8 +22,9 @@ void checkpointFirmwareUpdate(bool force = false) {
   checkpoint["sha256"] = firmwareUpdate.sha256; checkpoint["revision"] = firmwareUpdate.revision;
   checkpoint["boot"] = bootId; checkpoint["at"] = millis();
 #if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
-  checkpoint["freeHeap"] = ESP.getFreeHeap(); checkpoint["minFreeHeap"] = ESP.getMinFreeHeap();
-  checkpoint["largestFreeBlock"] = ESP.getMaxAllocHeap();
+  checkpoint["freeHeap"] = platformFreeNetworkHeap();
+  checkpoint["minFreeHeap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  checkpoint["largestFreeBlock"] = platformLargestNetworkBlock();
   checkpoint["utc"] = time(nullptr);
 #endif
   String text; serializeJson(checkpoint, text); persistUpdateCheckpoint(text);

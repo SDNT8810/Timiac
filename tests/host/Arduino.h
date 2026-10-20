@@ -40,7 +40,9 @@ static uint32_t hostNow = 1000;
 inline uint32_t millis() { return hostNow; }
 inline uint32_t platformRandom() { return 1; }
 struct IPAddress {
-  IPAddress(unsigned = 0, unsigned = 0, unsigned = 0, unsigned = 0) {}
+  unsigned octets[4];
+  IPAddress(unsigned a = 0, unsigned b = 0, unsigned c = 0, unsigned d = 0) : octets{a,b,c,d} {}
+  unsigned operator[](unsigned index) const { return octets[index]; }
   String toString() const { return "192.168.4.2"; }
 };
 struct WiFiClient {
@@ -74,7 +76,19 @@ struct WiFiServer {
   WiFiClient accept() { return WiFiClient(); }
 };
 constexpr unsigned WL_CONNECTED = 3;
-static struct Wifi { unsigned status() const { return WL_CONNECTED; } void reconnect() {} } WiFi;
+static struct Wifi {
+  unsigned state = WL_CONNECTED, attempts = 0, disconnects = 0;
+  bool autoReconnect = true;
+  String ssid, password;
+  IPAddress ip{192,168,1,4};
+  unsigned status() const { return state; }
+  void reconnect() {}
+  void setAutoReconnect(bool enabled) { autoReconnect = enabled; }
+  void disconnect(bool radioOff, bool erase) { assert(!radioOff && !erase); ++disconnects; state = 6; }
+  void begin(const char* name, const char* key) { ssid = name; password = key; ++attempts; }
+  IPAddress localIP() const { return ip; }
+  int RSSI() const { return -64; }
+} WiFi;
 struct File {
   std::vector<uint8_t> bytes; size_t cursor = 0;
   void close() {} String readStringUntil(char) { return ""; }

@@ -46,8 +46,9 @@ void writeReliabilityStatus(JsonObject status) {
   status["diagnosticWriteFailures"] = diagnosticWriteFailures;
   writeSavedUpdateCheckpoint(status.createNestedObject("lastUpdate"));
 #if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
-  status["freeHeap"] = ESP.getFreeHeap(); status["minFreeHeap"] = ESP.getMinFreeHeap();
-  status["largestFreeBlock"] = ESP.getMaxAllocHeap();
+  status["freeHeap"] = platformFreeNetworkHeap();
+  status["minFreeHeap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  status["largestFreeBlock"] = platformLargestNetworkBlock();
   status["resetReason"] = unsigned(esp_reset_reason());
 #endif
 }

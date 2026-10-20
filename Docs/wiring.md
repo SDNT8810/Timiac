@@ -10,6 +10,9 @@ Keep the current **24 V to 3.3 V converter**, ESP32 and DS3231 connections.
 The new Heschen E3F-DS30B2 is **NPN normally closed**, powered from **24 V**.
 It connects to **GPIO27** through the documented **4.7 kΩ / 68 kΩ / 10 kΩ**
 resistor interface. Brown = 24 V; blue = common ground; black = resistor input.
+The 68 kΩ resistor is in series from black OUT to GPIO27; 10 kΩ goes from
+GPIO27 to ground. The 4.7 kΩ pull-up goes from +24 V to black OUT and must
+remain on the confirmed NPN NC sensor. See the [enlarged sensor diagram](master-sensor-wiring.svg).
 Only the low-voltage divider junction connects to GPIO27. Do not connect black
 straight to an ESP32 pin. Remove/unplug the old ultrasonic module and leave
 its GPIO18 and GPIO19 PCB traces unused.

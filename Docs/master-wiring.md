@@ -4,6 +4,16 @@
 
 [Open the scalable wiring diagram](master-wiring.svg) or [PNG image](master-wiring.png).
 
+**2026-10-20 review: the installed sensor is confirmed NPN normally closed.**
+The divider is **black OUT → 68 kΩ → GPIO27**, with **10 kΩ from GPIO27 to
+ground**. The additional **4.7 kΩ from +24 V to black OUT** is the pull-up that
+establishes HIGH when the NPN output opens. Keep all three resistors.
+
+![Enlarged sensor wiring with every junction labeled](master-sensor-wiring.svg)
+
+[Sensor-only PNG](master-sensor-wiring.png). Brown is +24 V, **blue is ground**,
+and **black is OUT**. Drawing colors must not be used to exchange these functions.
+
 Keep the existing **24 V input and 24 V → 3.3 V converter**. The ESP32 and DS3231
 stay on 3.3 V. Remove/unplug the ultrasonic module. Its existing **GPIO18 and
 GPIO19 PCB traces stay unused**; the new sensor uses a new wire to **GPIO27**.
@@ -63,6 +73,14 @@ When the output is open, all three resistors form the supply-to-ground chain:
 unexpected 24 V on A to about 3.08 V at B. R1 dissipates about 0.123 W while
 the sensor conducts. These values are for the existing **regulated 24 V**
 supply, not an arbitrary supply anywhere in the sensor's 10–30 V rating.
+
+The two-resistor sketch has the correct series/shunt divider arrangement when
+its signal lead is the actual sensor OUT. On this confirmed NPN unit, OUT is
+black and 0 V is blue. A bare NPN output sinks current or opens; it does not
+provide a guaranteed +24 V source. With only 68 kΩ to OUT and 10 kΩ to ground,
+there is no defined source for HIGH when OUT opens. Retain R1 instead of relying
+on unspecified internal leakage. A PNP or driven 24 V output needs a separately
+reviewed circuit and polarity; it must not be inferred from a similar model name.
 
 Before connecting B to the ESP32, power the converter and sensor, measure the
 converter output at 3.3 V, and measure B relative to PCB GND. With no hand B

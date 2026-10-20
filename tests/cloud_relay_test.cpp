@@ -43,6 +43,8 @@ struct {
 } ESP;
 unsigned uxTaskGetStackHighWaterMark(std::thread*) { return 6000; }
 bool wifiPending = false, otaOpenInFlight = false;
+uint32_t uplinkGeneration = 0;
+void writeTlsMemoryStatus(JsonObject) {}
 void* otaDownloadSession = nullptr;
 struct { String state = "idle"; } firmwareUpdate;
 struct DateTime {};
@@ -81,12 +83,22 @@ int main() {
   assert(cloudInFlight && handoffs == 1 && !liveSnapshotPool);
   CloudExchange* exchange = nullptr;
   assert(xQueueReceive(cloudRequests, &exchange, 0) == pdTRUE);
-  DynamicJsonDocument payload(12288);
-  assert(!deserializeJson(payload, exchange->payload));
-  assert(payload["status"]["software"] == kSoftwareRevision && payload["status"]["ota"]["state"] == "waiting for bridge");
+  {
+    DynamicJsonDocument payload(12288);
+    assert(!deserializeJson(payload, exchange->payload));
+    assert(payload["status"]["software"] == kSoftwareRevision && payload["status"]["ota"]["state"] == "waiting for bridge");
+  }
   exchange->response = "{\"action\":null}";
   assert(xQueueSend(cloudResponses, &exchange, 0) == pdTRUE);
   cloudTick(); assert(!cloudInFlight && cloudState == "connected" && handoffs == 1);
+  // A recovered router bypasses the previous 60-second cloud failure backoff.
+  WiFi.state = 6; cloudTick(); assert(cloudState == "waiting for router");
+  cloudRetryMs = 60000; cloudLastSync = millis(); ++uplinkGeneration;
+  WiFi.state = WL_CONNECTED; cloudTick(); assert(cloudInFlight && handoffs == 2);
+  assert(xQueueReceive(cloudRequests, &exchange, 0) == pdTRUE);
+  exchange->error = "TLS memory unavailable";
+  assert(xQueueSend(cloudResponses, &exchange, 0) == pdTRUE);
+  cloudTick(); assert(!cloudInFlight && cloudFailures == 1);
   hostBeforeQueueSend = nullptr; vQueueDelete(cloudRequests); vQueueDelete(cloudResponses);
   std::cout << "Cloud relay: fragmented/low RAM deferred, snapshot pool freed before TLS, firmware/cloud exclusion and board progress reporting passed\n";
 }

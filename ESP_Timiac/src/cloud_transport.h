@@ -59,7 +59,7 @@ void cloudTransportTask(void*) {
 bool configureCloudTransport() {
   cloudRequests = xQueueCreate(1, sizeof(CloudExchange*));
   cloudResponses = xQueueCreate(1, sizeof(CloudExchange*));
-  if (cloudRequests && cloudResponses && xTaskCreatePinnedToCore(cloudTransportTask, "timiac-cloud", 12288, nullptr, 1, &cloudTask, 0) == pdPASS) return true;
+  if (cloudRequests && cloudResponses && xTaskCreatePinnedToCore(cloudTransportTask, "timiac-cloud", 10240, nullptr, 1, &cloudTask, 0) == pdPASS) return true;
   if (cloudRequests) vQueueDelete(cloudRequests);
   if (cloudResponses) vQueueDelete(cloudResponses);
   cloudRequests = cloudResponses = nullptr;

@@ -63,6 +63,7 @@ void setup() {
   bootId = platformChipId() + "-" + String(platformRandom(), HEX);
   WiFi.persistent(false);
 #if TIMIAC_MASTER
+  configureTlsMemory();
   runtimeMutex = xSemaphoreCreateRecursiveMutex();
   configASSERT(runtimeMutex);
   RuntimeLock lock;

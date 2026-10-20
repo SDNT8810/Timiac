@@ -21,9 +21,12 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include "../../shared/network_memory.h"
+#include "tls_memory.h"
 
 inline bool platformNetworkMemoryReady(bool secure) {
-  return timiac::networkMemoryReady(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), secure);
+  // ESP.getFreeHeap()/getMaxAllocHeap() also count 32-bit-only instruction
+  // RAM. TLS and JSON need byte-addressable internal RAM.
+  return timiac::networkMemoryReady(platformFreeNetworkHeap(), platformLargestNetworkBlock(), secure, tlsRecordsReady);
 }
 
 // AsyncTCP HTTP callbacks and Arduino loop() execute in different tasks.

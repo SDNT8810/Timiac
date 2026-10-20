@@ -22,14 +22,19 @@ static uint32_t networkFreeHeap = 128U * 1024, networkLargestBlock = 64U * 1024;
 inline bool platformNetworkMemoryReady(bool secure) {
   return timiac::networkMemoryReady(networkFreeHeap, networkLargestBlock, secure);
 }
+inline uint32_t platformFreeNetworkHeap() { return networkFreeHeap; }
+inline uint32_t platformLargestNetworkBlock() { return networkLargestBlock; }
 WiFiServer listener;
 #include "../ESP_Timiac/src/runtime.h"
 struct Preferences {
   unsigned saved = timiac::defaultSpeedPercent;
   bool writable = true;
+  String savedString;
   bool begin(const char*, bool) { return true; }
   unsigned getUInt(const char*, unsigned) { return saved; }
   size_t putUInt(const char*, unsigned value) { if (!writable) return 0; saved = value; return sizeof(value); }
+  String getString(const char*, const char* fallback) { return savedString.isEmpty() ? String(fallback) : savedString; }
+  size_t putString(const char*, const String& value) { if (!writable) return 0; savedString = value; return value.length(); }
 };
 #include "../ESP_Timiac/src/motion_speed.h"
 #include "../ESP_Timiac/src/uart_bridge.h"
@@ -62,6 +67,7 @@ void resetMaster() {
   configureProximity(); proximityTriggers = 0; photoelectricLevel = HIGH;
   firmwareUpdating = firmwareUpdateCancel = false;
   cloudInFlight = false; networkFreeHeap = 128U * 1024; networkLargestBlock = 64U * 1024;
+  WiFi.state = WL_CONNECTED;
   for (auto& r : receipts) r = Receipt();
   for (unsigned b = 0; b < 2; ++b) { peers[b] = Peer(); boards[b] = RemoteBoard(); lastBoardBoot[b] = ""; }
 }

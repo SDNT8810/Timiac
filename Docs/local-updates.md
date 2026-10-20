@@ -1,5 +1,24 @@
 # Local hotspot, cloud and USB firmware updates
 
+For the prepared **2026-10-20.1 cloud-memory/Wi-Fi recovery fix**, update only
+the master and its dashboard. In the Timiac folder run `git pull` while online,
+then connect the PC to **Timiac** Wi-Fi and run:
+
+```powershell
+python local_update.py --check
+python run.py master_release --host 192.168.4.1
+```
+
+To deliberately update every firmware in the prepared package instead, use
+`python local_update.py --target all --host 192.168.4.1`. Both Octopus cards
+must remain installed. Each selected image is the repository's verified image;
+only the master/dashboard images changed for 2026-10-20.1.
+
+On the router LAN use the master's current address, for example
+`--host 192.168.1.4`. If `--check` reports missing local-update support or the
+master cannot be reached over Wi-Fi, install by USB with
+`python run.py master_release --port COM5`, using its actual COM port.
+
 Release **2026-10-19.2** adds local updates alongside the existing cloud and USB
 methods. Clock animations, motor settings, wiring, saved router credentials and
 the hardware identity remain unchanged. Local and cloud updates share the same

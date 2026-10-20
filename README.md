@@ -1,3 +1,5 @@
+**Cloud/Wi-Fi recovery (2026-10-20.1):** the master reserves both TLS record buffers and checks byte-addressable RAM, preventing repeated cloud handshakes from depending on fragmented heap blocks. Saved router credentials retry indefinitely after an outage, including while a program is paused; cloud sync retries immediately when Wi-Fi returns. Update only the master and its dashboard; see [recovery and installation](Docs/cloud-recovery.md).
+
 **Current package (2026-10-15.5):** remote firmware updates now support the master, both ESP bridges and both Octopus boards through `control.timiac.it`. Install all five images once and leave FAT32 microSD cards in the Octopus boards; see [remote update setup](Docs/remote-updates.md). Future updates can use `python remote_update.py --target all`. The seven 0–20 mm [Struggle patterns](Docs/struggle-patterns.md), Next Hour, current and [master wiring](Docs/master-wiring.md) are unchanged.
 
 

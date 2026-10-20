@@ -49,7 +49,7 @@ void otaDownloadTask(void*) {
 bool configureOtaDownloadTransport() {
   otaOpenRequests = xQueueCreate(1, sizeof(OtaDownloadSession*));
   otaOpenResponses = xQueueCreate(1, sizeof(OtaDownloadSession*));
-  if (otaOpenRequests && otaOpenResponses && xTaskCreatePinnedToCore(otaDownloadTask, "timiac-ota", 12288, nullptr, 1, &otaOpenTask, 0) == pdPASS) return true;
+  if (otaOpenRequests && otaOpenResponses && xTaskCreatePinnedToCore(otaDownloadTask, "timiac-ota", 10240, nullptr, 1, &otaOpenTask, 0) == pdPASS) return true;
   if (otaOpenRequests) vQueueDelete(otaOpenRequests);
   if (otaOpenResponses) vQueueDelete(otaOpenResponses);
   otaOpenRequests = otaOpenResponses = nullptr; return false;
