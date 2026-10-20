@@ -100,6 +100,7 @@ void writeBoard(JsonObject board, unsigned index) {
   board["homingMode"] = online ? "switch" : "unknown";
   board["firmware"] = TIMIAC_MASTER ? remote.firmware : (uart.session.identity ? timiac::machineId : "");
   board["software"] = TIMIAC_MASTER ? remote.software.c_str() : kSoftwareRevision;
+  board["octopusSoftware"] = TIMIAC_MASTER ? remote.octopusSoftware : uart.octopusSoftware;
   board["otaSupported"] = TIMIAC_MASTER ? remote.otaSupported : true;
   board["sdOtaSupported"] = TIMIAC_MASTER ? remote.sdOtaSupported : uart.sdOtaSupported;
   board["updating"] = TIMIAC_MASTER ? remote.updating : firmwareUpdating;
@@ -296,6 +297,7 @@ void processPeer(Peer& p, const String& line) {
     board.firmware = doc["board"]["firmware"] | "";
     board.otaSupported = doc["board"]["otaSupported"] | false;
     board.sdOtaSupported = doc["board"]["sdOtaSupported"] | false;
+    board.octopusSoftware = doc["board"]["octopusSoftware"] | "";
     board.updating = doc["board"]["updating"] | false;
     board.diagnostic = doc["board"]["diagnostic"] | "";
     board.uptime = doc["board"]["bridgeUptimeMs"] | 0U;

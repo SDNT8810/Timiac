@@ -3,6 +3,7 @@
 #undef main
 #include "../shared/firmware_transfer.h"
 struct {
+  String id = "11111111-1111-4111-8111-111111111111", target = "octopus1", sha256 = std::string(64, 'a');
   String kind = "octopus", revision = kSoftwareRevision, state = "waiting for UART", phase, error;
   uint32_t size = 1024, done = 0, crc32 = 123;
 } firmwareUpdate;
@@ -12,9 +13,12 @@ String otaHex(const uint8_t* bytes, size_t size) {
   while (size--) { text += digits[*bytes >> 4]; text += digits[*bytes++ & 15]; }
   return text;
 }
-struct { void remove(const char*) {} } LittleFS;
+#include "host/ReceiptStore.h"
+ReceiptStore LittleFS;
+bool otaHashValid(const String& value) { return value.length() == 64; }
 String otaSerialLine;
 #include "../ESP_Timiac/src/ota_octopus.h"
+#include "../ESP_Timiac/src/ota_octopus_receipt.h"
 
 String lastCommand() {
   const auto start = Serial.sent.rfind("M997 "); assert(start != std::string::npos);
@@ -43,9 +47,44 @@ int main() {
   hostNow += 5000; firmwareUpdateCancel = true; octopusTick();
   assert(octopusPhase == 4 && firmwareUpdating && Serial.sent == atActivation);
   Serial.feed("start\n"); octopusTick(); assert(octopusPhase == 5);
+  // Reproduce the real log: SD activation succeeded, then its ESP reset and
+  // previously restored the unrelated older ESP-app receipt. The exact SD job
+  // must survive this reset without sending another activation command.
+  assert(LittleFS.exists("/octopus-receipt.json"));
+  const String expectedId = firmwareUpdate.id, expectedHash = firmwareUpdate.sha256;
+  bootId = "bridge-after-SD-activation";
+  firmwareUpdate.id = "old-ESP-app-job"; firmwareUpdate.sha256 = "";
+  firmwareUpdate.kind = "app"; firmwareUpdate.state = "idle";
+  firmwareUpdating = false; octopusPhase = 0;
+  assert(restoreOctopusUpdateReceipt());
+  assert(firmwareUpdate.id == expectedId && firmwareUpdate.sha256 == expectedHash && firmwareUpdate.kind == "octopus");
+  assert(octopusPhase == 5 && firmwareUpdating && !firmwareUpdateCancel);
+  assert(Serial.sent == atActivation);
   uart.session.state = timiac::OctopusSession::State::Ready; uart.session.identity = true; uart.session.lastRx = hostNow;
-  uart.sdOtaSupported = true; uart.octopusSoftware = kSoftwareRevision;
+  uart.sdOtaSupported = true; uart.octopusSoftware = "older-installed-version";
+  octopusTick(); assert(firmwareUpdating && octopusPhase == 5);
+  uart.octopusSoftware = kSoftwareRevision;
   octopusTick(); assert(firmwareUpdate.state == "complete" && !firmwareUpdating);
+  bootId = "bridge-after-completed-receipt";
+  firmwareUpdate.id = "";
+  assert(restoreOctopusUpdateReceipt() && firmwareUpdate.id == expectedId);
+  assert(firmwareUpdate.state == "complete" && !firmwareUpdating && !octopusPhase);
+  const std::string committed = LittleFS.files["/octopus-receipt.json"];
+  LittleFS.writeLimit = 20; assert(!saveOctopusUpdateReceipt(false));
+  assert(LittleFS.files["/octopus-receipt.json"] == committed);
+  LittleFS.writeLimit = std::numeric_limits<size_t>::max();
+  LittleFS.files["/octopus-receipt.json"] = "{broken";
+  assert(!restoreOctopusUpdateReceipt());
+  LittleFS.files["/octopus-receipt.json"] = committed;
+  // A failed durable write must prevent P3 entirely, while retaining the old
+  // committed receipt even if its replacement could not be renamed.
+  firmwareUpdating = true; firmwareUpdateCancel = false; octopusPhase = 3;
+  LittleFS.failRename = true;
+  Serial.feed("TIMIAC_FW_VERIFIED\n"); octopusTick();
+  assert(firmwareUpdate.state == "failed" && !firmwareUpdating && !octopusPhase);
+  assert(firmwareUpdate.error.indexOf("no activation requested") >= 0 && lastCommand() == "M997 P4");
+  assert(LittleFS.files["/octopus-receipt.json"] == committed);
+  LittleFS.failRename = false;
   firmwareUpdating = true; firmwareUpdateCancel = false; octopusPhase = 2;
   Serial.feed("Error:SD card unavailable\n"); octopusTick();
   assert(firmwareUpdate.state == "failed" && firmwareUpdate.error == "Error:SD card unavailable");
@@ -62,5 +101,5 @@ int main() {
   for (unsigned retry = 0; retry < 5; ++retry) { hostNow += 10001; octopusTick(); }
   assert(!octopusPhase && !firmwareUpdating && firmwareUpdate.state == "failed");
   assert(firmwareUpdate.error.indexOf("writing SD block at 512/1024; last reply: ok") >= 0);
-  std::cout << "Production Octopus sender: stale ACKs, exact block CRC/offsets, safe retries and one-shot activation with delayed reboot passed\n";
+  std::cout << "Production Octopus sender: SD verification, one-shot activation, durable receipt across bridge reset, wrong-version rejection and interrupted receipt writes passed\n";
 }

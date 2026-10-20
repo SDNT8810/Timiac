@@ -18,6 +18,7 @@ String otaHex(const uint8_t* bytes, size_t size) {
   return text;
 }
 struct { void remove(const char*) {} } LittleFS;
+bool saveOctopusUpdateReceipt(bool) { return true; }
 String otaSerialLine;
 #include "../ESP_Timiac/src/ota_octopus.h"
 

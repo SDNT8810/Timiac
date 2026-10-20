@@ -44,7 +44,8 @@ void writeFirmwareUpdateStatus(JsonObject doc) {
   doc["state"] = firmwareUpdate.state; doc["error"] = firmwareUpdate.error;
   doc["phase"] = firmwareUpdating ? firmwareUpdate.phase : "";
   doc["size"] = firmwareUpdate.size; doc["done"] = firmwareUpdate.done;
-  doc["sha256"] = firmwareUpdate.sha256; doc["revision"] = kSoftwareRevision;
+  doc["sha256"] = firmwareUpdate.sha256;
+  doc["revision"] = firmwareUpdate.revision.isEmpty() ? String(kSoftwareRevision) : firmwareUpdate.revision;
 }
 void otaFailed(const String& reason) {
   otaWriter.abort(); firmwareUpdate.state = "failed"; firmwareUpdate.error = reason;

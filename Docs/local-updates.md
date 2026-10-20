@@ -1,18 +1,20 @@
 # Local hotspot, cloud and USB firmware updates
 
-For the prepared **2026-10-20.1 cloud-memory/Wi-Fi recovery fix**, update only
-the master and its dashboard. In the Timiac folder run `git pull` while online,
-then connect the PC to **Timiac** Wi-Fi and run:
+For the prepared **2026-10-20.2 Octopus confirmation recovery fix**, update the
+complete package so the master and both ESP bridges are installed before the
+Octopus SD updates. In the Timiac folder run `git pull` while online, then
+connect the PC to **Timiac** Wi-Fi and run:
 
 ```powershell
 python local_update.py --check
-python run.py master_release --host 192.168.4.1
+python local_update.py --target all --host 192.168.4.1
 ```
 
-To deliberately update every firmware in the prepared package instead, use
-`python local_update.py --target all --host 192.168.4.1`. Both Octopus cards
-must remain installed. Each selected image is the repository's verified image;
-only the master/dashboard images changed for 2026-10-20.1.
+Both Octopus cards must remain installed and power must stay connected. The
+command uses the prepared, checksum-verified images without compiling them.
+Version 2026-10-20.2 also includes the earlier cloud-memory/Wi-Fi recovery fix.
+See [the SD update diagnosis](sd-update-timeout.md) for the activation/receipt
+failure observed on October 20.
 
 On the router LAN use the master's current address, for example
 `--host 192.168.1.4`. If `--check` reports missing local-update support or the

@@ -3,6 +3,7 @@ File octopusImage;
 unsigned octopusPhase = 0, octopusRetries = 0;
 uint32_t octopusSent = 0, octopusOffset = 0, octopusNextOffset = 0;
 String octopusCommand;
+bool saveOctopusUpdateReceipt(bool complete);
 // The installed STM32 Arduino UART has a 64-byte ring (63 usable bytes).
 // Hex-encoding a 64-byte block produces a >150-character command. A single
 // 16-byte block including its offset/CRC/newline fits even while Marlin's main
@@ -56,6 +57,7 @@ void octopusTick() {
   if (firmwareUpdateCancel && octopusPhase != 4 && octopusPhase != 5) { octopusAbort(); otaFailed("Update cancelled before activation"); return; }
   if (octopusPhase == 5) {
     if (uart.online() && uart.sdOtaSupported && uart.octopusSoftware == firmwareUpdate.revision) {
+      if (!saveOctopusUpdateReceipt(true)) logMessage("Octopus verified; completed receipt write failed, pending receipt retained");
       firmwareUpdate.state = "complete"; firmwareUpdating = false; octopusPhase = 0;
       LittleFS.remove("/octopus.update");
     } else if (uint32_t(millis() - octopusSent) > 120000) { octopusPhase = 0; otaFailed("Octopus did not reconnect with the expected firmware; check its SD card"); }
@@ -89,6 +91,9 @@ void octopusTick() {
     if ((octopusPhase == 1 || octopusPhase == 2) && line == "TIMIAC_FW_OFFSET " + String(octopusNextOffset)) {
       octopusOffset = octopusNextOffset; firmwareUpdate.done = octopusOffset; octopusNext();
     } else if (octopusPhase == 3 && line == "TIMIAC_FW_VERIFIED") {
+      if (!saveOctopusUpdateReceipt(false)) {
+        octopusAbort(); otaFailed("Cannot save Octopus activation receipt; no activation requested"); return;
+      }
       octopusPhase = 4; firmwareUpdate.state = "activating";
       firmwareUpdate.phase = "Activating verified SD image"; octopusSend("M997 P3");
     } else if (octopusPhase == 4 && line == "TIMIAC_FW_REBOOT") {

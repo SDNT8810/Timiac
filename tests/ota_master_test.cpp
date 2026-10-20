@@ -90,7 +90,13 @@ void setBridgeInfo(bool complete) {
   DynamicJsonDocument info(1024);
   info["role"] = "esp1"; info["nonce"] = "nonce"; info["busy"] = false;
   info["boot"] = complete ? "new-bridge-boot" : "old-bridge-boot"; info["software"] = kSoftwareRevision;
-  if (complete) { info["id"] = firmwareUpdate.id; info["sha256"] = firmwareUpdate.sha256; info["state"] = "complete"; }
+  if (complete) {
+    info["id"] = firmwareUpdate.id; info["sha256"] = firmwareUpdate.sha256; info["state"] = "complete";
+    info["target"] = firmwareUpdate.target; info["kind"] = firmwareUpdate.kind;
+    info["size"] = info["done"] = firmwareUpdate.size; info["revision"] = firmwareUpdate.revision;
+    info["machine"] = timiac::machineId; info["sdOtaSupported"] = true;
+    info["octopusSoftware"] = firmwareUpdate.revision;
+  }
   bridgeInfo = ""; serializeJson(info, bridgeInfo);
 }
 void waitOpening() {
@@ -193,6 +199,36 @@ int main() {
       assert(firmwareUpdate.state == "complete" && !firmwareUpdating);
     }
   }
+  // A durable exact SD receipt survives a bridge reboot and a lost HTTP ACK.
+  // Reconnecting, an old running revision or another job is never sufficient.
+  auto pendingOctopus = [] {
+    firmwareUpdate = FirmwareUpdateStatus(); firmwareUpdate.id = "88888888-8888-4888-8888-888888888888";
+    firmwareUpdate.kind = "octopus"; firmwareUpdate.target = "octopus1";
+    firmwareUpdate.sha256 = std::string(64, 'a'); firmwareUpdate.revision = kSoftwareRevision;
+    firmwareUpdate.size = firmwareUpdate.done = 2048; firmwareUpdate.state = "waiting for bridge";
+    firmwareUpdating = true; otaBridgeNumber = 1; otaBridgeBoot = "old-bridge-boot";
+    otaBridgeAccepted = false; otaSince = hostNow; otaPollAt = 0; setBridgeInfo(true);
+  };
+  pendingOctopus(); hostNow += 1500; firmwareUpdateTick();
+  assert(firmwareUpdate.state == "complete" && !firmwareUpdating && !otaBridgeAccepted);
+  for (const char* field : {"sha256", "target", "kind", "revision", "role", "machine", "size", "done"}) {
+    pendingOctopus();
+    DynamicJsonDocument info(1536); assert(!deserializeJson(info, bridgeInfo));
+    if (!strcmp(field, "size") || !strcmp(field, "done")) info[field] = 1024;
+    else info[field] = "wrong";
+    bridgeInfo = ""; serializeJson(info, bridgeInfo); hostNow += 1500; firmwareUpdateTick();
+    assert(firmwareUpdate.state == "failed" && !firmwareUpdating && firmwareUpdate.error.indexOf("does not match") >= 0);
+  }
+  pendingOctopus();
+  DynamicJsonDocument info(1536); assert(!deserializeJson(info, bridgeInfo));
+  info["octopusSoftware"] = "older-build"; bridgeInfo = ""; serializeJson(info, bridgeInfo);
+  hostNow += 1500; firmwareUpdateTick(); assert(firmwareUpdating && firmwareUpdate.state == "waiting for bridge");
+  setBridgeInfo(true); hostNow += 1500; firmwareUpdateTick(); assert(firmwareUpdate.state == "complete" && !firmwareUpdating);
+  pendingOctopus(); assert(!deserializeJson(info, bridgeInfo));
+  info["id"] = "previous-esp-job"; bridgeInfo = ""; serializeJson(info, bridgeInfo);
+  hostNow += 1500; firmwareUpdateTick();
+  assert(firmwareUpdate.state == "failed" && !firmwareUpdating && firmwareUpdate.error.indexOf("without this Octopus update receipt") >= 0);
+
   { std::lock_guard<std::mutex> lock(otaOpenRequests->mutex); otaOpenRequests->closed = true; otaOpenRequests->ready.notify_all(); }
   otaOpenTask->join(); delete otaOpenTask; vQueueDelete(otaOpenRequests); vQueueDelete(otaOpenResponses);
   std::cout << "Production master OTA: stalled TLS, heartbeat service, short TCP writes, exact reboot receipts and safe cancellation passed\n";

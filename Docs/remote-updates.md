@@ -154,9 +154,17 @@ Open the remote dashboard, sign in, and press **Full update** under Firmware upd
 
 Timiac installs the master ESP32 application first, then ESP bridge 1, ESP bridge 2,
 Octopus 1, Octopus 2 and finally the local dashboard (six steps across five boards).
+The displayed step number identifies the current step, not how many components
+have succeeded. A failure at step 4 (Octopus 1) leaves steps 5 and 6 unattempted.
 The master receives updater fixes before forwarding the other images. See
 [USB recovery and persistent diagnostic logs](ota-recovery.md) if the old master
 is offline or cannot finish its own update.
+
+From 2026-10-20.2, bridges persist the exact Octopus activation receipt before
+requesting a reboot. A bridge restart during confirmation resumes checking the
+running Octopus revision without requesting activation again. The master checks
+the full receipt and the reported running revision before advancing. See
+[Octopus SD update failures](sd-update-timeout.md) for the October 20 diagnosis.
 
 ### Faster build preparation — 2026-10-20
 

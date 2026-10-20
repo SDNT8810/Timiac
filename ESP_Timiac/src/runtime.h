@@ -67,7 +67,7 @@ struct RemoteBoard {
   timiac::EndstopReport endstops;
   timiac::DriverReport drivers;
   String firmware;
-  String diagnostic, software;
+  String diagnostic, software, octopusSoftware;
   uint32_t uptime = 0;
   bool driverReportAvailable = false;
   bool trajectorySupported = false;

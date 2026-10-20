@@ -1,4 +1,44 @@
-# SD update ACK timeout - 2026-10-19.5
+# Octopus SD update failures
+
+## Lost confirmation after activation - 2026-10-20.2
+
+The October 20 diagnostic attached after the failed Full update shows Octopus 1
+reached **127,820 / 127,820 bytes**, restarted and reported an October 20 build
+instead of its previous October 17 build. ESP1 then restarted with a new boot ID
+and `External System` reset reason. The master waited for the SD job's receipt,
+but the bridge restored its older ESP application receipt. The gateway eventually
+reported no progress; the master's later error was a five-minute confirmation
+timeout. The trace supports activation followed by lost confirmation, rather
+than an SD write failing at that byte count. It does not establish what caused
+the external bridge reset. Full update stopped at Octopus 1, so Octopus 2 and
+the dashboard were not attempted in that sequence.
+
+Version **2026-10-20.2** saves the exact Octopus job, target, SHA-256, size, CRC,
+revision and machine identity in the bridge's LittleFS after full SD readback
+verification, before sending the one-shot activation command. After a bridge
+reset it restores the pending confirmation and waits for the running Octopus
+to identify the expected revision. Recovery never replays activation. If the
+receipt cannot be saved, activation is not requested.
+
+The master accepts completion only for the matching job and image metadata,
+with a fresh report of SD update support and the expected running Octopus
+revision. A changed bridge boot with a missing receipt reports that specific
+condition instead of waiting for the generic five-minute timeout. Diagnostics
+now expose each board's `octopusSoftware` separately from the ESP software.
+
+Host tests reproduce a bridge reset between activation and confirmation, lost
+HTTP acknowledgements, incorrect receipt metadata, old running firmware,
+truncated/invalid receipt files and failed atomic receipt replacement. All
+firmware roles are built before release; a physical update still needs to be
+verified on the clock.
+
+Install the new master and both bridges before retrying the SD updates. Full
+update and `python local_update.py --target all` already use this order. Keep
+power and both cards connected; formatting the cards is not indicated by this
+trace. Start a new update job: an expired job's missing old receipt cannot be
+reconstructed by installing this fix.
+
+## SD block ACK timeout - 2026-10-19.5
 
 The October 19 cloud record shows successful ESP1 and ESP2 updates to
 2026-10-19.4, followed by `Octopus SD acknowledgement timed out (phase 2)` on

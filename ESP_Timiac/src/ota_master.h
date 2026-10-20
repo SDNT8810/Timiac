@@ -248,8 +248,22 @@ __attribute__((noinline)) void firmwareUpdateTick() {
       } else if (info["id"].as<String>() == firmwareUpdate.id) {
         firmwareUpdate.phase = info["state"] | "waiting for bridge";
         if (info["state"] == "failed") { otaMasterFailed(info["error"] | "Octopus update failed"); return; }
-        if (otaBridgeAccepted && info["state"] == "complete") { otaCloseDownload(); firmwareUpdate.state = "complete"; firmwareUpdating = false; }
+        if (info["state"] == "complete") {
+          const bool receipt = info["sha256"].as<String>() == firmwareUpdate.sha256 &&
+            info["target"].as<String>() == firmwareUpdate.target && info["kind"] == "octopus" &&
+            info["size"].as<uint32_t>() == firmwareUpdate.size &&
+            info["done"].as<uint32_t>() == firmwareUpdate.size &&
+            info["revision"].as<String>() == firmwareUpdate.revision &&
+            info["role"].as<String>() == "esp" + String(otaBridgeNumber) &&
+            info["machine"].as<String>() == timiac::machineId;
+          if (!receipt) { otaMasterFailed("Octopus confirmation does not match this update's image and target"); return; }
+          if (info["sdOtaSupported"] == true && info["octopusSoftware"].as<String>() == firmwareUpdate.revision) {
+            otaCloseDownload(); firmwareUpdate.state = "complete"; firmwareUpdating = false;
+          }
+        }
         firmwareUpdate.done = info["done"] | firmwareUpdate.done;
+      } else if (!info["boot"].as<String>().isEmpty() && info["boot"].as<String>() != otaBridgeBoot) {
+        otaMasterFailed("Bridge restarted without this Octopus update receipt; SD may be updated but cannot be confirmed"); return;
       }
     }
     if (firmwareUpdating && uint32_t(millis() - otaSince) > 300000) otaMasterFailed("Board did not confirm its firmware within five minutes");

@@ -6,6 +6,7 @@ bool otaReceiving = false;
 uint32_t otaConnectionAt = 0, otaRestartAt = 0;
 void otaNewNonce() { otaNonce = bootId + "-" + String(platformRandom(), HEX); }
 #include "ota_octopus.h"
+#include "ota_octopus_receipt.h"
 void otaReply(unsigned code, const String& body) {
   otaConnection.print("HTTP/1.1 " + String(code) + (code == 200 ? " OK\r\n" : " Error\r\n"));
   otaConnection.print("Content-Type: application/json\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: " + String(body.length()) + "\r\n\r\n");
@@ -40,6 +41,11 @@ void otaAccept() {
   }
   if (firmwareUpdating || uart.job || operation.barrier.active() || (octopus && !uart.sdOtaSupported)) {
     otaReply(409, "{\"error\":\"Board busy or initial Octopus SD update missing\"}"); return;
+  }
+  // A newer authenticated job supersedes the previous Octopus receipt. In
+  // particular, an ESP application reboot must restore its own new receipt.
+  if (LittleFS.exists("/octopus-receipt.json") && !LittleFS.remove("/octopus-receipt.json")) {
+    otaReply(507, "{\"error\":\"Cannot clear the previous Octopus update receipt\"}"); return;
   }
   firmwareUpdate = FirmwareUpdateStatus(); firmwareUpdate.id = id; firmwareUpdate.target = target;
   firmwareUpdate.kind = kind; firmwareUpdate.sha256 = hash; firmwareUpdate.revision = revision;
@@ -78,6 +84,7 @@ void configureFirmwareUpdate() {
       }
       file.close();
     }
+    restoreOctopusUpdateReceipt();
   }
   otaNewNonce(); otaListener.begin();
 }
