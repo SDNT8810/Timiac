@@ -37,6 +37,7 @@ void cloudSnapshot(JsonObject snapshot) {
     event["boot"] = bootId; event["sequence"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
   }
   writeFirmwareUpdateStatus(snapshot.createNestedObject("ota"));
+  writeProximityStatus(snapshot.createNestedObject("proximity"));
   JsonObject clock = snapshot.createNestedObject("clock");
   writeRtcStatus(clock); writeNtpStatus(clock);
   clock["automatic"] = bool(TIMIAC_RELEASE); clock["running"] = releaseClockEnabled;

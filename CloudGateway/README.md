@@ -101,6 +101,27 @@ the deployed Worker.
 
 ## Online status
 
+The Hand sensor panel requires master firmware **2026-10-20.4** or later. It
+shows GPIO34 presence, ADC counts/voltage, whether the gesture is armed and
+the current reason motion is blocked. A zero-count input is labeled below
+the ADC floor rather than displayed as an exact zero voltage.
+
+Last sensor Struggle and last hand event retain the master's local RTC time
+(or an explicitly labeled age if RTC time is invalid), accepted/ignored
+counts and the reason a hand arrival did not start Struggle. A sensor-triggered
+program ID links the last accepted event to its running/completed/faulted state;
+manually requested Struggles do not increment the sensor counter. Event history
+is retained between five-second reports, so a hand can be withdrawn before the
+next cloud poll. Counters and the panel history reset with the master. Diagnostic
+downloads retain bounded persistent `Hand sensor:` events across restarts.
+
+Ignored arrivals are debounced for 200 ms and counted once per held hand; a
+500 ms clear interval permits another event. Identical ignored-event log writes
+are limited to one per 30 seconds. Live history still updates for each event.
+ADC samples themselves are not written to flash. Offline masters or failed
+browser refreshes clear live presence/arming while keeping last-report history
+explicitly labeled. Viewing this panel never queues motion or flash commands.
+
 The public page remains available when the ESP32 is unplugged. After 30 seconds
 without a hardware status, it reports **Master is offline** and disables
 commands. After flashing, connect the master to its internet router; its first

@@ -1,5 +1,10 @@
 # Local hotspot, cloud and USB firmware updates
 
+**2026-10-20.4** adds the Hand sensor panel at control.timiac.it, last trigger
+times, ignored-event reasons and persistent sensor diagnostic entries. Install
+the prepared master and dashboard with the command below, or use Full update.
+The GPIO34 wiring and 40/60 mV sensing introduced in 2026-10-20.3 remain the same.
+
 For the **2026-10-20.3 GPIO34 analog sensor update**, move only the old GPIO27
 signal wire to GPIO34, retaining all installed resistors and ground connections.
 Pull while online, then connect the PC to Timiac Wi-Fi and run

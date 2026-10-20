@@ -17,6 +17,16 @@
     <p id="connection">Reading Timiac...</p>
     <div class="time"><strong id="clock">--:--:--</strong><span id="date"></span><span id="clock-mode"></span></div>
     <div class="boards"><article><small>OCTOPUS 1</small><strong id="board-a">Unknown</strong></article><article><small>OCTOPUS 2</small><strong id="board-b">Unknown</strong></article></div>
+    <section class="sensor-panel" aria-labelledby="sensor-title">
+      <div class="sensor-heading"><h2 id="sensor-title">Hand sensor</h2><strong id="sensor-presence" class="sensor-badge" role="status">Waiting for a reading</strong></div>
+      <p id="sensor-reading">Reading sensor...</p>
+      <p id="sensor-eligibility"></p>
+      <dl class="sensor-history">
+        <dt>Last sensor Struggle</dt><dd id="sensor-last-trigger">None since master restart</dd>
+        <dt>Last hand event</dt><dd id="sensor-last-event" role="status">No hand events yet</dd>
+      </dl>
+      <p id="sensor-counts"></p><p id="sensor-sync" class="sensor-note"></p>
+    </section>
     <div class="actions">
       <button data-action="open">Open</button><button data-action="close">Close</button>
       <button data-action="show-time">Show time</button><button data-action="next-five">Next 5 minutes</button>

@@ -21,4 +21,20 @@ struct ProximityGate {
     return false;
   }
 };
+// Observe one debounced hand arrival even when motion is blocked. A held hand
+// produces one event; only a continuous clear interval permits another.
+struct ProximityObservation {
+  bool initialized = false, present = false, reported = false;
+  uint32_t changedAt = 0;
+  void reset() { initialized = present = reported = false; changedAt = 0; }
+  void samplingGap() { initialized = false; } // Retain the held-hand latch.
+  bool sample(bool detected, uint32_t now) {
+    if (!initialized || detected != present) { present = detected; changedAt = now; initialized = true; }
+    if (!present && uint32_t(now - changedAt) >= proximityClearMs) reported = false;
+    if (present && !reported && uint32_t(now - changedAt) >= proximityDetectMs) {
+      reported = true; return true;
+    }
+    return false;
+  }
+};
 }

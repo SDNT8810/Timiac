@@ -79,7 +79,7 @@ void logMessage(const String& message) {
   entry.id = ++logSequence; entry.at = millis(); entry.text = message.substring(0, 180);
   if (message.startsWith("FAULT:") || message.indexOf(" link lost:") >= 0 ||
       message.indexOf("boot reason:") >= 0 || message.startsWith("Bridge packet rejected:") ||
-      message.startsWith("Firmware update failed:")) persistDiagnostic(entry.text);
+      message.startsWith("Firmware update failed:") || message.startsWith("Hand sensor:")) persistDiagnostic(entry.text);
   if (!TIMIAC_MASTER && peers[0].paired && !peers[0].outbox.pending()) {
     StaticJsonDocument<512> doc; doc["type"] = "log"; doc["text"] = entry.text; sendPeer(peers[0], doc);
   }

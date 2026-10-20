@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
 async function dashboard({ active = false, supported = true, uploadError = false, statusPatch = {}, online = true, queued = 0, fullUpdate = null, update = null } = {}) {
-  const nodes = new Map(), requests = [], listeners = {};
+  const nodes = new Map(), requests = [], listeners = {}, network = { fail: false };
+  let refresh;
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', hidden: false, disabled: false, files: [],
       classList: { classes: new Set(), toggle(name, active) { if (active) this.classes.add(name); else this.classes.delete(name); }, contains(name) { return this.classes.has(name); } }, click() { if (!this.disabled) return this.onclick?.(); } });
@@ -21,17 +22,76 @@ async function dashboard({ active = false, supported = true, uploadError = false
     requests.push({ path, options });
     if (path === '/api/session') return Response.json({ username: 'Andrea' });
     if (path === '/api/config') return Response.json({ deviceId: 'clock-01' });
-    if (path.endsWith('/status')) return Response.json(status);
+    if (path.endsWith('/status')) { if (network.fail) throw new Error('Connection interrupted'); return Response.json(status); }
     if (path.endsWith('/firmware')) return uploadError ? Response.json({ error: 'Wrong board image' }, { status: 400 }) : Response.json({ id: 'image', revision: '2026-10-15.5' });
     if (path.endsWith('/updates')) return Response.json({ id: 'job', state: 'queued' });
     return Response.json({});
   };
   runInNewContext(readFileSync(new URL('../public/app.js', import.meta.url), 'utf8'), {
-    document, fetch, setInterval: () => 1, clearInterval() {}, sessionStorage: { removeItem() {} },
+    document, fetch, setInterval: fn => { refresh = fn; return 1; }, clearInterval() {}, sessionStorage: { removeItem() {} },
   });
   await new Promise(resolve => setImmediate(resolve));
-  return { node, buttons, listeners, requests };
+  return { node, buttons, listeners, requests, status, network, refresh: () => refresh() };
 }
+
+test('remote sensor shows voltage, arming, retained trigger time and a brief ignored hand event', async () => {
+  const f = await dashboard({ statusPatch: { proximity: { enabled: true, pin: 34, detected: false, armed: true, ready: true,
+    millivolts: 95, rawAdc: 80, blockedReason: '', triggers: 2, ignored: 1,
+    lastTriggerTime: '2026-10-20T17:31:42', lastTriggerAgeMs: 12000, lastTriggerId: 'sensor-gesture',
+    lastOutcome: 'ignored', lastReason: 'Motion or a program is busy', lastEventTime: '2026-10-20T17:31:50' },
+    program: { id: 'sensor-gesture', state: 'running' } } });
+  assert.equal(f.node('sensor-presence').textContent, 'Clear');
+  assert.match(f.node('sensor-reading').textContent, /GPIO34.*95 mV.*ADC 80/);
+  assert.match(f.node('sensor-last-trigger').textContent, /2026-10-20 17:31:42.*Struggle running/);
+  assert.match(f.node('sensor-last-event').textContent, /2026-10-20 17:31:50.*Ignored: Motion or a program is busy/);
+  assert.match(f.node('sensor-counts').textContent, /2 Struggle triggers.*1 ignored hand event since master restart/);
+  assert.match(f.node('sensor-eligibility').textContent, /Armed/);
+  Object.assign(f.status.status.proximity, { detected: true, armed: false, millivolts: null, rawAdc: 0, adcFloorMv: 75,
+    blockedReason: 'Withdraw hand and clear the sensor for 500 ms' });
+  await f.refresh();
+  assert.equal(f.node('sensor-presence').textContent, 'Hand detected');
+  assert.match(f.node('sensor-reading').textContent, /below 75 mV.*ADC 0/);
+  assert.match(f.node('sensor-eligibility').textContent, /Withdraw hand/);
+  assert.match(f.node('sensor-last-trigger').textContent, /17:31:42/);
+  assert.equal(f.requests.some(r => r.path.endsWith('/actions')), false); // Readout never commands motion.
+});
+
+test('offline and interrupted remote sensor reports clear live indications but retain labeled history', async () => {
+  const f = await dashboard({ statusPatch: { proximity: { enabled: true, pin: 34, detected: false, armed: true,
+    millivolts: 95, rawAdc: 80, triggers: 1, lastTriggerTime: '2026-10-20T17:31:42' } } });
+  f.status.online = false; await f.refresh();
+  assert.equal(f.node('sensor-presence').textContent, 'Master offline');
+  assert.equal(f.node('sensor-presence').classList.contains('armed'), false);
+  assert.equal(f.node('sensor-reading').textContent, 'Live sensor readings unavailable.');
+  assert.match(f.node('sensor-sync').textContent, /last received report/);
+  assert.match(f.node('sensor-last-trigger').textContent, /17:31:42/);
+  f.status.online = true; await f.refresh(); f.network.fail = true; await f.refresh();
+  assert.equal(f.node('sensor-presence').textContent, 'Connection unavailable');
+  assert.equal(f.node('sensor-reading').textContent, 'Live sensor readings unavailable.');
+  assert.match(f.node('sensor-last-trigger').textContent, /17:31:42/);
+});
+
+test('sensor history resets with the master session and never attributes a manual Struggle to the sensor', async () => {
+  const f = await dashboard({ statusPatch: { proximity: { enabled: true, detected: false, triggers: 1,
+    lastTriggerId: 'sensor-gesture', lastTriggerTime: '2026-10-20T17:31:42' }, program: { id: 'manual-struggle', state: 'running' } } });
+  assert.match(f.node('sensor-last-trigger').textContent, /Struggle accepted/);
+  assert.doesNotMatch(f.node('sensor-last-trigger').textContent, /running/);
+  f.status.status.session = 'new-master-boot';
+  f.status.status.proximity = { enabled: true, pin: 34, detected: null, triggers: 0, ignored: 0, blockedReason: 'Sensor reading is unavailable or stale' };
+  await f.refresh();
+  assert.equal(f.node('sensor-last-trigger').textContent, 'None since master restart');
+  assert.equal(f.node('sensor-presence').textContent, 'Waiting for a reading');
+  assert.match(f.node('sensor-eligibility').textContent, /unavailable or stale/);
+});
+
+test('old firmware and unavailable RTC time produce useful sensor status without inventing a timestamp', async () => {
+  const f = await dashboard();
+  assert.equal(f.node('sensor-presence').textContent, 'Update master firmware');
+  f.status.status.proximity = { enabled: true, pin: 34, detected: true, triggers: 0, ignored: 1,
+    lastOutcome: 'ignored', lastReason: 'Clock time is invalid', lastEventAgeMs: 5000, lastEventTime: '' };
+  await f.refresh();
+  assert.match(f.node('sensor-last-event').textContent, /5s before the last report.*clock time unavailable.*Ignored: Clock time is invalid/);
+});
 test('firmware form uploads the selected board bytes then queues exactly that image', async () => {
   const f = await dashboard(), file = new File([new Uint8Array([1, 2, 3])], 'firmware.bin');
   f.node('firmware-target').value = 'octopus2:octopus'; f.node('firmware-file').files = [file];

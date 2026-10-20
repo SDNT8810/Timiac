@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let config, timer, pendingAction = '', uploadingFirmware = false;
+let config, timer, pendingAction = '', uploadingFirmware = false, lastRemote;
 const localDate = () => {
   const d = new Date(), p = n => String(n).padStart(2, '0');
   return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
@@ -36,7 +36,47 @@ function commandBlockReason(remote) {
   if (!state.machineReady) return state.a?.fault || state.b?.fault || 'Waiting for both motor boards';
   return '';
 }
+function sensorEventTime(time, age) {
+  if (typeof time === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/.test(time)) return time.replace('T', ' ') + ' (clock time)';
+  if (Number.isFinite(age) && age >= 0) return Math.floor(age / 1000) + 's before the last report (clock time unavailable)';
+  return 'Time unavailable';
+}
+function renderSensor(remote, unavailable = false) {
+  const state = remote?.status, sensor = state?.proximity;
+  const live = !unavailable && remote?.online === true;
+  const known = live && sensor?.enabled && typeof sensor.detected === 'boolean';
+  const presence = $('sensor-presence');
+  presence.textContent = unavailable ? 'Connection unavailable' : !live ? 'Master offline' : !sensor ? 'Update master firmware'
+    : !sensor.enabled ? 'Disabled' : !known ? 'Waiting for a reading' : sensor.detected ? 'Hand detected' : 'Clear';
+  presence.classList.toggle('detected', Boolean(known && sensor.detected));
+  presence.classList.toggle('armed', Boolean(known && sensor.armed && !sensor.detected));
+  const voltage = Number.isFinite(sensor?.millivolts) ? '~' + sensor.millivolts + ' mV'
+    : sensor?.rawAdc === 0 && Number.isFinite(sensor.adcFloorMv) ? 'below ' + sensor.adcFloorMv + ' mV' : '';
+  $('sensor-reading').textContent = !live ? 'Live sensor readings unavailable.' : !sensor ? 'Install master firmware 2026-10-20.4 or later to report the sensor here.'
+    : !sensor.enabled ? 'Hand sensing is disabled.' : 'GPIO' + sensor.pin + (voltage ? ' · ' + voltage : ' · No current voltage reading') +
+      (Number.isFinite(sensor.rawAdc) ? ' · ADC ' + sensor.rawAdc : '');
+  $('sensor-eligibility').textContent = !live || !sensor ? '' : sensor.blockedReason ||
+    (known && sensor.armed ? 'Armed — ready to trigger Struggle' : sensor.ready ? 'Clear the sensor to rearm' : 'Gesture paused');
+  const triggers = Number.isInteger(sensor?.triggers) && sensor.triggers >= 0 ? sensor.triggers : null;
+  const ignored = Number.isInteger(sensor?.ignored) && sensor.ignored >= 0 ? sensor.ignored : 0;
+  $('sensor-counts').textContent = triggers === null ? '' : triggers + ' Struggle trigger' + (triggers === 1 ? '' : 's') + ' · ' +
+    ignored + ' ignored hand event' + (ignored === 1 ? '' : 's') + ' since master restart';
+  const program = state?.program;
+  const sameMotion = sensor?.lastTriggerId && program?.id === sensor.lastTriggerId;
+  const motion = sameMotion && program.state === 'running' ? 'Struggle running'
+    : sameMotion && program.state === 'done' ? 'Struggle completed'
+    : sameMotion && program.state === 'faulted' ? 'Struggle stopped: ' + (program.error || 'motion fault')
+    : sameMotion && program.state === 'paused' ? 'Struggle paused' : 'Struggle accepted';
+  $('sensor-last-trigger').textContent = triggers > 0 ? sensorEventTime(sensor.lastTriggerTime, sensor.lastTriggerAgeMs) + ' — ' + motion : 'None since master restart';
+  $('sensor-last-event').textContent = sensor?.lastOutcome === 'triggered' ? sensorEventTime(sensor.lastEventTime, sensor.lastEventAgeMs) + ' — Struggle triggered'
+    : sensor?.lastOutcome === 'ignored' ? sensorEventTime(sensor.lastEventTime, sensor.lastEventAgeMs) + ' — Ignored: ' + (sensor.lastReason || 'gesture was not eligible')
+    : 'No hand events recorded since master restart';
+  $('sensor-sync').textContent = unavailable || !live ? 'History above is from the last received report.'
+    : remote.updatedAt ? 'Last master report: ' + new Date(remote.updatedAt).toLocaleTimeString() + '. Refreshes every 5 seconds; brief triggers stay in the history.'
+    : 'Refreshes every 5 seconds; brief triggers stay in the history.';
+}
 function render(remote) {
+  lastRemote = remote; renderSensor(remote);
   const state = remote.status || {};
   const reason = commandBlockReason(remote);
   const homed = state.a?.homed === 63 && state.b?.homed === 63;
@@ -92,7 +132,7 @@ function render(remote) {
     say('Master disconnected. Commands expire after one minute.', true); pendingAction = '';
   }
 }
-async function refresh() { try { render(await api('/api/devices/' + config.deviceId + '/status')); } catch (error) { say(error.message, true); } }
+async function refresh() { try { render(await api('/api/devices/' + config.deviceId + '/status')); } catch (error) { renderSensor(lastRemote, true); say(error.message, true); } }
 async function queue(type, values = {}) {
   const action = await api('/api/devices/' + config.deviceId + '/actions', { method: 'POST', body: JSON.stringify({ type, ...values }) });
   pendingAction = action.id; say(type + ' queued for the master.'); await refresh();

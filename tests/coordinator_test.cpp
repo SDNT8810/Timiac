@@ -42,6 +42,7 @@ struct Preferences {
 #include "../ESP_Timiac/src/builtin_program.h"
 #include "../ESP_Timiac/src/program_runner.h"
 bool rtcValid = true;
+String rtcText = "2026-10-20T13:45:00";
 struct TestRtc {
   unsigned h = 13, m = 45;
   unsigned hour() const { return h; }
@@ -666,6 +667,9 @@ int main() {
   };
   sensorFor(50, 600); assert(!proximityTriggers && !proximityGate.armed && !proximityKnown); // Boot in deadband.
   sensorFor(0, 600); assert(!proximityTriggers && !proximityGate.armed); // Held at boot / grounded.
+  assert(proximityLastOutcome == "ignored" && proximityLastReason.indexOf("not armed") >= 0 && proximityIgnored == 1);
+  const unsigned ignoredAtBoot = proximityIgnored;
+  sensorFor(0, 600); assert(proximityIgnored == ignoredAtBoot); // One event for a held hand.
   {
     DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
     assert(status["rawAdc"] == 0 && status["millivolts"].isNull() && status["adcFloorMv"] == 75);
@@ -683,8 +687,15 @@ int main() {
   assert(proximityGate.armed && !proximityDetected && !proximityTriggers); // Hysteresis, including exact boundaries.
   sensorFor(39, 180); assert(!proximityTriggers);
   sensorFor(0, 60); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Struggle);
+  assert(proximityLastOutcome == "triggered" && proximityLastReason.isEmpty());
+  assert(proximityLastTriggerTime == rtcText && proximityLastTriggerId == program.id);
+  const String firstSensorMotion = proximityLastTriggerId, firstSensorTime = proximityLastTriggerTime;
+  assert(logs[(logSequence - 1) % 32].text.indexOf("Hand sensor: Struggle triggered") == 0);
   assert(program.struggleVariant < 7 && program.targetMinute == 13 * 60 + 45 && releaseClockEnabled);
   sensorFor(50, 600); assert(proximityTriggers == 1 && !proximityGate.armed && proximityDetected);
+  sensorFor(95, 600); sensorFor(0, 300); // A new arrival during the animation is consumed with its reason.
+  assert(proximityLastOutcome == "ignored" && proximityLastReason == "Motion or a program is busy");
+  assert(proximityLastTriggerId == firstSensorMotion && proximityLastTriggerTime == firstSensorTime);
   program = Program(); operation = Operation();
   sensorFor(0, 600); assert(proximityTriggers == 1); // No replay after movement.
   sensorFor(95, 600); assert(proximityGate.armed);
@@ -694,6 +705,7 @@ int main() {
   photoelectricAdcValid = true; sensorFor(0, 300); assert(!proximityGate.armed && proximityTriggers == 1);
   sensorFor(95, 600); assert(proximityGate.armed);
   stopRequested = true; sensorFor(0, 300); assert(proximityTriggers == 1 && !proximityGate.armed);
+  assert(proximityLastReason == "Stop is active");
   stopRequested = false; sensorFor(0, 300); assert(proximityTriggers == 1);
   boards[0].homed = 0; sensorFor(95, 600); assert(!proximityGate.armed);
   {
@@ -702,12 +714,29 @@ int main() {
     hostNow += 1001; status.clear(); writeProximityStatus(status.to<JsonObject>());
     assert(status["detected"].isNull()); // Stale samples do not look current.
   }
+  sensorFor(0, 300); assert(proximityLastReason == "Arms need homing");
+  const unsigned ignoredBeforeHeld = proximityIgnored;
+  sensorFor(0, 1000); assert(proximityIgnored == ignoredBeforeHeld);
+  assert(proximityLastTriggerId == firstSensorMotion && proximityLastTriggerTime == firstSensorTime);
+  {
+    DynamicJsonDocument status(2048); writeProximityStatus(status.to<JsonObject>());
+    assert(!status.overflowed() && status["lastOutcome"] == "ignored" && status["lastReason"] == "Arms need homing");
+    assert(status["lastTriggerTime"] == rtcText && status["triggers"] == 1 && status["lastTriggerAgeMs"].as<unsigned>() > 0);
+  }
+  sensorFor(95, 600);
   boards[0].homed = 63; sensorFor(95, 600); assert(proximityGate.armed);
   hostNow += 1000; sensorFor(0, 20); assert(!proximityGate.armed && proximityTriggers == 1);
   sensorFor(0, 300); assert(proximityTriggers == 1); // Long sampling gap discards pending eligibility.
 #if TIMIAC_RELEASE
   releaseClockEnabled = false; sensorFor(95, 600); assert(!proximityGate.armed); // Manual Home/paused clock.
+  sensorFor(0, 300); assert(proximityLastReason == "Clock paused; start the clock first" && proximityTriggers == 1);
 #endif
+  resetMaster(); connectBoard(0); connectBoard(1); releaseClockEnabled = true;
+  rtcValid = false; sensorFor(95, 600); sensorFor(0, 300);
+  assert(proximityLastReason == "Clock time is invalid" && proximityLastEventTime.isEmpty());
+  resetMaster(); connectBoard(0); releaseClockEnabled = true;
+  sensorFor(95, 600); sensorFor(0, 300);
+  assert(proximityLastReason == "Motor boards are not ready" && !proximityTriggers);
   resetMaster(); connectBoard(0); connectBoard(1);
   firmwareUpdating = true;
   assert(!bothHealthy() && !boardsHealthy(1));

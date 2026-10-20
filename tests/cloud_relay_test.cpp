@@ -64,6 +64,11 @@ void observeHandoff(HostQueue* queue) {
 }
 int main() {
   resetMaster(); connectBoard(0); connectBoard(1);
+  // A brief real sensor arrival, refused before homing, must survive in the
+  // cloud payload even after the hand has been withdrawn between polls.
+  photoelectricLevel = 0; proximityTick(); hostNow += 220; proximityTick();
+  assert(proximityLastOutcome == "ignored" && proximityLastReason == "Arms need homing");
+  photoelectricLevel = 95; hostNow += 20; proximityTick();
   cloudRequests = xQueueCreate(1, sizeof(CloudExchange*));
   cloudResponses = xQueueCreate(1, sizeof(CloudExchange*));
   hostBeforeQueueSend = observeHandoff;
@@ -87,6 +92,10 @@ int main() {
     DynamicJsonDocument payload(12288);
     assert(!deserializeJson(payload, exchange->payload));
     assert(payload["status"]["software"] == kSoftwareRevision && payload["status"]["ota"]["state"] == "waiting for bridge");
+    const auto sensor = payload["status"]["proximity"];
+    assert(sensor["pin"] == 34 && sensor["detected"] == false && sensor["millivolts"] == 95);
+    assert(sensor["lastOutcome"] == "ignored" && sensor["lastReason"] == "Arms need homing");
+    assert(sensor["lastEventTime"] == rtcText && sensor["ignored"] == 1 && !payload.overflowed());
   }
   exchange->response = "{\"action\":null}";
   assert(xQueueSend(cloudResponses, &exchange, 0) == pdTRUE);

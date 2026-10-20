@@ -1,6 +1,6 @@
 # Master board: analog hand sensor on GPIO34
 
-**Firmware 2026-10-20.3: move only the existing sensor signal wire from GPIO27
+**Firmware 2026-10-20.3 and later: move only the existing sensor signal wire from GPIO27
 to GPIO34. Leave every resistor, sensor power connection and ground unchanged.**
 GPIO34 is an input-only ADC1 pin, so analog sensing can run with the master's
 Wi-Fi AP and router connection active. GPIO27 belongs to ADC2 and cannot provide
@@ -87,6 +87,16 @@ The local dashboard shows **Clear / Detected** plus estimated millivolts or
 **below N mV**. Presence remains visible before homing and during movement;
 that does not mean the gesture is eligible to run.
 
+From **2026-10-20.4**, control.timiac.it also shows these readings, the current
+blocked reason, last accepted Struggle time and last ignored hand event with
+its reason. Sensor-triggered motion is identified separately from a manually
+requested Struggle. Times use the clock's RTC and are labeled unavailable when
+it is invalid. Counters/history in the panel cover the current master boot;
+bounded `Hand sensor:` events also enter the persistent downloadable diagnostic
+log. Held hands are recorded once, and repeated identical ignored log writes
+are rate-limited. A brief accepted/ignored event remains visible after the hand
+is withdrawn between cloud reports.
+
 `/api/status` and downloaded diagnostics expose:
 
 | `proximity` field | Meaning |
@@ -99,6 +109,11 @@ that does not mean the gesture is eligible to run.
 | `detectBelowMv`, `clearAboveMv` | 40 and 60 |
 | `detected` | Presence state, or null when unknown/stale/invalid |
 | `armed`, `ready`, `triggers` | Gesture eligibility and accepted trigger count |
+| `blockedReason` | Why a gesture cannot currently start |
+| `ignored`, `lastOutcome`, `lastReason` | Debounced ignored count and latest hand result |
+| `lastTriggerTime`, `lastEventTime` | Retained local RTC timestamps, empty when unavailable |
+| `lastTriggerAgeMs`, `lastEventAgeMs` | Ages when this status was created; null if no event |
+| `lastTriggerId` | Accepted sensor program ID, for matching its motion result |
 
 The legacy digital field `rawHigh` and distance fields stay null. Defaults are
 `TIMIAC_PROXIMITY_PIN=34`, `TIMIAC_PROXIMITY_DETECT_MV=40` and
