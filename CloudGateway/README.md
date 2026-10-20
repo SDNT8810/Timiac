@@ -26,6 +26,12 @@ Apply `cloudflare/schema.sql` to D1 before deploying this gateway revision.
 Images are private, immutable and SHA-256 identified; no R2 bucket or new billing
 account is needed. The update guide describes limits and recovery.
 
+Full update prepares verified firmware automatically on each push to main.
+Its GitHub workflow reuses completed bundles only for the exact requested
+commit, verifies them again before upload, and rebuilds when the cache is
+missing or invalid. Preparation jobs never contact or update hardware. See
+[faster build preparation](../Docs/remote-updates.md#faster-build-preparation--2026-10-20).
+
 ## Update the master
 
 From the project folder, run the usual command:

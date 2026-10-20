@@ -146,8 +146,8 @@ References: [ESP32 OTA partitions](https://docs.espressif.com/projects/esp-idf/e
 
 Open the remote dashboard, sign in, and press **Full update** under Firmware updates. No firmware files need to be selected.
 
-1. The server requests a fresh GitHub Actions build of the latest pushed commit (main).
-2. Every firmware is built and checked before any board is updated.
+1. The server identifies the latest pushed commit on main and requests its verified firmware bundle.
+2. GitHub prepares the bundle automatically after each push. Full update reuses the bundle for that exact commit when available; otherwise it builds it. Every component is checked before any board is updated.
 3. The server installs the complete package in sequence, waiting for each board's verified success and reboot before continuing. Progress survives closing the browser.
 4. If any build or installation fails, the sequence stops. Check the message/build log before trying again. Keep power connected throughout installation. **Stop** cancels the remaining sequence; a flash already activating must finish safely.
 5. After success, calibrate/home the arms and resume operation from the dashboard.
@@ -157,6 +157,34 @@ Octopus 1, Octopus 2 and finally the local dashboard (six steps across five boar
 The master receives updater fixes before forwarding the other images. See
 [USB recovery and persistent diagnostic logs](ota-recovery.md) if the old master
 is offline or cannot finish its own update.
+
+### Faster build preparation — 2026-10-20
+
+Pushing main starts a build-only preparation job; it does not contact, Stop or
+update the clock. The prepared bundle is cached by the full source commit SHA.
+Pressing Full update still resolves the current main commit and verifies every
+image's SHA-256, role, revision and hardware identity before uploading it.
+There is no fallback to firmware from a different commit. A missing, evicted or
+invalid cache triggers a fresh build. Upload and sequential board installation
+still take time even when compilation is skipped.
+
+Builds for one commit queue together so an update can reuse an in-progress
+preparation job. The workflow also caches pip/PlatformIO downloads, checks out
+only shallow source history, and uses `python build.py cloud` to build the
+release master, both ESP bridges and Octopus without the unused development
+master. The complete verified bundle is saved before upload, so an interrupted
+upload can reuse it on the next attempt. Cache eviction or the first run of a
+new commit still needs compilation; no fixed completion time is guaranteed.
+
+For local build verification without replacing the shipped binaries:
+
+```powershell
+python build.py cloud --output-dir .local/cloud-build-validation
+```
+
+The normal `python build.py all` and individual dev/release targets remain
+available. This workflow change applies to new runs; an already-running Full
+update keeps the workflow with which it started.
 
 The initial USB/SD setup is still required once. Leave all Octopus microSD cards inserted and connect the controller to Internet Wi-Fi. Push your code before using Full update: uncommitted changes on a PC are not included.
 

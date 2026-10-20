@@ -1,6 +1,8 @@
 name: Full firmware update
-run-name: Full update ${{ inputs.update_id }}
+run-name: ${{ github.event_name == 'push' && 'Prepare firmware' || format('Full update {0}', inputs.update_id) }}
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       update_id:
@@ -14,7 +16,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: full-update-${{ inputs.update_id }}
+  group: firmware-${{ inputs.source_sha || github.sha }}
   cancel-in-progress: false
 jobs:
   build:
@@ -22,25 +24,70 @@ jobs:
     timeout-minutes: 90
     env:
       UPDATE_ID: ${{ inputs.update_id }}
-      SOURCE_SHA: ${{ inputs.source_sha }}
+      SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       FIRMWARE_BUILD_KEY: ${{ secrets.FIRMWARE_BUILD_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_sha }}
-          submodules: recursive
-          fetch-depth: 0
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Restore verified firmware for this exact commit
+        id: firmware
+        uses: actions/cache/restore@v4
+        with:
+          path: firmware/two-motor
+          key: ${{ runner.os }}-cloud-firmware-v1-${{ env.SOURCE_SHA }}
+      - name: Check restored bundle
+        id: bundle
+        if: steps.firmware.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          if python tools/publish_full_update.py --check-only; then
+            echo 'usable=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Cached bundle failed verification; rebuilding from the pinned source.'
+          fi
+      - name: Restore PlatformIO toolchains and downloaded libraries
+        if: steps.bundle.outputs.usable != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/platforms
+            ~/.platformio/packages
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-platformio-v1-${{ hashFiles('requirements.txt', 'ESP_Timiac/platformio.ini', 'Marlin/marlin-2.1.2.7/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-v1-
       - name: Install build tools
+        if: steps.bundle.outputs.usable != 'true'
         run: python -m pip install -r requirements.txt
       - name: Fetch pinned Marlin source tag
-        run: git -C Marlin/marlin-2.1.2.7 fetch origin tag 2.1.2.7
-      - name: Build every firmware
-        run: python build.py all
+        if: steps.bundle.outputs.usable != 'true'
+        run: |
+          git submodule update --init --depth 1 Marlin/marlin-2.1.2.7
+          git -C Marlin/marlin-2.1.2.7 fetch --depth 1 origin tag 2.1.2.7
+      - name: Build release master, bridges and Octopus
+        if: steps.bundle.outputs.usable != 'true'
+        run: python build.py cloud
+      - name: Verify compiled bundle
+        if: steps.bundle.outputs.usable != 'true'
+        run: python tools/publish_full_update.py --check-only
+      # Save before uploading: an interrupted upload or offline clock must not
+      # force the next request for these exact sources to compile everything.
+      - name: Cache verified bundle
+        if: steps.bundle.outputs.usable != 'true' && steps.firmware.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: firmware/two-motor
+          key: ${{ steps.firmware.outputs.cache-primary-key }}
       - name: Verify and publish complete bundle
+        if: github.event_name == 'workflow_dispatch'
         run: python tools/publish_full_update.py --gateway https://control.timiac.it --update-id "$UPDATE_ID" --source-sha "$SOURCE_SHA"
       - name: Report build failure
-        if: failure()
+        if: failure() && github.event_name == 'workflow_dispatch'
         run: python tools/publish_full_update.py --gateway https://control.timiac.it --update-id "$UPDATE_ID" --source-sha "$SOURCE_SHA" --failed

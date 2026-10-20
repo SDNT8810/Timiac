@@ -94,34 +94,40 @@ def main():
     aliases = {f"{role}_{mode}": target for mode in ("dev", "release")
                for role, target in (("octopus", "marlin"), ("esp1", "board1"), ("esp2", "board2"),
                                     ("master", "master_release" if mode == "release" else "master"))}
-    parser.add_argument("target", choices=("all", "master", "board1", "board2", "marlin", *aliases), nargs="?", default="all")
+    parser.add_argument("target", choices=("all", "cloud", "master", "board1", "board2", "marlin", *aliases), nargs="?", default="all")
     parser.add_argument("--prepare-only", action="store_true", help="generate the six-axis Marlin source without compiling")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / "firmware/two-motor", help="destination for built images and checksums")
     args = parser.parse_args()
     args.target = aliases.get(args.target, args.target)
+    # Cloud installation uses the release master, both bridges and Octopus.
+    # Keep the development master available through the existing all/dev targets.
+    roles = ("master", "master_release", "board1", "board2") if args.target == "all" else \
+            ("master_release", "board1", "board2") if args.target == "cloud" else \
+            (args.target,) if args.target in ("master", "master_release", "board1", "board2") else ()
     generate()
     from tools.generate_presets import generate as generate_presets
     generate_presets()
     if args.prepare_only:
         prepare_marlin()
         return
-    release = ROOT / "firmware/two-motor"
+    release = args.output_dir.resolve()
     release.mkdir(parents=True, exist_ok=True)
-    if args.target in ("all", "marlin"):
+    if args.target in ("all", "cloud", "marlin"):
         project = prepare_marlin()
         subprocess.run([sys.executable, "-m", "platformio", "run", "-d", str(project),
                         "-e", "STM32F446ZE_btt"], check=True)
         shutil.copy2(project / ".pio/build/STM32F446ZE_btt/firmware.bin", release / "firmware.bin")
         print(f"Octopus firmware (same image for both): {project / '.pio/build/STM32F446ZE_btt/firmware.bin'}")
-    if args.target in ("all", "master", "master_release", "board1", "board2"):
+    if roles:
         command = [sys.executable, "-m", "platformio", "run", "-d", str(ROOT / "ESP_Timiac")]
         if args.target != "all":
-            command += ["-e", f"timiac_{args.target}"]
+            for role in roles:
+                command += ["-e", f"timiac_{role}"]
         subprocess.run(command, check=True)
-        roles = ("master", "master_release", "board1", "board2") if args.target == "all" else (args.target,)
         for role in roles:
             shutil.copy2(ROOT / f"ESP_Timiac/.pio/build/timiac_{role}/firmware.bin", release / f"esp_{role}.bin")
     for role in ("master", "master_release"):
-        if args.target not in ("all", role):
+        if role not in roles:
             continue
         subprocess.run([sys.executable, "-m", "platformio", "run", "-d", str(ROOT / "ESP_Timiac"),
                         "-e", f"timiac_{role}", "-t", "export_master"], check=True)
@@ -147,10 +153,10 @@ def main():
     checksums = json.loads(previous.read_text()) if previous.is_file() else {}
     checksums.pop("firmware_sensorless.bin", None)
     updated = []
-    if args.target in ("all", "marlin"):
+    if args.target in ("all", "cloud", "marlin"):
         updated.append("firmware.bin")
     for role in ("board1", "board2", "master", "master_release"):
-        if args.target in ("all", role):
+        if role in roles:
             updated.append(f"esp_{role}.bin")
             if role.startswith("master"):
                 updated.extend(f"{role}_{suffix}.bin" for suffix in ("bootloader", "partitions", "boot_app0", "littlefs"))

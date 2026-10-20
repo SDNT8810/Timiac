@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import urllib.request
 
@@ -36,24 +37,43 @@ def call(args, endpoint, data, headers=None):
 
 def checked_images():
     manifest = json.loads((OUTPUT / ('SHA256.json' if TIMIAC else 'manifest.json')).read_text())
-    images = []
+    images, identities, revisions = [], set(), set()
     for target, kind, filename in IMAGES:
         data = (OUTPUT / filename).read_bytes()
         sha = hashlib.sha256(data).hexdigest()
         expected = manifest[filename] if TIMIAC else manifest['images'][filename]['sha256']
         if sha != expected:
             raise ValueError('Firmware checksum mismatch: ' + filename)
+        marker = 'octopus' if kind == 'octopus' else 'master-filesystem' if kind == 'filesystem' else target
+        if (PROJECT.upper() + '_OTA_ROLE:' + marker).encode() not in data:
+            raise ValueError('Wrong firmware role: ' + filename)
+        revision = re.search(rb'20\d\d-\d\d-\d\d\.\d{1,3}(?!\d)', data)
+        identity = re.search((PROJECT.upper() + r'[12]-[0-9a-f]{12}').encode(), data)
+        if not revision or not identity:
+            raise ValueError('Missing firmware revision or hardware identity: ' + filename)
+        revisions.add(revision[0]); identities.add(identity[0])
         images.append((target, kind, filename, data, sha))
+    if len(revisions) != 1 or len(identities) != 1:
+        raise ValueError('All firmware must belong to the same release and hardware identity')
     return images
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--gateway', required=True)
-    parser.add_argument('--update-id', required=True)
-    parser.add_argument('--source-sha', required=True)
+    parser.add_argument('--gateway')
+    parser.add_argument('--update-id')
+    parser.add_argument('--source-sha')
+    parser.add_argument('--check-only', action='store_true', help='verify the complete bundle locally without uploading or updating hardware')
     parser.add_argument('--failed', action='store_true')
     args = parser.parse_args()
+    if args.check_only:
+        if args.failed:
+            parser.error('--check-only cannot be combined with --failed')
+        images = checked_images()
+        print('Verified complete bundle:', len(images), 'components; no upload or hardware update requested')
+        return
+    if not all((args.gateway, args.update_id, args.source_sha)):
+        parser.error('--gateway, --update-id and --source-sha are required for publishing')
     allowed = 'https://control.timiac.it' if TIMIAC else 'https://lumiac.control.timiac.it'
     if args.gateway != allowed:
         parser.error('Use the configured HTTPS hardware gateway')
