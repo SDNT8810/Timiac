@@ -70,7 +70,10 @@ jobs:
         if: steps.bundle.outputs.usable != 'true'
         run: |
           git submodule update --init --depth 1 Marlin/marlin-2.1.2.7
-          git -C Marlin/marlin-2.1.2.7 fetch --depth 1 origin tag 2.1.2.7
+          # The submodule is already shallow at the pinned commit. Fetch only
+          # its tag without rewriting .git/shallow a second time.
+          git -C Marlin/marlin-2.1.2.7 fetch --no-recurse-submodules origin tag 2.1.2.7
+          test "$(git -C Marlin/marlin-2.1.2.7 rev-parse '2.1.2.7^{commit}')" = "$(git -C Marlin/marlin-2.1.2.7 rev-parse HEAD)"
       - name: Build release master, bridges and Octopus
         if: steps.bundle.outputs.usable != 'true'
         run: python build.py cloud
