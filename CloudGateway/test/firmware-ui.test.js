@@ -25,6 +25,7 @@ async function dashboard({ active = false, supported = true, uploadError = false
     if (path.endsWith('/status')) { if (network.fail) throw new Error('Connection interrupted'); return Response.json(status); }
     if (path.endsWith('/firmware')) return uploadError ? Response.json({ error: 'Wrong board image' }, { status: 400 }) : Response.json({ id: 'image', revision: '2026-10-15.5' });
     if (path.endsWith('/updates')) return Response.json({ id: 'job', state: 'queued' });
+    if (path.endsWith('/component-update')) return uploadError ? Response.json({ error: 'GitHub build access unavailable' }, { status: 502 }) : Response.json({ id: 'component', state: 'building' });
     return Response.json({});
   };
   runInNewContext(readFileSync(new URL('../public/app.js', import.meta.url), 'utf8'), {
@@ -94,25 +95,37 @@ test('old firmware and unavailable RTC time produce useful sensor status without
   await f.refresh();
   assert.match(f.node('sensor-last-event').textContent, /5s before the last report.*clock time unavailable.*Ignored: Clock time is invalid/);
 });
-test('firmware form uploads the selected board bytes then queues exactly that image', async () => {
-  const f = await dashboard(), file = new File([new Uint8Array([1, 2, 3])], 'firmware.bin');
-  f.node('firmware-target').value = 'octopus2:octopus'; f.node('firmware-file').files = [file];
+test('component form requests only the selected GitHub image without a local file or separate upload', async () => {
+  const f = await dashboard();
+  f.node('firmware-target').value = 'octopus2:octopus';
   await f.node('firmware-form').onsubmit({ preventDefault() {} });
-  const upload = f.requests.find(request => request.path.endsWith('/firmware'));
-  assert.equal(upload.options.body, file);
-  assert.equal(upload.options.headers['Content-Type'], 'application/octet-stream');
-  assert.equal(upload.options.headers['X-Timiac-Target'], 'octopus2');
-  assert.equal(upload.options.headers['X-Timiac-Kind'], 'octopus');
-  const jobs = f.requests.filter(request => request.path.endsWith('/updates'));
-  assert.equal(jobs.length, 1); assert.deepEqual(JSON.parse(jobs[0].options.body), { imageId: 'image' });
-  assert.equal(f.node('firmware-file').value, '');
+  const calls = f.requests.filter(request => request.path.endsWith('/component-update'));
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(calls[0].options.body), { target: 'octopus2', kind: 'octopus' });
+  assert.equal(f.requests.some(r => r.path.endsWith('/firmware') || r.path.endsWith('/updates') || r.path.endsWith('/full-update')), false);
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /type="file"|id="firmware-file"/);
+  assert.match(f.node('message').textContent, /Octopus 2 requested from GitHub/);
 });
-test('a rejected firmware upload never queues a flash and returns a useful error', async () => {
+test('a rejected component build is not replayed or followed by an image upload', async () => {
   const f = await dashboard({ uploadError: true });
-  f.node('firmware-file').files = [new File(['bad file'], 'wrong.bin')];
   await f.node('firmware-form').onsubmit({ preventDefault() {} });
-  assert.equal(f.requests.filter(request => request.path.endsWith('/updates')).length, 0);
-  assert.equal(f.node('message').textContent, 'Wrong board image');
+  assert.equal(f.requests.filter(request => request.path.endsWith('/component-update')).length, 1);
+  assert.equal(f.requests.some(r => r.path.endsWith('/firmware') || r.path.endsWith('/updates')), false);
+  assert.equal(f.node('message').textContent, 'GitHub build access unavailable');
+});
+test('a selected component survives reopening during build and installs as exactly one step', async () => {
+  const f = await dashboard({ fullUpdate: { state: 'building', selected_target: 'master', selected_kind: 'filesystem', steps: [] } });
+  assert.match(f.node('full-update-status').textContent, /Preparing Master local dashboard.*GitHub/);
+  assert.equal(f.node('firmware-target').disabled, true);
+  assert.equal(f.node('install-firmware').disabled, true);
+  await f.node('firmware-form').onsubmit({ preventDefault() {} });
+  assert.equal(f.requests.some(r => r.path.endsWith('/component-update')), false);
+  f.status.fullUpdate.state = 'installing'; f.status.fullUpdate.steps = [{ target: 'master', kind: 'filesystem', state: 'delivered' }];
+  await f.refresh(); assert.match(f.node('full-update-status').textContent, /1\/1: master dashboard/);
+  f.status.fullUpdate.state = 'complete'; f.status.fullUpdate.steps[0].state = 'complete';
+  await f.refresh(); assert.match(f.node('full-update-status').textContent, /Master local dashboard update complete/);
+  assert.equal(f.node('install-firmware').disabled, false);
 });
 test('an active firmware update disables movement and settings while Stop stays available', async () => {
   const f = await dashboard({ active: true });

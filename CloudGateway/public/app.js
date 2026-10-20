@@ -20,10 +20,14 @@ async function api(path, options = {}) {
   return body;
 }
 function stateLabel(board) { if (!board?.bridgeConnected) return 'ESP offline'; if (board.updating) return 'Updating firmware'; if (!board.octopusConnected) return 'Octopus offline'; if (board.fault) return 'Stopped'; if (board.busy) return 'Moving'; return board.homed === 63 ? 'Ready' : 'Home required'; }
+function componentLabel(target, kind) {
+  return target === 'master' ? kind === 'filesystem' ? 'Master local dashboard' : 'Master ESP32 application'
+    : ({esp1: 'ESP-12 bridge 1', esp2: 'ESP-12 bridge 2', octopus1: 'Octopus 1', octopus2: 'Octopus 2'})[target] || target;
+}
 function commandBlockReason(remote) {
   const state = remote.status || {};
   if (!remote.online) return 'Master is offline';
-  if (['building', 'installing'].includes(remote.fullUpdate?.state)) return 'Full update in progress. Stop is available.';
+  if (['building', 'installing'].includes(remote.fullUpdate?.state)) return (remote.fullUpdate.selected_target ? 'Component update' : 'Full update') + ' in progress. Stop is available.';
   if (uploadingFirmware || state.ota?.active) return 'Firmware update in progress';
   if (state.stopPending) return 'Waiting for Stop confirmation';
   if (state.fault) return state.fault;
@@ -99,6 +103,7 @@ function render(remote) {
   $('save-time').disabled = busy; $('local-time').disabled = busy;
   $('calibrate').disabled = busy;
   $('install-firmware').disabled = busy || !state.ota?.supported;
+  $('firmware-target').disabled = busy || !state.ota?.supported;
   const ota = state.ota;
   const full = remote.fullUpdate;
   const job = remote.update;
@@ -109,11 +114,15 @@ function render(remote) {
   const completed = full?.steps?.filter(step => step.state === 'complete').length || 0;
   const current = full?.steps?.find(step => step.state !== 'complete');
   const previousFull = full && !fullActive && job?.createdAt > full.updated_at;
+  const selected = full?.selected_target ? componentLabel(full.selected_target, full.selected_kind) : '';
+  const updateLabel = selected ? 'Component update' : 'Full update';
   const fullResult = !full ? 'Build all firmware and install it automatically. No files to select.'
-    : full.state === 'building' ? 'Building all firmware. This can take several minutes. You may close this page.'
+    : full.state === 'building' ? selected ? `Preparing ${selected} from the latest GitHub build. A missing build is compiled first. You may close this page.`
+      : 'Preparing the latest GitHub firmware bundle. A missing build is compiled first. You may close this page.'
     : full.state === 'installing' ? `Installing ${completed + 1}/${full.steps.length}: ${current?.target || ''} ${current?.kind === 'filesystem' ? 'dashboard' : ''}. Keep power connected.`
-    : full.state === 'complete' ? full.validate_only ? 'Build verified. No hardware was updated.' : 'Full update complete. Calibrate/Home the arms before resuming.'
-    : `Full update ${full.state}: ${full.error || 'Check the connection and try again.'}`;
+    : full.state === 'complete' ? full.validate_only ? 'Build verified. No hardware was updated.'
+      : selected ? `${selected} update complete. Calibrate/Home the arms before resuming.` : 'Full update complete. Calibrate/Home the arms before resuming.'
+    : `${updateLabel} ${full.state}: ${full.error || 'Check the connection and try again.'}`;
   $('full-update-status').textContent = previousFull ? 'Individual component updates were started after the previous Full update. Latest result is shown below.' : fullResult;
   $('full-update-status').classList.toggle('error', !previousFull && full?.state === 'failed');
   $('full-update-history').hidden = !previousFull;
@@ -160,15 +169,13 @@ $('time-form').onsubmit = event => {
 };
 $('firmware-form').onsubmit = async event => {
   event.preventDefault();
-  const file = $('firmware-file').files[0]; if (!file || uploadingFirmware) return;
+  if (uploadingFirmware || $('install-firmware').disabled) return;
   const [target, kind] = $('firmware-target').value.split(':');
-  uploadingFirmware = true; $('install-firmware').disabled = true; say('Uploading and checking firmware…');
+  uploadingFirmware = true; $('install-firmware').disabled = true; $('firmware-target').disabled = true;
+  $('full-update').disabled = true; say('Preparing ' + componentLabel(target, kind) + ' from GitHub…');
   try {
-    const image = await api('/api/devices/' + config.deviceId + '/firmware', { method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream', 'X-Timiac-Target': target, 'X-Timiac-Kind': kind }, body: file });
-    await api('/api/devices/' + config.deviceId + '/updates', { method: 'POST', body: JSON.stringify({ imageId: image.id }) });
-    say(`${target} update queued. Keep power connected; the clock will remain paused.`);
-    $('firmware-file').value = '';
+    await api('/api/devices/' + config.deviceId + '/component-update', { method: 'POST', body: JSON.stringify({ target, kind }) });
+    say(`${componentLabel(target, kind)} requested from GitHub. It will install automatically when verified. Keep power connected.`);
   } catch (error) { say(error.message, true); }
   finally { uploadingFirmware = false; await refresh(); }
 };

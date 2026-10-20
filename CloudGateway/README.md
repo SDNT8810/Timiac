@@ -21,8 +21,14 @@ are retained. Updates pause the clock and keep it parked until Home / Start cloc
 
 From another PC, `python remote_update.py --target all` in the project root
 verifies and uploads the tracked binaries, then installs them one at a time using
-the dashboard login. The web panel also accepts the individual `.bin` files.
-Apply `cloudflare/schema.sql` to D1 before deploying this gateway revision.
+the dashboard login. In the web panel, **Update one component from GitHub**
+requires only a target selection. It automatically prepares/reuses the verified
+build for the latest main commit and installs exactly that component; no `.bin`
+file is required. Full update still deliberately installs all six components.
+Manual binary uploads remain available through the existing authenticated API
+and PC tools.
+Apply `cloudflare/schema.sql` for a new D1 database. For an existing gateway,
+apply `cloudflare/component-update.sql` once before deploying this revision.
 Images are private, immutable and SHA-256 identified; no R2 bucket or new billing
 account is needed. The update guide describes limits and recovery.
 
@@ -31,6 +37,16 @@ Its GitHub workflow reuses completed bundles only for the exact requested
 commit, verifies them again before upload, and rebuilds when the cache is
 missing or invalid. Preparation jobs never contact or update hardware. See
 [faster build preparation](../Docs/remote-updates.md#faster-build-preparation--2026-10-20).
+
+The single-component request is `POST /api/devices/DEVICE/component-update`
+with `{ "target": "esp1", "kind": "app" }` using the signed-in administrator
+and same-origin checks. The selection is stored durably with its source SHA;
+the GitHub workflow receives `component_target` / `component_kind`. The publisher
+verifies the cached complete bundle before uploading only the requested image.
+The gateway rejects other components and creates exactly one installation step.
+The normal Stop, progress expiry, image/identity validation and exact completion
+receipts still apply. Reloading the page resumes progress; failures do not replay
+installation. A missing exact-commit cache needs compilation first.
 
 ## Update the master
 
@@ -89,6 +105,16 @@ Initialize a new D1 database with `cloudflare/schema.sql` before deploying.
 For an existing database from before firmware 2026-10-17.1, apply
 `cloudflare/ota-progress.sql` once and `cloudflare/diagnostics-schema.sql` before
 deploying. These add progress leases and the persistent diagnostic archive.
+For the file-free component updater, apply this one-time additive migration:
+
+```powershell
+npx wrangler d1 execute timiac-control --remote --file cloudflare/component-update.sql
+```
+
+It adds `selected_target` and `selected_kind`; existing Full update records keep
+empty selections and retain their complete-bundle behavior. Push the updated
+workflow/publisher to main before deploying the gateway so GitHub accepts the
+new optional workflow inputs.
 Diagnostic downloads require the normal signed-in administrator session and
 remain available while hardware is offline. See [recovery instructions](../Docs/ota-recovery.md).
 

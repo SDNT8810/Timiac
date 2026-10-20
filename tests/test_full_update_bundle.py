@@ -66,5 +66,35 @@ class FullUpdateBundleTests(unittest.TestCase):
         call.assert_not_called()
 
 
+    def test_single_component_publishes_only_the_exact_selected_target_and_kind(self):
+        for target, kind, _ in publisher.IMAGES:
+            with self.subTest(target=target, kind=kind):
+                args = ['publish_full_update.py', '--gateway', 'https://control.timiac.it', '--update-id', 'pending',
+                        '--source-sha', 'a' * 40, '--target', target, '--kind', kind]
+                def reply(args, endpoint, data, headers=None):
+                    return {'sha256': hashlib.sha256(data).hexdigest()} if endpoint == 'images' else {'state': 'installing'}
+                with patch('sys.argv', args), patch.object(publisher, 'call', side_effect=reply) as call, contextlib.redirect_stdout(io.StringIO()):
+                    publisher.main()
+                self.assertEqual(call.call_count, 2)
+                image = call.call_args_list[0]
+                self.assertEqual(image.args[1], 'images')
+                self.assertEqual(image.args[3], {'X-Timiac-Target': target, 'X-Timiac-Kind': kind})
+                self.assertEqual(call.call_args_list[1].args[1], 'complete')
+
+    def test_component_requests_reject_invalid_or_partial_selection_before_network(self):
+        for selection in (['--target', 'esp1'], ['--kind', 'app'], ['--target', 'master', '--kind', 'octopus']):
+            with patch('sys.argv', ['publish_full_update.py', *selection]), patch.object(publisher, 'call') as call, contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit): publisher.main()
+                call.assert_not_called()
+
+    def test_component_still_checks_complete_cached_bundle_before_uploading(self):
+        (self.output / 'esp_board2.bin').write_bytes(b'corrupted unselected cached image')
+        args = ['publish_full_update.py', '--gateway', 'https://control.timiac.it', '--update-id', 'pending',
+                '--source-sha', 'a' * 40, '--target', 'esp1', '--kind', 'app']
+        with patch('sys.argv', args), patch.object(publisher, 'call') as call:
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'): publisher.main()
+        call.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

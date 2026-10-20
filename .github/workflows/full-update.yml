@@ -13,6 +13,16 @@ on:
         description: Exact source commit requested by the dashboard
         required: true
         type: string
+      component_target:
+        description: Optional single component target; empty installs the full bundle
+        required: false
+        default: ''
+        type: string
+      component_kind:
+        description: Optional single component image kind
+        required: false
+        default: ''
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -25,6 +35,8 @@ jobs:
     env:
       UPDATE_ID: ${{ inputs.update_id }}
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+      COMPONENT_TARGET: ${{ inputs.component_target }}
+      COMPONENT_KIND: ${{ inputs.component_kind }}
       FIRMWARE_BUILD_KEY: ${{ secrets.FIRMWARE_BUILD_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -88,9 +100,9 @@ jobs:
         with:
           path: firmware/two-motor
           key: ${{ steps.firmware.outputs.cache-primary-key }}
-      - name: Verify and publish complete bundle
+      - name: Verify bundle and publish requested components
         if: github.event_name == 'workflow_dispatch'
-        run: python tools/publish_full_update.py --gateway https://control.timiac.it --update-id "$UPDATE_ID" --source-sha "$SOURCE_SHA"
+        run: python tools/publish_full_update.py --gateway https://control.timiac.it --update-id "$UPDATE_ID" --source-sha "$SOURCE_SHA" --target "$COMPONENT_TARGET" --kind "$COMPONENT_KIND"
       - name: Report build failure
         if: failure() && github.event_name == 'workflow_dispatch'
         run: python tools/publish_full_update.py --gateway https://control.timiac.it --update-id "$UPDATE_ID" --source-sha "$SOURCE_SHA" --failed

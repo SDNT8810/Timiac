@@ -41,16 +41,17 @@
       <p>Full update builds the latest pushed code, checks every image, then installs each board automatically. Keep power connected.</p>
       <button id="full-update" type="button" disabled>Full update</button>
       <p id="full-update-status" role="status">Checking full update support...</p><a id="full-update-log" target="_blank" rel="noopener" hidden>Build progress / log</a>
-      <details id="full-update-history" hidden><summary>Previous Full update result</summary><p id="full-update-history-status"></p></details>
-      <details><summary>Update one component manually</summary><form id="firmware-form">
+      <details id="full-update-history" hidden><summary>Previous automated update result</summary><p id="full-update-history-status"></p></details>
+      <details><summary>Update one component from GitHub</summary>
+      <p>Choose one component. The latest pushed commit's verified GitHub build is used automatically. A missing build is prepared first. Only the selected component is installed.</p>
+      <form id="firmware-form">
         <label>Board / image <select id="firmware-target">
           <option value="master:app">Master ESP32 — application</option>
           <option value="master:filesystem">Master ESP32 — local dashboard</option>
           <option value="esp1:app">ESP-12 bridge 1</option><option value="esp2:app">ESP-12 bridge 2</option>
           <option value="octopus1:octopus">Octopus 1</option><option value="octopus2:octopus">Octopus 2</option>
         </select></label>
-        <label>Firmware .bin file <input id="firmware-file" type="file" accept=".bin" required></label>
-        <button id="install-firmware" type="submit">Install firmware</button>
+        <button id="install-firmware" type="submit">Update selected component</button>
       </form></details>
       <p id="firmware-status" role="status">Initial USB/SD setup is required before the first remote update.</p>
     </section>

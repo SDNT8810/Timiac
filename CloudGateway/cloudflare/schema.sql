@@ -29,6 +29,7 @@ CREATE INDEX IF NOT EXISTS ota_queue ON ota_jobs(state, expires_at);
 CREATE TABLE IF NOT EXISTS full_updates (
   id TEXT PRIMARY KEY, device_id TEXT NOT NULL, state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
   source_sha TEXT NOT NULL, controller TEXT NOT NULL, validate_only INTEGER NOT NULL DEFAULT 0,
+  selected_target TEXT NOT NULL DEFAULT '', selected_kind TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS full_update_active ON full_updates(device_id) WHERE state IN ('building','installing');

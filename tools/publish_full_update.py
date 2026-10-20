@@ -63,9 +63,13 @@ def main():
     parser.add_argument('--gateway')
     parser.add_argument('--update-id')
     parser.add_argument('--source-sha')
+    parser.add_argument('--target', default='', help='publish only this selected component (empty publishes the full bundle)')
+    parser.add_argument('--kind', default='', help='selected component image kind')
     parser.add_argument('--check-only', action='store_true', help='verify the complete bundle locally without uploading or updating hardware')
     parser.add_argument('--failed', action='store_true')
     args = parser.parse_args()
+    if (args.target or args.kind) and not any((target, kind) == (args.target, args.kind) for target, kind, _ in IMAGES):
+        parser.error('Select a valid component --target and --kind together')
     if args.check_only:
         if args.failed:
             parser.error('--check-only cannot be combined with --failed')
@@ -81,6 +85,8 @@ def main():
         call(args, 'failed', {'error': 'Firmware build or bundle validation failed. Open the GitHub Actions build log for details.'})
         return
     images = checked_images()  # Check ALL artifacts before sending the first one.
+    if args.target:
+        images = [image for image in images if image[:2] == (args.target, args.kind)]
     for target, kind, filename, data, sha in images:
         result = call(args, 'images', data, {'X-' + PROJECT + '-Target': target, 'X-' + PROJECT + '-Kind': kind})
         if result.get('sha256') != sha:

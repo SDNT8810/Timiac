@@ -56,10 +56,17 @@ For one component use `--target esp1`, `esp2`, `octopus1`, `octopus2`, or `maste
 `master` includes its matching dashboard; `dashboard` updates that filesystem alone.
 No Cloudflare token or account credentials are needed to perform a normal update.
 
-You can also use **Firmware updates** on the remote dashboard. Choose the target,
-select its file below and press **Install firmware**, one component at a time.
+On the remote dashboard, open **Firmware updates > Update one component from
+GitHub**, choose a target and press **Update selected component**. No `.bin`
+file or PC build is required. The service pins the latest pushed main commit,
+reuses its verified GitHub build when available, and uploads/installs only the
+selected image. If that exact build is missing or invalid, it compiles first.
+Progress survives closing the page. **Full update** remains the option that
+installs all six components; it does not automatically skip unchanged boards.
 
-| Dashboard target | File in `firmware/two-motor/` |
+The automatic component mapping is:
+
+| Dashboard target | Prepared GitHub image |
 |---|---|
 | Master ESP32 — application | `esp_master_release.bin` |
 | Master ESP32 — local dashboard | `master_release_littlefs.bin` |
@@ -160,6 +167,13 @@ The master receives updater fixes before forwarding the other images. See
 [USB recovery and persistent diagnostic logs](ota-recovery.md) if the old master
 is offline or cannot finish its own update.
 
+For one component, use **Update one component from GitHub** instead. That
+request uploads one image and creates a single `1/1` installation step. Selecting
+the master application updates only that application; select **Master ESP32 —
+local dashboard** separately if its web files also changed. Bridges and Octopus
+boards are not flashed as part of a master-only selection. All six supported
+target/image pairs remain available.
+
 From 2026-10-20.2, bridges persist the exact Octopus activation receipt before
 requesting a reboot. A bridge restart during confirmation resumes checking the
 running Octopus revision without requesting activation again. The master checks
@@ -199,6 +213,12 @@ The initial USB/SD setup is still required once. Leave all Octopus microSD cards
 ### Automatic-build setup (maintainers)
 
 The gateway uses `GITHUB_REPOSITORY`, `GITHUB_REF`, and the Worker secrets `GITHUB_BUILD_TOKEN` (repository Actions write/content read) and `FIRMWARE_BUILD_KEY`. The matching repository Actions secret `FIRMWARE_BUILD_KEY` authenticates uploads only; browser accounts and device keys cannot publish builds. `.github/workflows/full-update.yml` must also exist on the repository default branch for workflow dispatch registration. Lumiac's source/build branch remains RF.
+
+Before deploying single-component selection to an existing Timiac gateway,
+apply `CloudGateway/cloudflare/component-update.sql` once. It adds the durable
+selection columns without changing existing update records. Push the workflow
+and publisher first; single-component dispatches use the new optional
+`component_target` and `component_kind` inputs.
 
 The workflow runs on GitHub-hosted runners; no local PC or VPS build agent is needed. Build failures are reported to the dashboard. GitHub Actions must be enabled and have available build minutes. The builder uploads the verified complete bundle; bootloaders and partition tables are excluded from OTA.
 

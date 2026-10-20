@@ -169,3 +169,71 @@ test('build failures release the lock and expose a useful error', async t => {
   assert.equal((await f.full()).state, 'failed'); assert.equal((await f.full()).error, 'Compiler failed');
   assert.equal(f.db.prepare('SELECT count(*) n FROM actions').get().n, 0);
 });
+
+for (const [target, kind] of components) test(`GitHub component update installs only ${target}/${kind}, with an exact receipt and no later steps`, async t => {
+  const f = fixture(t, timiac ? 'master' : target); await f.sync();
+  const response = await f.call('/api/devices/clock/component-update', {target, kind});
+  assert.equal(response.status, 202, await response.clone().text());
+  const {id} = await response.json();
+  assert.deepEqual(f.dispatches[0], {ref: f.env.GITHUB_REF, inputs: {update_id: id, source_sha: sha, component_target: target, component_kind: kind}});
+  assert.equal((await (await f.sync()).json()).action.type, 'stop');
+  assert.equal((await f.full()).selected_target, target); assert.equal((await f.full()).selected_kind, kind);
+  assert.equal((await f.call('/api/devices/clock/full-update', {})).status, 409);
+  assert.equal((await f.call('/api/devices/clock/component-update', {target, kind})).status, 409);
+  assert.equal((await f.build(id, 'complete')).status, 409);
+  await f.upload(id, [target,kind]); assert.equal((await f.build(id, 'complete')).status, 200);
+  const update = (await (await f.sync()).json()).update;
+  assert.equal(update.target, target); assert.equal(update.kind, kind);
+  f.state.ota = {...f.state.ota, id: update.id, sha256: '0'.repeat(64), state: 'complete', active: false};
+  await f.sync(); assert.equal((await f.full()).state, 'installing');
+  f.state.ota.sha256 = update.sha256;
+  if (target === 'master' && kind === 'app') f.state.session = 'after-master-app';
+  await f.sync(); await f.sync();
+  const done = await f.full(); assert.equal(done.state, 'complete'); assert.equal(done.steps.length, 1);
+  assert.equal(done.steps[0].state, 'complete');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM ota_jobs').get().n, 1);
+  assert.equal((await (await f.sync()).json()).update, undefined);
+});
+
+test('component requests reject invalid pairs, cross-origin users, offline masters and motion before dispatch', async t => {
+  const f = fixture(t); await f.sync();
+  const endpoint = '/api/devices/clock/component-update', valid = {target: components[0][0], kind: components[0][1]};
+  assert.equal((await f.call(endpoint, valid, {})).status, 401);
+  assert.equal((await f.call(endpoint, valid, {Cookie: `__Host-${family.toLowerCase()}-session=admin`, Origin: 'https://other.example'})).status, 403);
+  for (const body of [{}, {target: 'master'}, {target: 'master', kind: 'octopus'}, {...valid, validateOnly: true}, {...valid, extra: 'image.bin'}])
+    assert.equal((await f.call(endpoint, body)).status, 400);
+  f.state.program = {state: 'running'}; await f.sync(); assert.equal((await f.call(endpoint, valid)).status, 409);
+  f.state.program = {state: 'done'}; await f.sync(); f.advance(30001); assert.equal((await f.call(endpoint, valid)).status, 409);
+  assert.equal(f.dispatches.length, 0); assert.equal(f.db.prepare('SELECT count(*) n FROM ota_jobs').get().n, 0);
+});
+
+test('component callback rejects unselected images and mismatched source; Stop cancels it without flashing', async t => {
+  const f = fixture(t); await f.sync();
+  const [target,kind] = components[0];
+  const id = (await (await f.call('/api/devices/clock/component-update', {target,kind})).json()).id;
+  await f.sync();
+  assert.equal((await f.build(id, 'images', new Uint8Array(2048), {['X-' + prefix + '-Target']: components[1][0], ['X-' + prefix + '-Kind']: components[1][1]})).status, 400);
+  assert.equal((await f.build(id, 'complete', {}, {'X-Firmware-Source': 'b'.repeat(40)})).status, 409);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM ota_images').get().n, 0);
+  await f.upload(id, [target,kind]);
+  assert.equal((await f.call('/api/devices/clock/actions', {type: 'stop'})).status, 202);
+  assert.equal((await f.build(id, 'complete')).status, 409); await f.sync();
+  assert.equal((await f.full()).state, 'cancelled'); assert.equal(f.db.prepare('SELECT count(*) n FROM ota_jobs').get().n, 0);
+});
+
+if (timiac) test('a master-only update needs no Octopus SD capability; an Octopus update checks its selected board', async t => {
+  const f = fixture(t); f.state.a.sdOtaSupported = f.state.b.sdOtaSupported = false; await f.sync();
+  assert.equal((await f.call('/api/devices/clock/component-update', {target: 'octopus1', kind: 'octopus'})).status, 409);
+  assert.equal((await f.call('/api/devices/clock/component-update', {target: 'master', kind: 'app'})).status, 202);
+});
+
+test('the one-time migration preserves previous Full update rows as complete-bundle requests', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec("CREATE TABLE full_updates(id TEXT PRIMARY KEY,state TEXT); INSERT INTO full_updates VALUES('previous','complete');");
+    db.exec(readFileSync(new URL('../cloudflare/component-update.sql', import.meta.url), 'utf8'));
+    const row = db.prepare('SELECT * FROM full_updates').get();
+    assert.equal(row.id, 'previous'); assert.equal(row.state, 'complete');
+    assert.equal(row.selected_target, ''); assert.equal(row.selected_kind, '');
+  } finally { db.close(); }
+});
