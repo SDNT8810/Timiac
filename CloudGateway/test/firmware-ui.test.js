@@ -87,6 +87,8 @@ test('sensor history resets with the master session and never attributes a manua
 test('old firmware and unavailable RTC time produce useful sensor status without inventing a timestamp', async () => {
   const f = await dashboard();
   assert.equal(f.node('sensor-presence').textContent, 'Update master firmware');
+  assert.equal(f.node('sensor-last-trigger').textContent, 'Not available in the last master report');
+  assert.equal(f.node('sensor-last-event').textContent, 'Not available in the last master report');
   f.status.status.proximity = { enabled: true, pin: 34, detected: true, triggers: 0, ignored: 1,
     lastOutcome: 'ignored', lastReason: 'Clock time is invalid', lastEventAgeMs: 5000, lastEventTime: '' };
   await f.refresh();

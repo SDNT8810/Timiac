@@ -67,10 +67,11 @@ function renderSensor(remote, unavailable = false) {
     : sameMotion && program.state === 'done' ? 'Struggle completed'
     : sameMotion && program.state === 'faulted' ? 'Struggle stopped: ' + (program.error || 'motion fault')
     : sameMotion && program.state === 'paused' ? 'Struggle paused' : 'Struggle accepted';
-  $('sensor-last-trigger').textContent = triggers > 0 ? sensorEventTime(sensor.lastTriggerTime, sensor.lastTriggerAgeMs) + ' — ' + motion : 'None since master restart';
+  $('sensor-last-trigger').textContent = triggers === null ? 'Not available in the last master report'
+    : triggers > 0 ? sensorEventTime(sensor.lastTriggerTime, sensor.lastTriggerAgeMs) + ' — ' + motion : 'None since master restart';
   $('sensor-last-event').textContent = sensor?.lastOutcome === 'triggered' ? sensorEventTime(sensor.lastEventTime, sensor.lastEventAgeMs) + ' — Struggle triggered'
     : sensor?.lastOutcome === 'ignored' ? sensorEventTime(sensor.lastEventTime, sensor.lastEventAgeMs) + ' — Ignored: ' + (sensor.lastReason || 'gesture was not eligible')
-    : 'No hand events recorded since master restart';
+    : typeof sensor?.lastOutcome === 'string' ? 'No hand events recorded since master restart' : 'Not available in the last master report';
   $('sensor-sync').textContent = unavailable || !live ? 'History above is from the last received report.'
     : remote.updatedAt ? 'Last master report: ' + new Date(remote.updatedAt).toLocaleTimeString() + '. Refreshes every 5 seconds; brief triggers stay in the history.'
     : 'Refreshes every 5 seconds; brief triggers stay in the history.';
