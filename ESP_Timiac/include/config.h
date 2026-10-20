@@ -29,6 +29,14 @@
 #ifndef TIMIAC_PROXIMITY_CLEAR_MV
 #define TIMIAC_PROXIMITY_CLEAR_MV 60
 #endif
+// Latest installed readings: hand 55..62 counts, clear about 69, far about 75.
+// Below the ADC's accurate voltage range, classify counts, not calibrated mV.
+#ifndef TIMIAC_PROXIMITY_DETECT_ADC
+#define TIMIAC_PROXIMITY_DETECT_ADC 64
+#endif
+#ifndef TIMIAC_PROXIMITY_CLEAR_ADC
+#define TIMIAC_PROXIMITY_CLEAR_ADC 68
+#endif
 #ifndef TIMIAC_WIFI_SSID
 #define TIMIAC_WIFI_SSID "Timiac"
 #endif
@@ -72,7 +80,7 @@
 #endif
 constexpr unsigned long kBaud = 115200;
 // Application revision is separate from the hardware identity shared with Marlin.
-constexpr char kSoftwareRevision[] = "2026-10-20.4";
+constexpr char kSoftwareRevision[] = "2026-10-20.7";
 constexpr char kLocalOtaMarker[] = "TIMIAC_LOCAL_OTA_V1";
 #if TIMIAC_MASTER
 constexpr char kOtaImageMarker[] = "TIMIAC_OTA_ROLE:master";

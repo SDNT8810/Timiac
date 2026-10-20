@@ -68,7 +68,7 @@ int main() {
   // cloud payload even after the hand has been withdrawn between polls.
   photoelectricLevel = 0; proximityTick(); hostNow += 220; proximityTick();
   assert(proximityLastOutcome == "ignored" && proximityLastReason == "Arms need homing");
-  photoelectricLevel = 95; hostNow += 20; proximityTick();
+  photoelectricLevel = 80; hostNow += 20; proximityTick();
   cloudRequests = xQueueCreate(1, sizeof(CloudExchange*));
   cloudResponses = xQueueCreate(1, sizeof(CloudExchange*));
   hostBeforeQueueSend = observeHandoff;

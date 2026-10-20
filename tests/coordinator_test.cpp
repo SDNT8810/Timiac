@@ -50,12 +50,12 @@ struct TestRtc {
 } rtcTime;
 #include "../ESP_Timiac/src/release_clock.h"
 constexpr unsigned INPUT = 0;
-unsigned photoelectricLevel = 0; // Zero ADC counts; calibrated API alone returns 75 mV.
+unsigned photoelectricLevel = 0; // Raw counts; calibrated API alone returns 75 mV at zero.
 bool photoelectricAdcValid = true;
 void pinMode(unsigned pin, unsigned mode) { assert(pin == 34 && mode == INPUT); }
 bool configureProximityAdc(unsigned pin) { assert(pin == 34); return true; }
 bool readProximityAdc(uint16_t& raw, uint32_t& mv, uint32_t& floor) {
-  raw = photoelectricLevel * 4; mv = photoelectricLevel ? photoelectricLevel : 75; floor = 75;
+  raw = photoelectricLevel; mv = 75 + photoelectricLevel / 4; floor = 75;
   return photoelectricAdcValid;
 }
 #include "../ESP_Timiac/src/proximity_sensor.h"
@@ -665,7 +665,7 @@ int main() {
       proximityTick();
     }
   };
-  sensorFor(50, 600); assert(!proximityTriggers && !proximityGate.armed && !proximityKnown); // Boot in deadband.
+  sensorFor(66, 600); assert(!proximityTriggers && !proximityGate.armed && !proximityKnown); // Boot in deadband.
   sensorFor(0, 600); assert(!proximityTriggers && !proximityGate.armed); // Held at boot / grounded.
   assert(proximityLastOutcome == "ignored" && proximityLastReason.indexOf("not armed") >= 0 && proximityIgnored == 1);
   const unsigned ignoredAtBoot = proximityIgnored;
@@ -680,19 +680,20 @@ int main() {
     DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
     assert(status["type"] == "photoelectric" && status["pin"] == 34 && status["inputMode"] == "analog");
     assert(status["detected"] == false && status["rawHigh"].isNull() && status["distanceCm"].isNull());
-    assert(status["millivolts"] == 95 && status["rawAdc"] == 380 && status["belowRange"] == true);
-    assert(status["detectBelowMv"] == 40 && status["clearAboveMv"] == 60);
+    assert(status["millivolts"] == 98 && status["rawAdc"] == 95 && status["belowRange"] == true);
+    assert(status["detectBelowMv"].isNull() && status["clearAboveMv"].isNull());
+    assert(status["detectAtOrBelowAdc"] == 64 && status["clearAtOrAboveAdc"] == 68);
   }
-  sensorFor(50, 300); sensorFor(40, 300); sensorFor(60, 300);
-  assert(proximityGate.armed && !proximityDetected && !proximityTriggers); // Hysteresis, including exact boundaries.
-  sensorFor(39, 180); assert(!proximityTriggers);
-  sensorFor(0, 60); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Struggle);
+  sensorFor(65, 300); sensorFor(66, 300); sensorFor(67, 300);
+  assert(proximityGate.armed && !proximityDetected && !proximityTriggers); // Deadband retains clear.
+  sensorFor(64, 40); assert(!proximityTriggers);
+  sensorFor(55, 20); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Struggle);
   assert(proximityLastOutcome == "triggered" && proximityLastReason.isEmpty());
   assert(proximityLastTriggerTime == rtcText && proximityLastTriggerId == program.id);
   const String firstSensorMotion = proximityLastTriggerId, firstSensorTime = proximityLastTriggerTime;
   assert(logs[(logSequence - 1) % 32].text.indexOf("Hand sensor: Struggle triggered") == 0);
   assert(program.struggleVariant < 7 && program.targetMinute == 13 * 60 + 45 && releaseClockEnabled);
-  sensorFor(50, 600); assert(proximityTriggers == 1 && !proximityGate.armed && proximityDetected);
+  sensorFor(66, 600); assert(proximityTriggers == 1 && !proximityGate.armed && proximityDetected);
   sensorFor(95, 600); sensorFor(0, 300); // A new arrival during the animation is consumed with its reason.
   assert(proximityLastOutcome == "ignored" && proximityLastReason == "Motion or a program is busy");
   assert(proximityLastTriggerId == firstSensorMotion && proximityLastTriggerTime == firstSensorTime);
@@ -729,7 +730,7 @@ int main() {
   sensorFor(0, 300); assert(proximityTriggers == 1); // Long sampling gap discards pending eligibility.
 #if TIMIAC_RELEASE
   releaseClockEnabled = false; sensorFor(95, 600); assert(!proximityGate.armed); // Manual Home/paused clock.
-  sensorFor(0, 300); assert(proximityLastReason == "Clock paused; start the clock first" && proximityTriggers == 1);
+  sensorFor(0, 300); assert(proximityLastReason == "Clock paused; sensor readings remain active, movement blocked" && proximityTriggers == 1);
 #endif
   resetMaster(); connectBoard(0); connectBoard(1); releaseClockEnabled = true;
   rtcValid = false; sensorFor(95, 600); sensorFor(0, 300);
@@ -737,6 +738,21 @@ int main() {
   resetMaster(); connectBoard(0); releaseClockEnabled = true;
   sensorFor(95, 600); sensorFor(0, 300);
   assert(proximityLastReason == "Motor boards are not ready" && !proximityTriggers);
+  // Runtime threshold adjustment is diagnostics only: preserve Stop and never
+  // create a program, home, resume the clock, or replay a held hand afterwards.
+  resetMaster(); releaseStartupPending = false; stopRequested = true;
+  DynamicJsonDocument thresholds(128); thresholds["detectAdc"] = 16; thresholds["clearAdc"] = 40;
+  assert(!setProximityThresholds(thresholds.as<JsonVariant>()));
+  assert(stopRequested && !releaseClockEnabled && !operation.barrier.active() && !program.reserved());
+  sensorFor(80, 600); sensorFor(3, 100);
+  assert(proximityDetected && proximityLastReason == "Stop is active" && !proximityTriggers && !proximityGate.armed);
+  thresholds["clearAdc"] = 16;
+  assert(setProximityThresholds(thresholds.as<JsonVariant>()));
+  assert(proximityDetectAdc == 16 && proximityClearAdc == 40 && stopRequested);
+  thresholds["clearAdc"] = 40; releaseClockEnabled = true;
+  assert(setProximityThresholds(thresholds.as<JsonVariant>()));
+  connectBoard(0); connectBoard(1); boards[0].homed = boards[1].homed = 63; stopRequested = false;
+  sensorFor(3, 600); assert(!proximityTriggers && !program.reserved()); // No queued gesture when Stop clears.
   resetMaster(); connectBoard(0); connectBoard(1);
   firmwareUpdating = true;
   assert(!bothHealthy() && !boardsHealthy(1));

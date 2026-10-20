@@ -97,6 +97,11 @@ void handleApi(AsyncWebServerRequest* request, JsonVariant doc) {
     if (error) { errorReply(request, 409, error); return; }
     statusReply(request); return;
   }
+  if (path == "/api/proximity") {
+    const char* error = setProximityThresholds(doc);
+    if (error) { errorReply(request, 409, error); return; }
+    statusReply(request); return;
+  }
   if (path == "/api/wifi") {
     const char* error = saveUplink(doc);
     if (error) { errorReply(request, 400, error); return; }
@@ -340,7 +345,7 @@ void configureHttp() {
     response->addHeader("Cache-Control", "no-store"); request->send(response);
   });
 #endif
-  for (const char* path : {"/api/claim", "/api/lease", "/api/release", "/api/command", "/api/action", "/api/time", "/api/wifi", "/api/speed", "/api/stop",
+  for (const char* path : {"/api/claim", "/api/lease", "/api/release", "/api/command", "/api/action", "/api/time", "/api/wifi", "/api/speed", "/api/proximity", "/api/stop",
        "/api/program/begin", "/api/program/append", "/api/program/start", "/api/program/pause", "/api/program/resume"}) {
     auto* handler = new AsyncCallbackJsonWebHandler(path, [](AsyncWebServerRequest* request, JsonVariant& json) { handleApi(request, json); }, 4096);
     handler->setMethod(HTTP_POST); handler->setMaxContentLength(2300); http.addHandler(handler);

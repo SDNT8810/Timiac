@@ -19,7 +19,7 @@ bool configureProximityAdc(unsigned pin) {
 }
 bool readProximityAdc(uint16_t& raw, uint32_t& millivolts, uint32_t& floorMillivolts) {
   // A median of nine rejects up to four isolated spikes without smoothing a
-  // hand transition over the existing 200 ms gesture debounce.
+  // hand transition over the short gesture debounce.
   uint16_t samples[9];
   for (unsigned i = 0; i < 9; ++i) {
     const int value = adc1_get_raw(proximityAdcChannel);

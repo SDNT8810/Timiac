@@ -49,14 +49,14 @@ int main(int argc, char** argv) {
   assert(!gate.sample(false, true, 2000));
   assert(!gate.sample(false, true, 2499)); assert(!gate.armed);
   assert(!gate.sample(false, true, 2500)); assert(gate.armed);
-  assert(!gate.sample(true, true, 2520)); assert(!gate.sample(true, true, 2719));
-  assert(gate.sample(true, true, 2720));
+  assert(!gate.sample(true, true, 2520)); assert(!gate.sample(true, true, 2559));
+  assert(gate.sample(true, true, 2560));
   for (unsigned now = 2740; now < 4000; now += 20) assert(!gate.sample(true, true, now)); // Held hand cannot repeat.
   assert(!gate.sample(false, true, 4000)); assert(!gate.sample(false, true, 4500)); assert(gate.armed);
   assert(!gate.sample(true, true, 4520));
-  assert(!gate.sample(false, true, 4600)); // A short electrical/optical glitch does not trigger.
-  assert(!gate.sample(true, true, 4620)); assert(!gate.sample(true, true, 4819));
-  assert(gate.sample(true, true, 4820));
+  assert(!gate.sample(false, true, 4540)); // A short electrical/optical glitch does not trigger.
+  assert(!gate.sample(true, true, 4620)); assert(!gate.sample(true, true, 4659));
+  assert(gate.sample(true, true, 4660));
   assert(!gate.sample(false, true, 5000)); assert(!gate.sample(false, true, 5500)); assert(gate.armed);
   assert(!gate.sample(true, true, 5520)); assert(!gate.sample(true, false, 5600)); // Busy/Stop discards pending detection.
   assert(!gate.armed);
