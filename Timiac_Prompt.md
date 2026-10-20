@@ -244,3 +244,8 @@ add a small struggle on "Next hour" animation middle :
 when they are all open, do struggle something between 37 - 48 mm for 3 secounds , then the rest of move (close)
 
 4- instead of "Home" i want "Open" key . and it must sent all arms to full open instead of running home command
+
+
+-------------------------------------------------------------
+
+i wonder if we can make them less noisy or not ?
