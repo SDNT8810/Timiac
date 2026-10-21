@@ -44,11 +44,11 @@ void octopusNext() {
 void octopusTick() {
   if (!octopusPhase && firmwareUpdating && firmwareUpdate.kind == "octopus" && firmwareUpdate.state == "waiting for UART") {
     if (firmwareUpdateCancel) { otaFailed("Update cancelled before SD transfer"); octopusImage.close(); return; }
-    if (uart.session.state == timiac::OctopusSession::State::Ready && !uart.session.waiting) {
+    if (localUart().session.state == timiac::OctopusSession::State::Ready && !localUart().session.waiting) {
       firmwareUpdate.state = "writing SD";
       firmwareUpdate.phase = "Writing SD via UART (16-byte blocks)";
       octopusPhase = 6; octopusOffset = octopusNextOffset = 0; otaSerialLine = "";
-      uart.lastReply = ""; uart.lastReplyAt = 0;
+      localUart().lastReply = ""; localUart().lastReplyAt = 0;
       octopusSend("M997 P4"); // Clear an abandoned staging session before opening another.
     } else if (uint32_t(millis() - octopusSent) > 20000) { octopusImage.close(); otaFailed("Octopus UART is not ready; reset a halted motor board first"); }
     return;
@@ -56,7 +56,7 @@ void octopusTick() {
   if (!octopusPhase) return;
   if (firmwareUpdateCancel && octopusPhase != 4 && octopusPhase != 5) { octopusAbort(); otaFailed("Update cancelled before activation"); return; }
   if (octopusPhase == 5) {
-    if (uart.online() && uart.sdOtaSupported && uart.octopusSoftware == firmwareUpdate.revision) {
+    if (localUart().online() && localUart().sdOtaSupported && localUart().octopusSoftware == firmwareUpdate.revision) {
       if (!saveOctopusUpdateReceipt(true)) logMessage("Octopus verified; completed receipt write failed, pending receipt retained");
       firmwareUpdate.state = "complete"; firmwareUpdating = false; octopusPhase = 0;
       LittleFS.remove("/octopus.update");
@@ -69,12 +69,12 @@ void octopusTick() {
     if (c != '\n') { if (c != '\r' && otaSerialLine.length() < 180) otaSerialLine += c; continue; }
     String line = otaSerialLine; otaSerialLine = ""; line.trim();
     if (line.startsWith("echo:")) { line.remove(0, 5); line.trim(); }
-    if (!line.isEmpty()) { uart.lastReply = line.substring(0, 100); uart.lastReplyAt = millis(); }
+    if (!line.isEmpty()) { localUart().lastReply = line.substring(0, 100); localUart().lastReplyAt = millis(); }
     // A reset outside activation loses the staging session. Record it instead
     // of swallowing the banner and later claiming only an ACK timed out.
     if (line == "start" && octopusPhase != 4) {
       const String reason = "Octopus restarted while " + String(octopusPhaseName()) + " at byte " + String(octopusOffset);
-      octopusPhase = 0; octopusImage.close(); uart.receive(line); otaFailed(reason); return;
+      octopusPhase = 0; octopusImage.close(); localUart().receive(line); otaFailed(reason); return;
     }
     if (line.startsWith("TIMIAC_FW_ERROR") || line.startsWith("Error:") || line.startsWith("Unknown command:")) {
       // The leading newline may finish an abandoned partial command. Its
@@ -86,7 +86,7 @@ void octopusTick() {
       octopusPhase = 1; octopusSend("M997 P0 " + String(firmwareUpdate.size) + " " + String(firmwareUpdate.crc32));
     }
     if (line == "start" && octopusPhase == 4) {
-      uart.receive(line); octopusPhase = 5; octopusSent = millis(); firmwareUpdate.state = "reconnecting"; return;
+      localUart().receive(line); octopusPhase = 5; octopusSent = millis(); firmwareUpdate.state = "reconnecting"; return;
     }
     if ((octopusPhase == 1 || octopusPhase == 2) && line == "TIMIAC_FW_OFFSET " + String(octopusNextOffset)) {
       octopusOffset = octopusNextOffset; firmwareUpdate.done = octopusOffset; octopusNext();
@@ -97,7 +97,7 @@ void octopusTick() {
       octopusPhase = 4; firmwareUpdate.state = "activating";
       firmwareUpdate.phase = "Activating verified SD image"; octopusSend("M997 P3");
     } else if (octopusPhase == 4 && line == "TIMIAC_FW_REBOOT") {
-      uart.receive("start"); octopusPhase = 5; octopusSent = millis(); firmwareUpdate.state = "reconnecting"; return;
+      localUart().receive("start"); octopusPhase = 5; octopusSent = millis(); firmwareUpdate.state = "reconnecting"; return;
     }
   }
   if (octopusPhase == 4) {
@@ -112,7 +112,7 @@ void octopusTick() {
   if (octopusPhase && octopusPhase != 5 && uint32_t(millis() - octopusSent) > acknowledgementMs) {
     if (++octopusRetries > 4) {
       const String error = "Octopus SD ACK timeout while " + String(octopusPhaseName()) + " at " + String(octopusOffset) + "/" + String(firmwareUpdate.size) +
-        "; last reply: " + (uart.lastReply.isEmpty() ? String("none") : uart.lastReply);
+        "; last reply: " + (localUart().lastReply.isEmpty() ? String("none") : localUart().lastReply);
       octopusAbort(); otaFailed(error); return;
     }
     octopusSent = millis();

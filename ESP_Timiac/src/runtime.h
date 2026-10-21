@@ -1,6 +1,7 @@
 #pragma once
 struct LogEntry { uint32_t id = 0, at = 0; String text; };
-LogEntry logs[32];
+constexpr uint32_t kLogCapacity = 16;
+LogEntry logs[kLogCapacity];
 uint32_t logSequence = 0, sequence = 0;
 String bootId, coordinatorBoot, serialLine;
 String bridgeResetReason;
@@ -50,6 +51,7 @@ void writeReliabilityStatus(JsonObject status) {
   status["minFreeHeap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   status["largestFreeBlock"] = platformLargestNetworkBlock();
   status["resetReason"] = unsigned(esp_reset_reason());
+  writeTlsMemoryStatus(status);
 #endif
 }
 uint8_t stopRequired = 0, stopRecoveryRequired = 0;

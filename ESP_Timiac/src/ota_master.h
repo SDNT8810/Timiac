@@ -107,13 +107,13 @@ bool otaStartDownload() {
     otaBridgeNonce = info["nonce"].as<String>();
     otaBridgeBoot = info["boot"].as<String>(); otaBridgeAccepted = false;
   }
-  if (!otaOpenRequests) { otaMasterFailed("Firmware download worker unavailable"); return false; }
+  if (!otaOpenResponses) { otaMasterFailed("Firmware download worker unavailable"); return false; }
   auto* session = new (std::nothrow) OtaDownloadSession;
   if (!session) { otaMasterFailed("Not enough memory for firmware download"); return false; }
   session->localTransport = !otaLocalImageUrl.isEmpty();
   session->url = session->localTransport ? otaLocalImageUrl : String(TIMIAC_CLOUD_URL) + "/device/v1/devices/" + TIMIAC_CLOUD_DEVICE_ID + "/firmware/" + otaImageId;
   session->expectedSize = firmwareUpdate.size;
-  if (xQueueSend(otaOpenRequests, &session, 0) != pdTRUE) { delete session; otaMasterFailed("Firmware connection worker busy"); return false; }
+  if (!startOtaDownload(session)) { delete session; otaMasterFailed("Firmware connection worker memory unavailable"); return false; }
   otaOpenInFlight = true; firmwareUpdate.state = "connecting";
   firmwareUpdate.phase = session->localTransport ? "Connecting to the local PC firmware server" : "Connecting securely to the firmware gateway";
   return true;

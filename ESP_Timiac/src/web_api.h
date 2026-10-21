@@ -60,7 +60,7 @@ void statusReply(AsyncWebServerRequest* request) {
   uint32_t after = request->hasParam("after") ? strtoul(request->getParam("after")->value().c_str(), nullptr, 10) : 0;
   uint32_t first = logSequence > 8 ? logSequence - 8 : 0;
   for (uint32_t i = first; i < logSequence; ++i) {
-    const LogEntry& entry = logs[i % 32]; if (entry.id <= after) continue;
+    const LogEntry& entry = logs[i % kLogCapacity]; if (entry.id <= after) continue;
     JsonObject event = history.createNestedObject(); event["id"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
   }
   doc["logSequence"] = logSequence;
@@ -325,9 +325,9 @@ void configureHttp() {
     writeUplinkStatus(document.createNestedObject("wifi"));
     writeDiagnosticBatch(document.createNestedArray("persistentEvents"), true);
     JsonArray events = document.createNestedArray("recentEvents");
-    const uint32_t first = logSequence > 32 ? logSequence - 32 : 0;
+    const uint32_t first = logSequence > kLogCapacity ? logSequence - kLogCapacity : 0;
     for (uint32_t i = first; i < logSequence; ++i) {
-      const auto& entry = logs[i % 32]; JsonObject event = events.createNestedObject();
+      const auto& entry = logs[i % kLogCapacity]; JsonObject event = events.createNestedObject();
       event["id"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
     }
     if (document.overflowed()) { errorReply(request, 503, "Diagnostic snapshot unavailable; use /api/diagnostics?brief=1"); return; }

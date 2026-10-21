@@ -47,6 +47,7 @@ struct IPAddress {
 };
 struct WiFiClient {
   bool connectedFlag = false, writeSucceeds = true, connectSucceeds = false;
+  unsigned discarded = 0;
   size_t writeCapacity = 4096, maxWrite = 4096;
   std::string wire, assembling;
   std::vector<String> sent;
@@ -61,6 +62,7 @@ struct WiFiClient {
   bool connect(IPAddress ip, unsigned port, int) { return connect(ip, port); }
   IPAddress remoteIP() const { return IPAddress(); }
 };
+inline void discardPeerSocket(WiFiClient& socket) { ++socket.discarded; socket.stop(); }
 inline int writePeerChunk(WiFiClient& client, const char* data, size_t length) {
   if (!client.writeSucceeds) return -1;
   const size_t count = std::min(length, std::min(client.writeCapacity, client.maxWrite));

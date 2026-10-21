@@ -542,11 +542,11 @@ int main() {
   hello["board"] = 1; hello["axes"] = kAxisCount; hello["version"] = timiac::protocolVersion;
   hello["machine"] = timiac::machineId; hello["software"] = kSoftwareRevision; hello["resetReason"] = "External System";
   String text; serializeJson(hello, text); processPeer(peers[0], text);
-  assert(logs[(logSequence - 1) % 32].text.indexOf("same ESP boot") >= 0);
+  assert(logs[(logSequence - 1) % kLogCapacity].text.indexOf("same ESP boot") >= 0);
   assert(!boards[0].trajectorySupported);
   hello["trajectoryVersion"] = timiac::trajectoryVersion;
   hello["from"] = "new-boot"; peers[0].paired = false; text = ""; serializeJson(hello, text); processPeer(peers[0], text);
-  assert(logs[(logSequence - 1) % 32].text.indexOf("boot reason: External System") >= 0);
+  assert(logs[(logSequence - 1) % kLogCapacity].text.indexOf("boot reason: External System") >= 0);
   assert(boards[0].trajectorySupported);
 
   // A full send buffer is backpressure, not a disconnected ESP. Preparation
@@ -691,7 +691,7 @@ int main() {
   assert(proximityLastOutcome == "triggered" && proximityLastReason.isEmpty());
   assert(proximityLastTriggerTime == rtcText && proximityLastTriggerId == program.id);
   const String firstSensorMotion = proximityLastTriggerId, firstSensorTime = proximityLastTriggerTime;
-  assert(logs[(logSequence - 1) % 32].text.indexOf("Hand sensor: Struggle triggered") == 0);
+  assert(logs[(logSequence - 1) % kLogCapacity].text.indexOf("Hand sensor: Struggle triggered") == 0);
   assert(program.struggleVariant < 7 && program.targetMinute == 13 * 60 + 45 && releaseClockEnabled);
   sensorFor(66, 600); assert(proximityTriggers == 1 && !proximityGate.armed && proximityDetected);
   sensorFor(95, 600); sensorFor(0, 300); // A new arrival during the animation is consumed with its reason.

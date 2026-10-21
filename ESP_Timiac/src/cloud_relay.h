@@ -32,7 +32,7 @@ void cloudSnapshot(JsonObject snapshot) {
   JsonArray diagnostics = snapshot.createNestedArray("diagnostics"); writeDiagnosticBatch(diagnostics);
   const uint32_t firstLog = logSequence > 3 ? logSequence - 3 : 0;
   for (uint32_t i = firstLog; i < logSequence; ++i) {
-    const auto& entry = logs[i % 32];
+    const auto& entry = logs[i % kLogCapacity];
     JsonObject event = diagnostics.createNestedObject(); event["id"] = "r" + String(entry.id);
     event["boot"] = bootId; event["sequence"] = entry.id; event["at"] = entry.at; event["text"] = entry.text;
   }

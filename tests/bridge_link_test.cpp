@@ -24,16 +24,16 @@ void setupBridge() {
   systemLatched = false; systemFault = ""; operation = Operation();
   peers[0] = Peer(); auto& p = peers[0]; p.boot = coordinatorBoot; p.paired = true;
   p.socket.connectedFlag = true; p.rx = p.tx = hostNow;
-  uart.session = timiac::OctopusSession();
-  uart.session.identity = true; uart.session.state = timiac::OctopusSession::State::Ready;
-  uart.session.lastRx = hostNow; uart.session.homed = 1;
-  uart.drivers.tested = uart.drivers.connected = uart.drivers.currentOk = uart.drivers.stepsOk = uart.drivers.modeOk = 63;
-  uart.drivers.columns = true; uart.drivers.settings = 7;
+  localUart().session = timiac::OctopusSession();
+  localUart().session.identity = true; localUart().session.state = timiac::OctopusSession::State::Ready;
+  localUart().session.lastRx = hostNow; localUart().session.homed = 1;
+  localUart().drivers.tested = localUart().drivers.connected = localUart().drivers.currentOk = localUart().drivers.stepsOk = localUart().drivers.modeOk = 63;
+  localUart().drivers.columns = true; localUart().drivers.settings = 7;
   for (unsigned i = 0; i < 6; ++i) {
-    uart.drivers.currentMa[i] = timiac::driverCurrent; uart.drivers.microsteps[i] = timiac::driverMicrosteps;
+    localUart().drivers.currentMa[i] = timiac::driverCurrent; localUart().drivers.microsteps[i] = timiac::driverMicrosteps;
   }
-  uart.fault = ""; uart.halted = uart.job = false;
-  uart.seenFailures = uart.seenCompletions = 0; Serial.sent.clear();
+  localUart().fault = ""; localUart().halted = localUart().job = false;
+  localUart().seenFailures = localUart().seenCompletions = 0; Serial.sent.clear();
 }
 void drainNetwork() {
   for (unsigned i = 0; peers[0].outbox.pending() && i < 100; ++i) {
@@ -75,47 +75,47 @@ int main() {
   // Exercise the real M114 -> completion -> sendState path with no send space.
   setupBridge(); p.socket.writeCapacity = 0;
   operation.id = "home-X1"; operation.barrier.begin(hostNow); operation.barrier.phase = timiac::Phase::Running;
-  const char* commands[] = {"G1 X1 F120"}; assert(uart.session.stage(commands, 1, hostNow));
-  uart.session.next(++hostNow); assert(uart.session.commit()); uart.sync();
-  while (uart.session.running()) {
-    const char* command = uart.session.next(++hostNow);
+  const char* commands[] = {"G1 X1 F120"}; assert(localUart().session.stage(commands, 1, hostNow));
+  localUart().session.next(++hostNow); assert(localUart().session.commit()); localUart().sync();
+  while (localUart().session.running()) {
+    const char* command = localUart().session.next(++hostNow);
     if (command) {
-      uart.send(command);
-      if (!strcmp(command, "M114")) uart.receive("X:1.00 Y:0 Z:0 A:0 B:0 C:0 Count X:720 Y:0 Z:0 A:0 B:0 C:0");
-      uart.receive("ok");
+      localUart().send(command);
+      if (!strcmp(command, "M114")) localUart().receive("X:1.00 Y:0 Z:0 A:0 B:0 C:0 Count X:720 Y:0 Z:0 A:0 B:0 C:0");
+      localUart().receive("ok");
     }
-    uart.sync();
+    localUart().sync();
   }
-  assert(operation.barrier.phase == timiac::Phase::Done && uart.homed == 1 && !systemLatched && p.socket.connected());
+  assert(operation.barrier.phase == timiac::Phase::Done && localUart().homed == 1 && !systemLatched && p.socket.connected());
   drainNetwork(); p.socket.writeCapacity = 4096; sendState(); drainNetwork(); validPackets();
   DynamicJsonDocument done(4096); assert(!deserializeJson(done, p.socket.sent.back()));
   assert(done["type"] == "state" && done["phase"] == "done" && done["board"]["homed"] == 1);
-  assert(uart.session.resets == 0 && Serial.sent.find("M112") == std::string::npos && Serial.sent.find("M410") == std::string::npos);
+  assert(localUart().session.resets == 0 && Serial.sent.find("M112") == std::string::npos && Serial.sent.find("M410") == std::string::npos);
 
   // The production peer decoder and UART adapter accept an advertised queued
   // trajectory, preserve its order, and wait for one final planner drain only.
-  setupBridge(); uart.session.homed = 63;
+  setupBridge(); localUart().session.homed = 63;
   DynamicJsonDocument trajectory(4096);
   trajectory["type"] = "prepare"; trajectory["from"] = coordinatorBoot; trajectory["session"] = coordinatorBoot;
   trajectory["speedPercent"] = 20; trajectory["id"] = "hour"; trajectory["hash"] = 123; trajectory["trajectory"] = true;
   JsonArray lines = trajectory.createNestedArray("lines");
   for (unsigned i = 0; i < 28; ++i) lines.add("G1 X1 F120");
   String packet; serializeJson(trajectory, packet); processPeer(p, packet);
-  uart.session.next(hostNow); assert(uart.prepared());
+  localUart().session.next(hostNow); assert(localUart().prepared());
   trajectory.clear(); trajectory["type"] = "commit"; trajectory["speedPercent"] = 20; trajectory["id"] = "hour";
   trajectory["from"] = coordinatorBoot; trajectory["session"] = coordinatorBoot;
   packet = ""; serializeJson(trajectory, packet); processPeer(p, packet);
-  assert(operation.speedPercent == 20 && uart.session.speedPercent == 20);
-  assert(uart.job && operation.barrier.phase == timiac::Phase::Running);
+  assert(operation.speedPercent == 20 && localUart().session.speedPercent == 20);
+  assert(localUart().job && operation.barrier.phase == timiac::Phase::Running);
   unsigned moves = 0, drains = 0;
-  while (uart.session.running()) {
-    if (const char* command = uart.session.next(++hostNow)) {
+  while (localUart().session.running()) {
+    if (const char* command = localUart().session.next(++hostNow)) {
       if (!strcmp(command, "M220 S20")) assert(moves == 0);
       if (!strncmp(command, "G1 ", 3)) { ++moves; assert(!drains); }
       if (!strcmp(command, "M400")) ++drains;
-      uart.send(command); uart.receive("ok");
+      localUart().send(command); localUart().receive("ok");
     }
-    uart.sync();
+    localUart().sync();
   }
   assert(moves == 28 && drains == 1 && operation.barrier.phase == timiac::Phase::Done && !systemLatched);
 
@@ -123,7 +123,15 @@ int main() {
   setupBridge(); operation.id = "move"; operation.barrier.begin(hostNow); operation.barrier.phase = timiac::Phase::Running;
   p.socket.writeSucceeds = false; sendState(); networkTick();
   assert(operation.barrier.phase == timiac::Phase::Failed && systemLatched);
-  assert(Serial.sent.find("M410") != std::string::npos && !uart.homed && !p.outbox.pending());
+  assert(Serial.sent.find("M410") != std::string::npos && !localUart().homed && !p.outbox.pending());
+  assert(p.socket.discarded);
+  // A timed-out idle socket is discarded and a new status-only handshake can
+  // start on the next retry, without waiting for the old TCP retransmissions.
+  setupBridge(); p.rx = hostNow - kPeerTimeout; reconnectAt = hostNow;
+  networkTick(); assert(!p.paired && !p.socket.connected() && p.socket.discarded == 1);
+  assert(!systemLatched && Serial.sent.find("M410") == std::string::npos);
+  p.socket.connectSucceeds = true; hostNow += 5001; networkTick();
+  assert(p.socket.connected() && !p.paired && p.socket.sent.back().indexOf("hello") >= 0);
   std::cout << "Production bridge: congested telemetry, partial writes, M114 completion, and genuine link failure passed\n";
   return 0;
 }

@@ -106,7 +106,7 @@ void loop() {
   }
 #else
   networkTick(); operationTick();
-  if (!firmwareUpdateOwnsUart()) uart.tick();
+  if (!firmwareUpdateOwnsUart()) localUart().tick();
   checkpointFirmwareUpdate(); firmwareUpdateTick(); checkpointFirmwareUpdate(); operationTick();
 #endif
   yield();

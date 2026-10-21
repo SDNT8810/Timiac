@@ -22,9 +22,9 @@ void otaInfo() {
   DynamicJsonDocument doc(2048); writeFirmwareUpdateStatus(doc.to<JsonObject>());
   doc["nonce"] = otaNonce; doc["role"] = "esp" + String(TIMIAC_BOARD_ID);
   doc["boot"] = bootId;
-  doc["software"] = kSoftwareRevision; doc["octopusSoftware"] = uart.octopusSoftware;
-  doc["sdOtaSupported"] = uart.sdOtaSupported; doc["machine"] = timiac::machineId;
-  doc["busy"] = firmwareUpdating || uart.job || operation.barrier.active();
+  doc["software"] = kSoftwareRevision; doc["octopusSoftware"] = localUart().octopusSoftware;
+  doc["sdOtaSupported"] = localUart().sdOtaSupported; doc["machine"] = timiac::machineId;
+  doc["busy"] = firmwareUpdating || localUart().job || operation.barrier.active();
   String result; serializeJson(doc, result); otaReply(200, result);
 }
 void otaAccept() {
@@ -39,7 +39,7 @@ void otaAccept() {
       !otaHashValid(hash) || !otaEqual(otaHeader("X-Timiac-Auth"), otaAuthorization(otaNonce, id, target, kind, size, hash, crc, revision))) {
     otaReply(403, "{\"error\":\"Invalid authenticated update\"}"); return;
   }
-  if (firmwareUpdating || uart.job || operation.barrier.active() || (octopus && !uart.sdOtaSupported)) {
+  if (firmwareUpdating || localUart().job || operation.barrier.active() || (octopus && !localUart().sdOtaSupported)) {
     otaReply(409, "{\"error\":\"Board busy or initial Octopus SD update missing\"}"); return;
   }
   // A newer authenticated job supersedes the previous Octopus receipt. In

@@ -9,6 +9,10 @@
 timiac::TlsRecordBuffers<MBEDTLS_SSL_IN_BUFFER_LEN, MBEDTLS_SSL_OUT_BUFFER_LEN> tlsRecords;
 portMUX_TYPE tlsMemoryMux = portMUX_INITIALIZER_UNLOCKED;
 uint32_t tlsAllocationFailures = 0, tlsLastFailedAllocationBytes = 0;
+uint32_t tlsReserveDenials = 0;
+// TLS is optional; peer receive buffers, Wi-Fi and Stop handling are not.
+// Check every certificate/crypto allocation, not only the start of a handshake.
+constexpr uint32_t kTlsControlReserve = 16U * 1024;
 bool tlsRecordsReady = false;
 inline uint32_t platformFreeNetworkHeap() {
   return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -24,7 +28,15 @@ void* allocateTlsMemory(size_t count, size_t size) {
     portENTER_CRITICAL(&tlsMemoryMux);
     memory = tlsRecords.allocate(bytes);
     portEXIT_CRITICAL(&tlsMemoryMux);
-  } else memory = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  } else {
+    const uint32_t available = platformFreeNetworkHeap();
+    if (bytes && (available < kTlsControlReserve || bytes > available - kTlsControlReserve)) {
+      memory = nullptr;
+      portENTER_CRITICAL(&tlsMemoryMux);
+      ++tlsReserveDenials;
+      portEXIT_CRITICAL(&tlsMemoryMux);
+    } else memory = heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  }
   if (!memory && bytes) {
     portENTER_CRITICAL(&tlsMemoryMux);
     ++tlsAllocationFailures; tlsLastFailedAllocationBytes = bytes;
@@ -43,8 +55,9 @@ void configureTlsMemory() {
 }
 void writeTlsMemoryStatus(JsonObject status) {
   portENTER_CRITICAL(&tlsMemoryMux);
-  const uint32_t failures = tlsAllocationFailures, bytes = tlsLastFailedAllocationBytes;
+  const uint32_t failures = tlsAllocationFailures, bytes = tlsLastFailedAllocationBytes, denials = tlsReserveDenials;
   portEXIT_CRITICAL(&tlsMemoryMux);
   status["tlsReservedBytes"] = tlsRecordsReady ? MBEDTLS_SSL_IN_BUFFER_LEN + MBEDTLS_SSL_OUT_BUFFER_LEN : 0;
   status["tlsAllocationFailures"] = failures; status["tlsLastFailedAllocationBytes"] = bytes;
+  status["tlsControlReserveBytes"] = kTlsControlReserve; status["tlsReserveDenials"] = denials;
 }

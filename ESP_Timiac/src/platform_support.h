@@ -51,6 +51,16 @@ inline String platformChipId() { return String(ESP.getChipId(), HEX); }
 #endif
 
 // Return accepted bytes, zero for temporary congestion, or -1 for a broken link.
+inline void discardPeerSocket(WiFiClient& socket) {
+#if defined(ARDUINO_ARCH_ESP8266)
+  // A failed link must release queued lwIP packets/PCBs immediately. Graceful
+  // stop() can leave an unacknowledged connection waiting for TCP retries.
+  socket.abort();
+#else
+  socket.stop();
+#endif
+}
+
 // ESP8266 writes are limited to current buffer space and its short timeout.
 inline int writePeerChunk(WiFiClient& socket, const char* data, size_t length) {
 #if defined(ARDUINO_ARCH_ESP32)

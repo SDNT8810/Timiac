@@ -111,4 +111,10 @@ struct UartBridge {
     sync();
 #endif
   }
-} uart;
+};
+inline UartBridge& localUart() {
+  // The master has no UART motor connection. Lazy construction lets its
+  // linker discard this entire 6 KB adapter instead of reserving it at boot.
+  static UartBridge bridge;
+  return bridge;
+}

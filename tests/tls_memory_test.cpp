@@ -14,8 +14,9 @@ void* (*sdkAllocate)(size_t, size_t) = nullptr;
 void (*sdkRelease)(void*) = nullptr;
 bool rejectHeap = false;
 unsigned heapCalls = 0, liveBlocks = 0;
+uint32_t freeByteHeap = 81728;
 uint32_t heap_caps_get_free_size(unsigned caps) {
-  return caps == MALLOC_CAP_INTERNAL ? 120628 : 81728;
+  return caps == MALLOC_CAP_INTERNAL ? 120628 : freeByteHeap;
 }
 uint32_t heap_caps_get_largest_free_block(unsigned caps) {
   return caps == MALLOC_CAP_INTERNAL ? 38900 : 14000;
@@ -23,9 +24,18 @@ uint32_t heap_caps_get_largest_free_block(unsigned caps) {
 void* heap_caps_calloc(size_t count, size_t size, unsigned caps) {
   assert(caps == (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)); ++heapCalls;
   if (rejectHeap) return nullptr;
-  void* block = std::calloc(count, size); if (block) ++liveBlocks; return block;
+  const size_t bytes = count * size;
+  if (bytes > freeByteHeap) return nullptr;
+  auto* block = static_cast<size_t*>(std::calloc(1, bytes + sizeof(size_t)));
+  if (!block) return nullptr;
+  *block = bytes; freeByteHeap -= bytes; ++liveBlocks;
+  return block + 1;
 }
-void heap_caps_free(void* pointer) { if (pointer) { assert(liveBlocks); --liveBlocks; } std::free(pointer); }
+void heap_caps_free(void* pointer) {
+  if (!pointer) return;
+  auto* block = static_cast<size_t*>(pointer) - 1;
+  assert(liveBlocks); --liveBlocks; freeByteHeap += *block; std::free(block);
+}
 int mbedtls_platform_set_calloc_free(void* (*allocate)(size_t, size_t), void (*release)(void*)) {
   assert(!sdkAllocate && !sdkRelease); sdkAllocate = allocate; sdkRelease = release; return 0;
 }
@@ -46,6 +56,16 @@ int main() {
   rejectHeap = false;
   void* certificate = sdkAllocate(1, 2048); assert(certificate && liveBlocks == 1);
   sdkRelease(certificate); assert(!liveBlocks);
+  // Emulate the overnight peak: a handshake must fail before consuming the
+  // last bytes needed by Wi-Fi and the coordinator, and recover after cleanup.
+  freeByteHeap = kTlsControlReserve + 2048;
+  certificate = sdkAllocate(1, 2048); assert(certificate && freeByteHeap == kTlsControlReserve);
+  assert(!sdkAllocate(1, 32) && tlsReserveDenials == 1 && tlsLastFailedAllocationBytes == 32);
+  sdkRelease(certificate); assert(freeByteHeap == kTlsControlReserve + 2048);
+  freeByteHeap = kTlsControlReserve - 1;
+  assert(!sdkAllocate(1, 1) && tlsReserveDenials == 2);
+  input = sdkAllocate(1, MBEDTLS_SSL_IN_BUFFER_LEN); assert(input); sdkRelease(input);
+  freeByteHeap = 81728;
   // Two tasks may free/acquire records; never alias a live session's buffer.
   auto churn = [] {
     for (unsigned n = 0; n < 1000; ++n) {
@@ -54,9 +74,10 @@ int main() {
     }
   };
   std::thread first(churn), second(churn); first.join(); second.join();
-  assert(!liveBlocks && tlsAllocationFailures == 2);
+  assert(!liveBlocks && tlsAllocationFailures == 4);
   DynamicJsonDocument diagnostics(512); writeTlsMemoryStatus(diagnostics.to<JsonObject>());
-  assert(diagnostics["tlsReservedBytes"] == 33434 && diagnostics["tlsAllocationFailures"] == 2);
-  assert(diagnostics["tlsLastFailedAllocationBytes"] == 2048);
+  assert(diagnostics["tlsReservedBytes"] == 33434 && diagnostics["tlsAllocationFailures"] == 4);
+  assert(diagnostics["tlsLastFailedAllocationBytes"] == 1);
+  assert(diagnostics["tlsControlReserveBytes"] == 16384 && diagnostics["tlsReserveDenials"] == 2);
   std::cout << "Production TLS allocator: excludes instruction RAM, records survive failed heap, SDK hooks, concurrent cleanup and allocation diagnostics passed\n";
 }

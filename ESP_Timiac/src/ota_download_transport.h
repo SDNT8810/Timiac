@@ -14,43 +14,41 @@ struct OtaDownloadSession {
   uint32_t expectedSize = 0;
   ~OtaDownloadSession() { http.end(); tls.stop(); local.stop(); }
 };
-QueueHandle_t otaOpenRequests = nullptr, otaOpenResponses = nullptr;
-TaskHandle_t otaOpenTask = nullptr;
+QueueHandle_t otaOpenResponses = nullptr;
 bool otaOpenInFlight = false;
-void otaDownloadTask(void*) {
-  for (;;) {
-    OtaDownloadSession* session = nullptr;
-    if (xQueueReceive(otaOpenRequests, &session, portMAX_DELAY) != pdTRUE) continue;
-    if (!session->localTransport) {
-      session->tls.setCACert(strlen(TIMIAC_CLOUD_CA_CERT) ? TIMIAC_CLOUD_CA_CERT : kCloudRunRootCa);
-      session->tls.setHandshakeTimeout(20);
-    }
-    session->http.setConnectTimeout(8000); session->http.setTimeout(5000);
-    session->http.useHTTP10(true); session->http.setReuse(false);
-    const bool opened = session->localTransport ? session->http.begin(session->local, session->url) : session->http.begin(session->tls, session->url);
-    if (!opened) session->error = "Cannot open firmware download";
-    else {
-      if (!session->localTransport) session->http.addHeader("X-Timiac-Device-Key", TIMIAC_CLOUD_DEVICE_KEY);
-      session->http.addHeader("Accept-Encoding", "identity");
-      const int code = session->http.GET();
-      if (code != 200) {
-        session->error = String(session->localTransport ? "Local firmware server unreachable; allow Python through the PC firewall (" : "Firmware gateway connection failed (") + String(code) + ")";
-        if (code < 0 && !session->localTransport) {
-          char detail[128] = {};
-          const int tlsError = session->tls.lastError(detail, sizeof(detail));
-          if (tlsError) session->error += "; TLS " + String(tlsError) + ": " + detail;
-        }
-      }
-      else if (session->http.getSize() != int(session->expectedSize)) session->error = "Firmware download length mismatch";
-    }
-    xQueueSend(otaOpenResponses, &session, portMAX_DELAY);
+void otaDownloadTask(void* argument) {
+  auto* session = static_cast<OtaDownloadSession*>(argument);
+  if (!session->localTransport) {
+    session->tls.setCACert(strlen(TIMIAC_CLOUD_CA_CERT) ? TIMIAC_CLOUD_CA_CERT : kCloudRunRootCa);
+    session->tls.setHandshakeTimeout(20);
   }
+  session->http.setConnectTimeout(8000); session->http.setTimeout(5000);
+  session->http.useHTTP10(true); session->http.setReuse(false);
+  const bool opened = session->localTransport ? session->http.begin(session->local, session->url) : session->http.begin(session->tls, session->url);
+  if (!opened) session->error = "Cannot open firmware download";
+  else {
+    if (!session->localTransport) session->http.addHeader("X-Timiac-Device-Key", TIMIAC_CLOUD_DEVICE_KEY);
+    session->http.addHeader("Accept-Encoding", "identity");
+    const int code = session->http.GET();
+    if (code != 200) {
+      session->error = String(session->localTransport ? "Local firmware server unreachable; allow Python through the PC firewall (" : "Firmware gateway connection failed (") + String(code) + ")";
+      if (code < 0 && !session->localTransport) {
+        char detail[128] = {};
+        const int tlsError = session->tls.lastError(detail, sizeof(detail));
+        if (tlsError) session->error += "; TLS " + String(tlsError) + ": " + detail;
+      }
+    }
+    else if (session->http.getSize() != int(session->expectedSize)) session->error = "Firmware download length mismatch";
+  }
+  xQueueSend(otaOpenResponses, &session, portMAX_DELAY);
+  // The receiver owns the session now. Return the 10 KB worker stack to
+  // the heap instead of keeping an idle updater task for the entire boot.
+  vTaskDelete(nullptr);
 }
 bool configureOtaDownloadTransport() {
-  otaOpenRequests = xQueueCreate(1, sizeof(OtaDownloadSession*));
   otaOpenResponses = xQueueCreate(1, sizeof(OtaDownloadSession*));
-  if (otaOpenRequests && otaOpenResponses && xTaskCreatePinnedToCore(otaDownloadTask, "timiac-ota", 10240, nullptr, 1, &otaOpenTask, 0) == pdPASS) return true;
-  if (otaOpenRequests) vQueueDelete(otaOpenRequests);
-  if (otaOpenResponses) vQueueDelete(otaOpenResponses);
-  otaOpenRequests = otaOpenResponses = nullptr; return false;
+  return otaOpenResponses != nullptr;
+}
+bool startOtaDownload(OtaDownloadSession* session) {
+  return otaOpenResponses && xTaskCreatePinnedToCore(otaDownloadTask, "timiac-ota", 10240, session, 1, nullptr, 0) == pdPASS;
 }

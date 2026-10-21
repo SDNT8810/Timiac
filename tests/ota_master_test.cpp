@@ -110,6 +110,7 @@ void collect() {
 }
 int main() {
   resetMaster(); connectBoard(0); connectBoard(1); configureFirmwareUpdate(); setBridgeInfo(false);
+  assert(hostTaskCreations == 0); // No updater stack is reserved during normal clock operation.
   accept("22222222-2222-4222-8222-222222222222", "esp1"); assert(stopPending && firmwareUpdating);
   for (auto& board : boards) board.stopAck = stopToken;
   cloudInFlight = true;
@@ -229,7 +230,8 @@ int main() {
   hostNow += 1500; firmwareUpdateTick();
   assert(firmwareUpdate.state == "failed" && !firmwareUpdating && firmwareUpdate.error.indexOf("without this Octopus update receipt") >= 0);
 
-  { std::lock_guard<std::mutex> lock(otaOpenRequests->mutex); otaOpenRequests->closed = true; otaOpenRequests->ready.notify_all(); }
-  otaOpenTask->join(); delete otaOpenTask; vQueueDelete(otaOpenRequests); vQueueDelete(otaOpenResponses);
+  hostJoinOneShotTasks();
+  assert(hostTaskCreations == connections && hostTaskCreations == 4);
+  vQueueDelete(otaOpenResponses);
   std::cout << "Production master OTA: stalled TLS, heartbeat service, short TCP writes, exact reboot receipts and safe cancellation passed\n";
 }

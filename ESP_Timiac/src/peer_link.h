@@ -48,7 +48,7 @@ bool workRequiresBoard(unsigned b) {
   return program.reserved() || (operation.barrier.active() && operation.barrier.includes(b));
 }
 void closePeer(Peer& p, const char* reason) {
-  p.closeReason = reason; p.outbox.clear(); p.socket.stop();
+  p.closeReason = reason; p.outbox.clear(); discardPeerSocket(p.socket);
 }
 bool flushPeer(Peer& p) {
   if (!p.socket.connected()) { p.outbox.clear(); return false; }
@@ -75,7 +75,7 @@ bool sendPeer(Peer& p, JsonDocument& doc) {
   p.tx = millis(); return flushPeer(p);
 }
 void logMessage(const String& message) {
-  LogEntry& entry = logs[logSequence % 32];
+  LogEntry& entry = logs[logSequence % kLogCapacity];
   entry.id = ++logSequence; entry.at = millis(); entry.text = message.substring(0, 180);
   if (message.startsWith("FAULT:") || message.indexOf(" link lost:") >= 0 ||
       message.indexOf("boot reason:") >= 0 || message.startsWith("Bridge packet rejected:") ||
@@ -85,35 +85,39 @@ void logMessage(const String& message) {
   }
 }
 void writeBoard(JsonObject board, unsigned index) {
-  bool online = TIMIAC_MASTER ? boardOnline(index) : uart.online();
+  bool online = TIMIAC_MASTER ? boardOnline(index) : localUart().online();
   const auto& remote = boards[index];
   board["online"] = online;
   board["bridgeConnected"] = TIMIAC_MASTER ? boardPeer(index) != nullptr && !timiac::expired(millis(), remote.stateAt, kPeerTimeout) : peers[0].paired;
   board["octopusConnected"] = online;
-  board["ready"] = online && (TIMIAC_MASTER ? remote.drivers.good() && remote.fault.isEmpty() && !remote.latched : uart.healthy()) && !systemLatched && !firmwareUpdating;
+  board["ready"] = online && (TIMIAC_MASTER ? remote.drivers.good() && remote.fault.isEmpty() && !remote.latched : localUart().healthy()) && !systemLatched && !firmwareUpdating;
   board["manualReady"] = TIMIAC_MASTER && !TIMIAC_RELEASE && boardsHealthy(1U << index);
-  board["busy"] = online && (TIMIAC_MASTER ? remote.busy : uart.job);
-  board["fault"] = TIMIAC_MASTER ? remote.fault : (uart.fault.isEmpty() ? systemFault : uart.fault);
-  board["resetRequired"] = TIMIAC_MASTER ? remote.resetRequired : uart.halted;
-  board["homed"] = online ? (TIMIAC_MASTER ? remote.homed : uart.homed) : 0;
-  board["reset"] = TIMIAC_MASTER ? remote.reset : uart.resetCount;
+  board["busy"] = online && (TIMIAC_MASTER ? remote.busy : localUart().job);
+  board["fault"] = TIMIAC_MASTER ? remote.fault : (localUart().fault.isEmpty() ? systemFault : localUart().fault);
+  board["resetRequired"] = TIMIAC_MASTER ? remote.resetRequired : localUart().halted;
+  board["homed"] = online ? (TIMIAC_MASTER ? remote.homed : localUart().homed) : 0;
+  board["reset"] = TIMIAC_MASTER ? remote.reset : localUart().resetCount;
   board["homingMode"] = online ? "switch" : "unknown";
-  board["firmware"] = TIMIAC_MASTER ? remote.firmware : (uart.session.identity ? timiac::machineId : "");
+  board["firmware"] = TIMIAC_MASTER ? remote.firmware : (localUart().session.identity ? timiac::machineId : "");
   board["software"] = TIMIAC_MASTER ? remote.software.c_str() : kSoftwareRevision;
-  board["octopusSoftware"] = TIMIAC_MASTER ? remote.octopusSoftware : uart.octopusSoftware;
+  board["octopusSoftware"] = TIMIAC_MASTER ? remote.octopusSoftware : localUart().octopusSoftware;
   board["otaSupported"] = TIMIAC_MASTER ? remote.otaSupported : true;
-  board["sdOtaSupported"] = TIMIAC_MASTER ? remote.sdOtaSupported : uart.sdOtaSupported;
+  board["sdOtaSupported"] = TIMIAC_MASTER ? remote.sdOtaSupported : localUart().sdOtaSupported;
   board["updating"] = TIMIAC_MASTER ? remote.updating : firmwareUpdating;
-  board["diagnostic"] = TIMIAC_MASTER ? remote.diagnostic : uart.diagnostic();
+  board["diagnostic"] = TIMIAC_MASTER ? remote.diagnostic : localUart().diagnostic();
   board["bridgeUptimeMs"] = TIMIAC_MASTER ? remote.uptime : millis();
   if (TIMIAC_MASTER) {
     Peer* peer = boardPeer(index);
     board["bridgeId"] = lastBoardBoot[index];
     if (peer) board["bridgeIp"] = peer->socket.remoteIP().toString();
+    if (peer) {
+      board["packetAgeMs"] = uint32_t(millis() - peer->rx);
+      board["pendingSendBytes"] = peer->outbox.pending();
+    }
     if (!lastBoardBoot[index].isEmpty()) board["lastSeenMs"] = uint32_t(millis() - remote.stateAt);
     else board["lastSeenMs"] = nullptr;
   }
-  const auto& drivers = TIMIAC_MASTER ? remote.drivers : uart.drivers;
+  const auto& drivers = TIMIAC_MASTER ? remote.drivers : localUart().drivers;
   JsonObject checks = board.createNestedObject("drivers");
   checks["tested"] = drivers.tested; checks["connected"] = drivers.connected;
   checks["current"] = drivers.currentOk; checks["microsteps"] = drivers.stepsOk;
@@ -128,11 +132,11 @@ void writeBoard(JsonObject board, unsigned index) {
     if (drivers.currentMa[i] >= 0) currents.add(drivers.currentMa[i]); else currents.add(nullptr);
     if (drivers.microsteps[i] >= 0) microsteps.add(drivers.microsteps[i]); else microsteps.add(nullptr);
   }
-  if (online && (TIMIAC_MASTER ? remote.driverReportAvailable : uart.session.driverReportAvailable))
-    checks["ageMs"] = TIMIAC_MASTER ? uint32_t(millis() - remote.driverReportAt) : uart.session.driverReportAge(millis());
+  if (online && (TIMIAC_MASTER ? remote.driverReportAvailable : localUart().session.driverReportAvailable))
+    checks["ageMs"] = TIMIAC_MASTER ? uint32_t(millis() - remote.driverReportAt) : localUart().session.driverReportAge(millis());
   else checks["ageMs"] = nullptr;
-  const auto& switches = TIMIAC_MASTER ? remote.endstops : uart.endstops;
-  const bool switchData = online && !(TIMIAC_MASTER ? remote.busy : uart.job) && switches.fresh(millis());
+  const auto& switches = TIMIAC_MASTER ? remote.endstops : localUart().endstops;
+  const bool switchData = online && !(TIMIAC_MASTER ? remote.busy : localUart().job) && switches.fresh(millis());
   if (switchData) board["endstopsAgeMs"] = uint32_t(millis() - switches.updatedAt);
   else board["endstopsAgeMs"] = nullptr;
   JsonArray endstops = board.createNestedArray("endstops");
@@ -142,15 +146,15 @@ void writeBoard(JsonObject board, unsigned index) {
     else endstops.add(nullptr);
   JsonArray positions = board.createNestedArray("positions");
   for (unsigned i = 0; i < 6; ++i)
-    if (i < kAxisCount && online && (TIMIAC_MASTER ? remote.known[i] : uart.known[i]))
-      positions.add(TIMIAC_MASTER ? remote.positions[i] : uart.positions[i]);
+    if (i < kAxisCount && online && (TIMIAC_MASTER ? remote.known[i] : localUart().known[i]))
+      positions.add(TIMIAC_MASTER ? remote.positions[i] : localUart().positions[i]);
     else positions.add(nullptr);
 }
 void sendState() {
   DynamicJsonDocument doc(3072);
   doc["type"] = "state"; writeBoard(doc.createNestedObject("board"), 0);
   doc["id"] = operation.id; doc["phase"] = operation.barrier.name();
-  doc["prepared"] = uart.prepared(); doc["error"] = operation.error;
+  doc["prepared"] = localUart().prepared(); doc["error"] = operation.error;
   doc["stopAck"] = acknowledgedStop; doc["latched"] = systemLatched;
   sendPeer(peers[0], doc); lastStateTx = millis();
 }
@@ -161,6 +165,16 @@ void stopAll(const String& reason) {
   releaseClockEnabled = false;
   clockPauseReason = reason;
   if (systemLatched) return;
+#if TIMIAC_MASTER && defined(ARDUINO_ARCH_ESP32)
+  persistDiagnostic("Stop context: free=" + String(platformFreeNetworkHeap()) +
+    "; min=" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)) +
+    "; largest=" + String(platformLargestNetworkBlock()) + "; TLS=" + String(cloudInFlight) +
+    "; channel=" + String(WiFi.channel()) + "; AP clients=" + String(WiFi.softAPgetStationNum()));
+  for (const auto& peer : peers) if (peer.paired) {
+    persistDiagnostic("Board " + String(peer.board + 1) + " Stop context: packet age=" + String(uint32_t(millis() - peer.rx)) +
+      "; state age=" + String(uint32_t(millis() - boards[peer.board].stateAt)) + "; queued=" + String(peer.outbox.pending()));
+  }
+#endif
   rememberStop(reason);
   // A never-connected, unused board cannot hold recovery hostage. A lost
   // participant must still acknowledge Stop before another job can run.
@@ -171,7 +185,7 @@ void stopAll(const String& reason) {
   }
   systemLatched = true; systemFault = reason;
   armTimeMinutes = -1;
-  if (!TIMIAC_MASTER) uart.abort(reason);
+  if (!TIMIAC_MASTER) localUart().abort(reason);
   if (operation.barrier.active()) { operation.barrier.fail(); operation.error = reason; recordReceipt(); }
   if (program.reserved()) {
     program.state = "faulted"; program.error = reason; program.hasStep = false; program.file.close();
@@ -280,7 +294,7 @@ void processPeer(Peer& p, const String& line) {
   if (from != p.boot || doc["session"] != (TIMIAC_MASTER ? bootId : coordinatorBoot)) { p.socket.stop(); return; }
   p.rx = millis();
   if (type == "ping") {
-    if (!TIMIAC_MASTER) uart.monitorEndstops(doc["monitorEndstops"] | false);
+    if (!TIMIAC_MASTER) localUart().monitorEndstops(doc["monitorEndstops"] | false);
     return;
   }
   if (TIMIAC_MASTER && type == "log") { logMessage("Board " + String(p.board + 1) + ": " + String(doc["text"] | "")); return; }
@@ -347,12 +361,12 @@ void processPeer(Peer& p, const String& line) {
     if (token.isEmpty()) { p.socket.stop(); return; }
     if (token != acknowledgedStop) {
       if (firmwareUpdating) firmwareUpdateCancel = true;
-      uart.abort(doc["reason"] | "Master stop");
+      localUart().abort(doc["reason"] | "Master stop");
     }
     // Cancel the barrier as well as the UART queue. Otherwise the old homing
     // deadline keeps firing after Stop. A local hardware fault survives Stop.
     acknowledgedStop = token;
-    systemLatched = !uart.fault.isEmpty(); systemFault = uart.fault;
+    systemLatched = !localUart().fault.isEmpty(); systemFault = localUart().fault;
     sendState();
   } else if (!TIMIAC_MASTER && type == "prepare") {
     String id = doc["id"] | "";
@@ -363,7 +377,7 @@ void processPeer(Peer& p, const String& line) {
       sendState(); return;
     }
     bool stale = false; for (auto& r : receipts) if (r.id == id) stale = true;
-    if (firmwareUpdating || stale || id.isEmpty() || id.length() > 96 || !doc["speedPercent"].is<unsigned>() || !timiac::validSpeedPercent(speedPercent) || !validLines(doc["lines"], trajectory) || !uart.healthy() ||
+    if (firmwareUpdating || stale || id.isEmpty() || id.length() > 96 || !doc["speedPercent"].is<unsigned>() || !timiac::validSpeedPercent(speedPercent) || !validLines(doc["lines"], trajectory) || !localUart().healthy() ||
         systemLatched || operation.barrier.active()) {
       stopAll("Preparation rejected: unavailable board, unhomed axis, stale or invalid command"); return;
     }
@@ -371,14 +385,14 @@ void processPeer(Peer& p, const String& line) {
     operation.speedPercent = speedPercent;
     // The idle peer also waits through the other board's homing operation.
     operation.homing = (doc["homing"] | false) || hasHoming(doc["lines"].as<JsonArray>());
-    operation.barrier.begin(millis()); uart.stage(doc["lines"].as<JsonArray>(), trajectory, speedPercent); recordReceipt(); sendState();
+    operation.barrier.begin(millis()); localUart().stage(doc["lines"].as<JsonArray>(), trajectory, speedPercent); recordReceipt(); sendState();
   } else if (!TIMIAC_MASTER && type == "commit") {
     if (doc["id"] != operation.id) { stopAll("Commit does not match prepared command"); return; }
     if (operation.barrier.phase == timiac::Phase::Running || operation.barrier.phase == timiac::Phase::Done) { sendState(); return; }
-    if (!uart.prepared() || systemLatched || operation.barrier.phase != timiac::Phase::Preparing) {
+    if (!localUart().prepared() || systemLatched || operation.barrier.phase != timiac::Phase::Preparing) {
       stopAll("Commit refused: board readiness changed"); return;
     }
-    operation.barrier.phase = timiac::Phase::Running; operation.barrier.since = millis(); uart.commit(); sendState();
+    operation.barrier.phase = timiac::Phase::Running; operation.barrier.since = millis(); localUart().commit(); sendState();
   }
 }
 void networkTick() {
@@ -387,14 +401,14 @@ void networkTick() {
     if ((p.paired || p.socket.connected()) && (!p.socket.connected() || timiac::expired(millis(), p.rx, kPeerTimeout))) {
       bool wasPaired = p.paired;
       if (TIMIAC_MASTER && p.board >= 0) boards[p.board].online = false;
-      p.paired = false; p.outbox.clear(); p.socket.stop();
+      p.paired = false; p.outbox.clear(); discardPeerSocket(p.socket);
       if (wasPaired) {
         const String reason = !p.closeReason.isEmpty() ? p.closeReason :
           timiac::expired(millis(), p.rx, kPeerTimeout) ? "no peer packet for 15 seconds" : "TCP connection closed";
         logMessage((TIMIAC_MASTER ? "Board " + String(p.board + 1) : String("Master")) + " link lost: " + reason + "; ESP " + p.boot);
         // A connection cannot authorize continued coordinated motion after
         // its 15-second deadline. Reconnect for status; never replay a move.
-        if (TIMIAC_MASTER ? workRequiresBoard(p.board) : operation.barrier.active() || uart.job)
+        if (TIMIAC_MASTER ? workRequiresBoard(p.board) : operation.barrier.active() || localUart().job)
           stopAll("Bridge link lost during work; movement cancelled, no replay");
       }
     }

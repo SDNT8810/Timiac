@@ -6,6 +6,7 @@
 #include <thread>
 #include <cstring>
 #include <cstdint>
+#include <vector>
 constexpr unsigned pdTRUE = 1, pdPASS = 1, portMAX_DELAY = UINT32_MAX;
 struct HostQueueClosed {};
 struct HostQueue {
@@ -17,6 +18,14 @@ struct HostQueue {
 using QueueHandle_t = HostQueue*;
 using TaskHandle_t = std::thread*;
 static void (*hostBeforeQueueSend)(HostQueue*) = nullptr;
+static std::vector<std::thread*> hostOneShotTasks;
+static unsigned hostTaskCreations = 0;
+struct HostTaskDeleted {};
+inline void vTaskDelete(TaskHandle_t task) { assert(!task); throw HostTaskDeleted(); }
+inline void hostJoinOneShotTasks() {
+  for (auto* task : hostOneShotTasks) { task->join(); delete task; }
+  hostOneShotTasks.clear();
+}
 inline QueueHandle_t xQueueCreate(unsigned count, size_t size) { return count == 1 && size == sizeof(void*) ? new HostQueue : nullptr; }
 inline unsigned xQueueSend(HostQueue* q, const void* source, unsigned wait) {
   std::unique_lock<std::mutex> lock(q->mutex);
@@ -36,5 +45,8 @@ inline unsigned xQueueReceive(HostQueue* q, void* destination, unsigned wait) {
 inline void vQueueDelete(HostQueue* q) { delete q; }
 inline unsigned xTaskCreatePinnedToCore(void (*task)(void*), const char*, unsigned stack, void* arg, unsigned priority, TaskHandle_t* handle, unsigned core) {
   if (stack < 8192 || priority != 1 || core != 0) return 0;
-  *handle = new std::thread([=] { try { task(arg); } catch (const HostQueueClosed&) {} }); return pdPASS;
+  ++hostTaskCreations;
+  auto* worker = new std::thread([=] { try { task(arg); } catch (const HostQueueClosed&) {} catch (const HostTaskDeleted&) {} });
+  if (handle) *handle = worker; else hostOneShotTasks.push_back(worker);
+  return pdPASS;
 }

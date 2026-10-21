@@ -31,7 +31,7 @@ int main() {
   assert(oldFrame.size() > 63 && oldFrame.substr(0, 63).find('\n') == std::string::npos);
 
   reset(); setupBridge(); firmwareUpdating = true; firmwareUpdateCancel = false;
-  firmwareUpdate.crc32 = crc(image); uart.session.waiting = false;
+  firmwareUpdate.crc32 = crc(image); localUart().session.waiting = false;
   octopusImage.bytes = image; octopusSent = hostNow;
   octopusTick(); size_t consumed = 0; unsigned blocks = 0;
   // An earlier truncated attempt may have left an unfinished command. The

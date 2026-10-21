@@ -26,7 +26,7 @@ String lastCommand() {
 }
 int main() {
   setupBridge(); firmwareUpdating = true; firmwareUpdateCancel = false;
-  uart.session.waiting = false; octopusImage.bytes.assign(1024, 42);
+  localUart().session.waiting = false; octopusImage.bytes.assign(1024, 42);
   octopusSent = hostNow; octopusTick(); assert(lastCommand() == "M997 P4");
   Serial.feed("echo:TIMIAC_FW_ABORTED\r\n"); octopusTick(); assert(octopusPhase == 1);
   Serial.feed("TIMIAC_FW_OFFSET 0\n"); octopusTick(); assert(octopusPhase == 2);
@@ -60,10 +60,10 @@ int main() {
   assert(firmwareUpdate.id == expectedId && firmwareUpdate.sha256 == expectedHash && firmwareUpdate.kind == "octopus");
   assert(octopusPhase == 5 && firmwareUpdating && !firmwareUpdateCancel);
   assert(Serial.sent == atActivation);
-  uart.session.state = timiac::OctopusSession::State::Ready; uart.session.identity = true; uart.session.lastRx = hostNow;
-  uart.sdOtaSupported = true; uart.octopusSoftware = "older-installed-version";
+  localUart().session.state = timiac::OctopusSession::State::Ready; localUart().session.identity = true; localUart().session.lastRx = hostNow;
+  localUart().sdOtaSupported = true; localUart().octopusSoftware = "older-installed-version";
   octopusTick(); assert(firmwareUpdating && octopusPhase == 5);
-  uart.octopusSoftware = kSoftwareRevision;
+  localUart().octopusSoftware = kSoftwareRevision;
   octopusTick(); assert(firmwareUpdate.state == "complete" && !firmwareUpdating);
   bootId = "bridge-after-completed-receipt";
   firmwareUpdate.id = "";
@@ -90,14 +90,14 @@ int main() {
   assert(firmwareUpdate.state == "failed" && firmwareUpdate.error == "Error:SD card unavailable");
   // A native reset during a block must not be swallowed as another lost ACK.
   firmwareUpdating = true; firmwareUpdateCancel = false; octopusPhase = 2; octopusOffset = 512;
-  const unsigned resetsBefore = uart.resetCount;
+  const unsigned resetsBefore = localUart().resetCount;
   Serial.feed("start\n"); octopusTick();
-  assert(!octopusPhase && !firmwareUpdating && uart.resetCount == resetsBefore + 1);
+  assert(!octopusPhase && !firmwareUpdating && localUart().resetCount == resetsBefore + 1);
   assert(firmwareUpdate.error.indexOf("Octopus restarted while writing SD block at byte 512") >= 0);
   // Give an exhausted block wait an actionable offset and actual last reply.
   firmwareUpdating = true; firmwareUpdateCancel = false; octopusPhase = 2;
   octopusCommand = first; octopusRetries = 0; octopusSent = hostNow;
-  uart.lastReply = "ok";
+  localUart().lastReply = "ok";
   for (unsigned retry = 0; retry < 5; ++retry) { hostNow += 10001; octopusTick(); }
   assert(!octopusPhase && !firmwareUpdating && firmwareUpdate.state == "failed");
   assert(firmwareUpdate.error.indexOf("writing SD block at 512/1024; last reply: ok") >= 0);
