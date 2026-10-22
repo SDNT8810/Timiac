@@ -16,7 +16,7 @@
 #define TIMIAC_RTC_SCL 22
 #endif
 #ifndef TIMIAC_PROXIMITY_ENABLED
-#define TIMIAC_PROXIMITY_ENABLED 1
+#define TIMIAC_PROXIMITY_ENABLED 0
 #endif
 #ifndef TIMIAC_PROXIMITY_PIN
 #define TIMIAC_PROXIMITY_PIN 34
@@ -80,7 +80,7 @@
 #endif
 constexpr unsigned long kBaud = 115200;
 // Application revision is separate from the hardware identity shared with Marlin.
-constexpr char kSoftwareRevision[] = "2026-10-21.1";
+constexpr char kSoftwareRevision[] = "2026-10-22.1";
 constexpr char kLocalOtaMarker[] = "TIMIAC_LOCAL_OTA_V1";
 #if TIMIAC_MASTER
 constexpr char kOtaImageMarker[] = "TIMIAC_OTA_ROLE:master";
