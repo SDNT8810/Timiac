@@ -40,21 +40,26 @@ The master configures ADC1 for 12-bit readings at 0 dB attenuation, takes nine
 samples every 20 ms and uses their median to reject isolated spikes. There is
 no sensor heap allocation in the sampling loop.
 
-- Below **40 mV**: hand detected.
-- Above **60 mV**: clear.
-- Between 40 and 60 mV, including the boundaries: retain the last known state.
-  Starting in this band does not establish a state or arm the gesture.
+- At or below **8 raw ADC counts** continuously for **200 ms**: hand event.
+- At or above **40 raw ADC counts** continuously for **500 ms**: rearm.
+- Counts 9–39 retain the presence state, but interrupt both debounce timers.
+  A low glitch followed by neutral readings cannot mature into a gesture.
+  The previous 64/68-count thresholds were inside the observed clear-input
+  variation and are no longer used.
 - A genuine **zero-count** ADC result counts as the low/detected state. The
   ESP32's calibrated conversion can return about 75 mV for zero counts; applying
   the 40 mV threshold to that result alone would never detect a grounded input.
-  The dashboard labels this as **below the ADC floor**, not an exact 0 V.
+  Zero and other readings below 100 mV have no numeric calibrated voltage in
+  status. Raw counts remain available; they are not precise millivolts.
 - Invalid ADC reads and stale samples reset gesture arming. An invalid read is
   never interpreted as zero or as a hand.
 
 **The ESP32's specified accurate ADC range starts at 100 mV at 0 dB.** The
-requested 40/60 mV boundaries cannot be guaranteed as physical voltage thresholds
-in this clipped region. This implementation is intended to distinguish the
-reported 95 mV clear state from a near-ground hand state. If both return zero
+nominal 1.1 V, 0 dB range is already the most sensitive supported range; there
+is no lower attenuation setting. These raw-count limits cannot be guaranteed
+as physical voltage thresholds in the clipped region. This implementation is
+intended to distinguish the reported 95 mV clear state from a near-ground hand
+state. If both return zero
 counts on this particular ESP32, software cannot distinguish them: the gesture
 will remain unarmed instead of triggering at boot. Inspect actual readings
 before relying on it; median filtering cannot recover a clipped signal.
@@ -103,10 +108,12 @@ is withdrawn between cloud reports.
 |---|---|
 | `pin`, `inputMode` | 34, analog |
 | `rawAdc` | Median 12-bit ADC count; zero means clipped near ground |
-| `millivolts` | Calibrated estimate; null for zero-count, stale or invalid reads |
+| `millivolts` | Calibrated estimate; null below 100 mV, or for stale/invalid reads |
+| `adcBits`, `adcAttenuationDb`, `adcNominalFullScaleMv` | 12-bit, 0 dB, nominal 1100 mV |
+| `minimumAccurateMv` | 100; low-end accuracy limit, not a presence threshold |
 | `adcFloorMv` | Calibration's voltage for zero counts; not a precise minimum measurable voltage |
 | `belowRange` | Reading is below the specified accurate range |
-| `detectBelowMv`, `clearAboveMv` | 40 and 60 |
+| `detectBelowMv`, `clearAboveMv` | null; presence uses raw ADC counts |
 | `detected` | Presence state, or null when unknown/stale/invalid |
 | `armed`, `ready`, `triggers` | Gesture eligibility and accepted trigger count |
 | `blockedReason` | Why a gesture cannot currently start |
@@ -116,8 +123,8 @@ is withdrawn between cloud reports.
 | `lastTriggerId` | Accepted sensor program ID, for matching its motion result |
 
 The legacy digital field `rawHigh` and distance fields stay null. Defaults are
-`TIMIAC_PROXIMITY_PIN=34`, `TIMIAC_PROXIMITY_DETECT_MV=40` and
-`TIMIAC_PROXIMITY_CLEAR_MV=60`. Disable gestures with
+`TIMIAC_PROXIMITY_PIN=34`, `TIMIAC_PROXIMITY_DETECT_ADC=8` and
+`TIMIAC_PROXIMITY_CLEAR_ADC=40`. Disable gestures with
 `TIMIAC_PROXIMITY_ENABLED=0` and rebuild when required.
 
 Source: [Espressif ADC channels, limitations and measurement range](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/api-reference/peripherals/adc.html).

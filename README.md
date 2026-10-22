@@ -446,7 +446,9 @@ This is an on/off photoelectric switch, not LiDAR. Its advertised sensing
 range is adjustable around 10–30 cm, but it has no software beam-angle control
 or measured-distance output. Both local dashboards show **Detected / Clear**
 with ADC readings. The user measured 95 mV clear and 2.5 mV with a hand; the
-firmware uses 40/60 mV hysteresis and treats zero ADC counts as the low state.
+firmware uses raw-count hysteresis: detect at or below 8 counts for 200 ms,
+then rearm only above or at 40 counts for 500 ms. Neutral readings interrupt
+the debounce timers. Zero ADC counts are treated as the low state.
 These voltages are below the specified accurate ADC range, so verify that clear
 and hand produce distinct counts. A zero-count voltage is labeled below the ADC
 floor, not an exact 0 V. Check the optical path with an actual hand.
@@ -461,7 +463,7 @@ parked. Dev mode also supports gestures when idle/homed. The sensor does not
 recognize gesture direction or shape, and NC wire/power failure can mimic a hand.
 
 The defaults are `TIMIAC_PROXIMITY_ENABLED=1`, `TIMIAC_PROXIMITY_PIN=34`,
-`TIMIAC_PROXIMITY_DETECT_MV=40` and `TIMIAC_PROXIMITY_CLEAR_MV=60`. ADC1 uses
+`TIMIAC_PROXIMITY_DETECT_ADC=8` and `TIMIAC_PROXIMITY_CLEAR_ADC=40`. ADC1 uses
 12-bit, 0 dB readings and a nine-sample median without an internal pull-up.
 Rebuild after changing configuration.
 

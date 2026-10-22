@@ -12,6 +12,8 @@ bool configureProximityAdc(unsigned pin) {
   while (channel < 8 && pins[channel] != pin) ++channel;
   if (channel == 8) return false;
   proximityAdcChannel = static_cast<adc1_channel_t>(channel);
+  // Classic ESP32's most sensitive supported range: 0 dB / nominal 1.1 V.
+  // The 1100 below is calibration's fallback Vref, not a selectable lower range.
   if (adc1_config_width(ADC_WIDTH_BIT_12) != ESP_OK ||
       adc1_config_channel_atten(proximityAdcChannel, ADC_ATTEN_DB_0) != ESP_OK) return false;
   esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_0, ADC_WIDTH_BIT_12, 1100, &proximityAdcCalibration);

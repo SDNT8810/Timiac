@@ -93,7 +93,8 @@ int main() {
     assert(!deserializeJson(payload, exchange->payload));
     assert(payload["status"]["software"] == kSoftwareRevision && payload["status"]["ota"]["state"] == "waiting for bridge");
     const auto sensor = payload["status"]["proximity"];
-    assert(sensor["pin"] == 34 && sensor["detected"] == false && sensor["millivolts"] == 95);
+    assert(sensor["pin"] == 34 && sensor["detected"] == false && sensor["millivolts"].isNull());
+    assert(sensor["belowRange"] == true && sensor["rawAdc"].as<unsigned>() > 0);
     assert(sensor["lastOutcome"] == "ignored" && sensor["lastReason"] == "Arms need homing");
     assert(sensor["lastEventTime"] == rtcText && sensor["ignored"] == 1 && !payload.overflowed());
   }

@@ -2,11 +2,14 @@
 #include <stdint.h>
 
 namespace timiac {
-constexpr uint32_t proximityClearMs = 300, proximityDetectMs = 40;
+constexpr uint32_t proximityClearMs = 500, proximityDetectMs = 200;
 struct ProximityGate {
   bool armed = false, initialized = false, detected = false;
   uint32_t changedAt = 0;
   void reset() { armed = initialized = detected = false; changedAt = 0; }
+  // An ambiguous ADC sample cannot count towards either continuous dwell.
+  // Preserve an already established clear/armed state across a transition.
+  void samplingGap() { initialized = false; }
   bool sample(bool present, bool ready, uint32_t now) {
     // Consume gestures during work/faults, never queue them for later.
     if (!ready) { reset(); return false; }

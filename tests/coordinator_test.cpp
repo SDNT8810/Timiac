@@ -665,7 +665,7 @@ int main() {
       proximityTick();
     }
   };
-  sensorFor(66, 600); assert(!proximityTriggers && !proximityGate.armed && !proximityKnown); // Boot in deadband.
+  sensorFor(20, 600); assert(!proximityTriggers && !proximityGate.armed && !proximityKnown); // Boot in deadband.
   sensorFor(0, 600); assert(!proximityTriggers && !proximityGate.armed); // Held at boot / grounded.
   assert(proximityLastOutcome == "ignored" && proximityLastReason.indexOf("not armed") >= 0 && proximityIgnored == 1);
   const unsigned ignoredAtBoot = proximityIgnored;
@@ -680,20 +680,35 @@ int main() {
     DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
     assert(status["type"] == "photoelectric" && status["pin"] == 34 && status["inputMode"] == "analog");
     assert(status["detected"] == false && status["rawHigh"].isNull() && status["distanceCm"].isNull());
-    assert(status["millivolts"] == 98 && status["rawAdc"] == 95 && status["belowRange"] == true);
+    assert(status["millivolts"].isNull() && status["rawAdc"] == 95 && status["belowRange"] == true);
+    assert(status["adcBits"] == 12 && status["adcAttenuationDb"] == 0 && status["adcNominalFullScaleMv"] == 1100);
+    assert(status["minimumAccurateMv"] == 100);
     assert(status["detectBelowMv"].isNull() && status["clearAboveMv"].isNull());
-    assert(status["detectAtOrBelowAdc"] == 64 && status["clearAtOrAboveAdc"] == 68);
+    assert(status["detectAtOrBelowAdc"] == 8 && status["clearAtOrAboveAdc"] == 40);
   }
-  sensorFor(65, 300); sensorFor(66, 300); sensorFor(67, 300);
+  sensorFor(200, 600);
+  {
+    DynamicJsonDocument status(1024); writeProximityStatus(status.to<JsonObject>());
+    assert(status["millivolts"] == 125 && status["belowRange"] == false);
+  }
+  // Actual false-trigger readings from the installed clock must stay clear.
+  for (unsigned value : {89U, 75U, 64U, 62U, 58U, 53U, 48U, 43U}) sensorFor(value, 300);
+  assert(proximityGate.armed && !proximityDetected && !proximityTriggers);
+  sensorFor(20, 300); sensorFor(21, 300); sensorFor(39, 300);
   assert(proximityGate.armed && !proximityDetected && !proximityTriggers); // Deadband retains clear.
-  sensorFor(64, 40); assert(!proximityTriggers);
-  sensorFor(55, 20); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Struggle);
+  sensorFor(0, 80); sensorFor(20, 300); // A short low plus neutral must not mature into a gesture.
+  assert(!proximityTriggers && proximityGate.armed);
+  sensorFor(95, 600);
+  sensorFor(0, 80); sensorFor(95, 100); // A short low pulse with recovery is ignored too.
+  assert(!proximityTriggers && proximityGate.armed);
+  sensorFor(8, 200); assert(!proximityTriggers);
+  sensorFor(3, 20); assert(proximityTriggers == 1 && program.reserved() && program.preset == timiac::Preset::Struggle);
   assert(proximityLastOutcome == "triggered" && proximityLastReason.isEmpty());
   assert(proximityLastTriggerTime == rtcText && proximityLastTriggerId == program.id);
   const String firstSensorMotion = proximityLastTriggerId, firstSensorTime = proximityLastTriggerTime;
   assert(logs[(logSequence - 1) % kLogCapacity].text.indexOf("Hand sensor: Struggle triggered") == 0);
   assert(program.struggleVariant < 7 && program.targetMinute == 13 * 60 + 45 && releaseClockEnabled);
-  sensorFor(66, 600); assert(proximityTriggers == 1 && !proximityGate.armed && proximityDetected);
+  sensorFor(20, 600); assert(proximityTriggers == 1 && !proximityGate.armed && proximityDetected);
   sensorFor(95, 600); sensorFor(0, 300); // A new arrival during the animation is consumed with its reason.
   assert(proximityLastOutcome == "ignored" && proximityLastReason == "Motion or a program is busy");
   assert(proximityLastTriggerId == firstSensorMotion && proximityLastTriggerTime == firstSensorTime);
@@ -744,7 +759,7 @@ int main() {
   DynamicJsonDocument thresholds(128); thresholds["detectAdc"] = 16; thresholds["clearAdc"] = 40;
   assert(!setProximityThresholds(thresholds.as<JsonVariant>()));
   assert(stopRequested && !releaseClockEnabled && !operation.barrier.active() && !program.reserved());
-  sensorFor(80, 600); sensorFor(3, 100);
+  sensorFor(80, 600); sensorFor(3, 300);
   assert(proximityDetected && proximityLastReason == "Stop is active" && !proximityTriggers && !proximityGate.armed);
   thresholds["clearAdc"] = 16;
   assert(setProximityThresholds(thresholds.as<JsonVariant>()));

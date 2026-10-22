@@ -97,13 +97,15 @@ void proximityTick() {
   proximitySampled = true; proximitySampleAt = now;
   proximityValid = proximityAdcReady && readProximityAdc(proximityRawAdc, proximityMillivolts, proximityFloorMillivolts);
   if (!proximityValid) { proximityGate.reset(); proximityKnown = false; proximityObservation.samplingGap(); return; }
-  // Calibrated readings have a ~75 mV floor, so even a few low counts used to
-  // look clear and restart the hand debounce. Raw hysteresis tolerates that
-  // noise: the configured low/high count thresholds retain state in between.
+  // Classify raw counts: the calibrated voltage curve is not accurate here.
+  // A neutral reading retains the displayed state, but interrupts the dwell:
+  // one low glitch followed by a neutral input must not become a hand event.
   if (proximityRawAdc <= proximityDetectAdc) {
     proximityDetected = true; proximityKnown = true;
   } else if (proximityRawAdc >= proximityClearAdc) {
     proximityDetected = false; proximityKnown = true;
+  } else {
+    proximityGate.samplingGap(); proximityObservation.samplingGap(); return;
   }
   if (!proximityKnown) { proximityGate.reset(); proximityObservation.samplingGap(); return; }
   const bool arrival = proximityObservation.sample(proximityDetected, now);
@@ -114,7 +116,7 @@ void proximityTick() {
     recordProximityEvent(!error, error ? String(error) : String());
   } else if (arrival) {
     const char* reason = proximityMotionBlockReason();
-    recordProximityEvent(false, reason ? reason : "Sensor was not armed; clear it for 300 ms first");
+    recordProximityEvent(false, reason ? reason : "Sensor was not armed; clear it for 500 ms first");
   }
 #endif
 }
@@ -123,6 +125,8 @@ void writeProximityStatus(JsonObject doc) {
   doc["enabled"] = bool(TIMIAC_PROXIMITY_ENABLED);
   doc["type"] = "photoelectric"; doc["model"] = "E3F-DS30B2";
   doc["pin"] = TIMIAC_PROXIMITY_PIN; doc["activeHigh"] = false; doc["inputMode"] = "analog";
+  doc["adcBits"] = 12; doc["adcAttenuationDb"] = 0; doc["adcNominalFullScaleMv"] = 1100;
+  doc["minimumAccurateMv"] = 100;
   doc["armed"] = fresh && proximityKnown && proximityReady() && proximityGate.armed;
   doc["ready"] = fresh && proximityKnown && proximityReady(); doc["rangeMaxCm"] = 30;
   doc["thresholdUnit"] = "adcCounts";
@@ -133,7 +137,9 @@ void writeProximityStatus(JsonObject doc) {
   if (fresh) {
     doc["rawAdc"] = proximityRawAdc; doc["adcFloorMv"] = proximityFloorMillivolts;
     doc["belowRange"] = proximityRawAdc == 0 || proximityMillivolts < 100;
-    if (proximityRawAdc) doc["millivolts"] = proximityMillivolts; else doc["millivolts"] = nullptr;
+    // Do not present an extrapolated ~75..99 mV estimate as a voltage reading.
+    if (proximityRawAdc && proximityMillivolts >= 100) doc["millivolts"] = proximityMillivolts;
+    else doc["millivolts"] = nullptr;
   } else { doc["rawAdc"] = nullptr; doc["millivolts"] = nullptr; doc["adcFloorMv"] = nullptr; doc["belowRange"] = nullptr; }
   if (fresh && proximityKnown) doc["detected"] = proximityDetected; else doc["detected"] = nullptr;
   doc["rawHigh"] = nullptr; // Legacy digital-only field.
@@ -143,7 +149,7 @@ void writeProximityStatus(JsonObject doc) {
   doc["samplingGaps"] = proximitySamplingGaps;
   if (proximitySampled) doc["sampleAgeMs"] = uint32_t(millis() - proximitySampleAt); else doc["sampleAgeMs"] = nullptr;
   doc["blockedReason"] = blocked ? blocked : !fresh ? "Sensor reading is unavailable or stale" :
-    !proximityKnown ? "Reading is between thresholds" : !proximityGate.armed ? "Withdraw hand and clear the sensor for 300 ms" : "";
+    !proximityKnown ? "Reading is between thresholds" : !proximityGate.armed ? "Withdraw hand and clear the sensor for 500 ms" : "";
   doc["ignored"] = proximityIgnored; doc["lastOutcome"] = proximityLastOutcome;
   doc["lastReason"] = proximityLastReason; doc["lastEventTime"] = proximityLastEventTime;
   doc["lastTriggerTime"] = proximityLastTriggerTime; doc["lastTriggerId"] = proximityLastTriggerId;
